@@ -13,11 +13,13 @@ ${MODULE_NAME}-objs	+=	amports/streambuf.o
 ${MODULE_NAME}-objs	+=	amports/stream_buffer_base.o
 ${MODULE_NAME}-objs	+=	amports/stream_buffer_interface.o
 
+ifndef CONFIG_AMLOGIC_MEDIA_NO_PARSER
 ${MODULE_NAME}-objs	+=	parser/esparser.o
 ${MODULE_NAME}-objs	+=	parser/tsdemux.o
+endif
+${MODULE_NAME}-objs	+=	parser/dvb_common.o
 ${MODULE_NAME}-objs	+=	subtitle/subtitle.o
 
-${MODULE_NAME}-objs	+=	parser/dvb_common.o
 obj-$(CONFIG_AMLOGIC_DVB)   += parser/hw_demux/
 obj-$(CONFIG_AMLOGIC_DVB)   += parser/dvb_ci/
 

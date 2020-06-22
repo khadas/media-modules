@@ -68,8 +68,6 @@
 #endif
 #include "../amports/streambuf.h"
 #include "../amports/streambuf_reg.h"
-#include "../parser/tsdemux.h"
-#include "../parser/esparser.h"
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "adec.h"
 #include "amports_priv.h"
@@ -94,6 +92,7 @@
 #include "../../frame_provider/decoder/utils/vdec_feature.h"
 #include <linux/syscalls.h>
 #include "../../common/media_utils/media_utils.h"
+#include "../parser/stream_parser.h"
 
 //#define G12A_BRINGUP_DEBUG
 
