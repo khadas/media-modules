@@ -21,7 +21,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include "clk_priv.h"
-#include <linux/amlogic/media/clk/gp_pll.h>
+//#include <linux/amlogic/media/clk/gp_pll.h>
 
 #ifndef INCLUDE_FROM_ARCH_CLK_MGR
 int vdec_clock_init(void);

@@ -49,7 +49,7 @@ int amstream_request_firmware_from_sys(const char *file_name,
 #ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 void set_vsync_pts_inc_mode(int inc);
 #else
-void __weak set_vsync_pts_inc_mode(int inc) { return; }
+//void __weak set_vsync_pts_inc_mode(int inc) { return; }
 #endif
 
 void set_real_audio_info(void *arg);

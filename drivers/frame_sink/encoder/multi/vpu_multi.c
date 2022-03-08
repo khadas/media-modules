@@ -49,12 +49,12 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 
-#include <linux/amlogic/power_ctrl.h>
-#include <dt-bindings/power/t7-pd.h>
+#include <dt-bindings/power/cx-pd.h>
 #include <linux/amlogic/power_domain.h>
+
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-#include "../../../frame_provider/decoder/utils/vdec.h"
-#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+//#include "../../../frame_provider/decoder/utils/vdec.h"
+//#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
 #include "vpu_multi.h"
 #include "vmm_multi.h"
 
@@ -87,7 +87,7 @@
 			printk(x); \
 	} while (0)
 
-static s32 print_level = LOG_DEBUG;
+static s32 print_level = LOG_ERROR;
 static s32 clock_level = 4;
 static s32 clock_gate_count = 0;
 static u32 set_clock_freq = 0;
@@ -113,7 +113,7 @@ struct vpu_clks {
 };
 
 static struct vpu_clks s_vpu_clks;
-
+#if 0
 #ifdef CONFIG_COMPAT
 static struct file *file_open(const char *path, int flags, int rights)
 {
@@ -225,7 +225,7 @@ static s32 dump_data(u32 phy_addr, u32 size) {
 	return 0;
 }
 #endif
-
+#endif
 /*static s32 dump_encoded_data(u8 *data, u32 size) {
 	struct file *filp;
 
@@ -320,24 +320,9 @@ static void vpu_clk_enable(struct vpu_clks *clks)
 
 	clk_set_rate(clks->dos_clk, freq * MHz);
 	clk_set_rate(clks->dos_apb_clk, freq * MHz);
-
-	if (clock_a > 0) {
-		pr_info("vpu_multi: desired clock_a freq %u\n", clock_a);
-		clk_set_rate(clks->a_clk, clock_a);
-	} else
-		clk_set_rate(clks->a_clk, 666666666);
-
-	if (clock_b > 0) {
-		pr_info("vpu_multi: desired clock_b freq %u\n", clock_b);
-		clk_set_rate(clks->b_clk, clock_b);
-	} else
-		clk_set_rate(clks->b_clk, 500 * MHz);
-
-	if (clock_c > 0) {
-		pr_info("vpu_multi: desired clock_c freq %u\n", clock_c);
-		clk_set_rate(clks->c_clk, clock_c);
-	} else
-		clk_set_rate(clks->c_clk, 500 * MHz);
+	clk_set_rate(clks->a_clk, freq * MHz);
+	clk_set_rate(clks->b_clk, freq * MHz);
+	clk_set_rate(clks->c_clk, freq * MHz);
 
 	clk_prepare_enable(clks->dos_clk);
 	clk_prepare_enable(clks->dos_apb_clk);
@@ -352,14 +337,14 @@ static void vpu_clk_enable(struct vpu_clks *clks)
 
 	/* the power on */
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
-		pr_err("powering on wave521 for t7\n");
-		vdec_poweron(VDEC_WAVE);
+		pr_info("powering on wave521 for t7\n");
+		//vdec_poweron(VDEC_WAVE);
 		mdelay(5);
-		pr_err("wave power stauts after poweron: %d\n", vdec_on(VDEC_WAVE));
+		//pr_info("wave power stauts after poweron: %d\n", vdec_on(VDEC_WAVE));
 	} else {
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, true);
+		pwr_ctrl_psci_smc(PDID_CX_WAVE, true);
 		mdelay(5);
-		pr_err("wave power stauts after poweron: %lu\n", pwr_ctrl_status_psci_smc(PDID_T7_DOS_WAVE));
+		pr_info("wave power stauts after poweron: %lu\n", pwr_ctrl_status_psci_smc(PDID_CX_WAVE));
 	}
 
 	/* reset */
@@ -368,7 +353,7 @@ static void vpu_clk_enable(struct vpu_clks *clks)
 	hw_reset(false);
 	/* gate the clocks */
 #ifdef VPU_SUPPORT_CLOCK_CONTROL
-	pr_err("vpu_clk_enable, now gate off the clock\n");
+	pr_info("vpu_clk_enable, now gate off the clock\n");
 	clk_disable(clks->c_clk);
 	clk_disable(clks->b_clk);
 	clk_disable(clks->a_clk);
@@ -395,14 +380,14 @@ static void vpu_clk_disable(struct vpu_clks *clks)
 	/* the power off */
 	/* the power on */
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
-		pr_err("powering off wave521 for t7\n");
-		vdec_poweron(VDEC_WAVE);
+		pr_info("powering off wave521 for t7\n");
+		//vdec_poweron(VDEC_WAVE);
 		mdelay(5);
-		pr_err("wave power stauts after poweroff: %d\n", vdec_on(VDEC_WAVE));
+		//pr_info("wave power stauts after poweroff: %d\n", vdec_on(VDEC_WAVE));
 	} else {
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, false);
+		pwr_ctrl_psci_smc(PDID_CX_WAVE, false);
 		mdelay(5);
-		pr_err("wave power stauts after poweroff: %lu\n", pwr_ctrl_status_psci_smc(PDID_T7_DOS_WAVE));
+		pr_info("wave power stauts after poweroff: %lu\n", pwr_ctrl_status_psci_smc(PDID_CX_WAVE));
 	}
 }
 
@@ -993,7 +978,7 @@ static void hw_reset(bool reset)
 	void __iomem *reset_addr;
 	uint32_t val;
 
-	reset_addr = ioremap_nocache(RESETCTRL_RESET1_LEVEL, 8);
+	reset_addr = ioremap(RESETCTRL_RESET1_LEVEL, 8);
 	if (reset_addr == NULL) {
 		enc_pr(LOG_ERROR, "%s: Failed to ioremap\n", __func__);
 		return;
@@ -2036,7 +2021,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			}
 			spin_unlock(&s_vpu_lock);
 			if (find && cached) {
-				//pr_err("[%d]doing cache flush for %p~%p\n", __LINE__, (long)(buf.phys_addr), (long)(buf.phys_addr+buf.size));
+				//pr_info("[%d]doing cache flush for %p~%p\n", __LINE__, (long)(buf.phys_addr), (long)(buf.phys_addr+buf.size));
 				cache_flush((u32)buf.phys_addr,(u32)buf.size);
 			}
 
@@ -2082,7 +2067,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 
 				if (dump_es) {
 					pr_err("dump es frame, size=%u\n", (u32)buf32.size);
-					dump_data((u32)buf32.phys_addr, (u32)buf32.size);
+					//dump_data((u32)buf32.phys_addr, (u32)buf32.size);
 				}
 			}
 			enc_pr(LOG_INFO, "[-]VVDI_IOCTL_CACHE_INV_BUFFER32\n");
@@ -2124,7 +2109,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				dma_info.fd[2]);
 		}
 		break;
-
+#if 1
 		//hoan add for canvas
 		case VDI_IOCTL_READ_CANVAS:
 		{
@@ -2197,7 +2182,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 		}
 		break;
 		//end
-
+#endif
 #ifdef CONFIG_COMPAT
 	case VDI_IOCTL_CONFIG_DMA32:
 		{
@@ -2278,7 +2263,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			dma_info.phys_addr[0] = dst.addr;
 
 			if (dump_input) {
-				dump_raw_input(&dst);
+				//dump_raw_input(&dst);
 			}
 
 			if ((canvas & 0xff00) >> 8)
@@ -2286,7 +2271,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				canvas_read((canvas & 0xff00) >> 8, &dst);
 				dma_info.phys_addr[1] = dst.addr;
 				if (dump_input) {
-					dump_raw_input(&dst);
+					//dump_raw_input(&dst);
 				}
 			}
 
@@ -2294,9 +2279,9 @@ INTERRUPT_REMAIN_IN_QUEUE:
 			{
 				canvas_read((canvas & 0xff0000) >> 16, &dst);
 				dma_info.phys_addr[2] = dst.addr;
-				if (dump_input) {
-					dump_raw_input(&dst);
-				}
+				//if (dump_input) {
+					//dump_raw_input(&dst);
+				//}
 			}
 
 			enc_pr(LOG_INFO,"VDI_IOCTL_READ_CANVAS32_1,phys_addr[0] = 0x%lx,phys_addr[1] = 0x%lx,phys_addr[2] = 0x%lx\n",
@@ -2519,7 +2504,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 		open_count = s_vpu_drv_context.open_count;
 		spin_unlock(&s_vpu_lock);
 
-		pr_err("open_count=%u\n", open_count);
+		pr_info("open_count=%u\n", open_count);
 
 		if (open_count == 0) {
 			for (i=0; i<MAX_NUM_INSTANCE; i++) {
@@ -3027,7 +3012,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 	err = of_property_read_u32(np, "config_mm_sz_mb", &cma_cfg_size);
 
 	cma_cfg_size = 100;
-	enc_pr(LOG_ERROR, "reset cma_cfg_size to 200");
+	enc_pr(LOG_DEBUG, "reset cma_cfg_size to 200");
 
 	if (err) {
 		enc_pr(LOG_ERROR, "failed to get config_mm_sz_mb node, use default\n");
@@ -3092,7 +3077,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 		/* if platform driver is implemented */
 		if (res.start != 0) {
 			s_vpu_register.phys_addr = res.start;
-			s_vpu_register.virt_addr = (ulong)ioremap_nocache(res.start, resource_size(&res));
+			s_vpu_register.virt_addr = (ulong)ioremap(res.start, resource_size(&res));
 			s_vpu_register.size = res.end - res.start;
 
 			enc_pr(LOG_DEBUG, "vpu base address get from platform driver ");
@@ -3100,7 +3085,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 					s_vpu_register.phys_addr, s_vpu_register.virt_addr);
 		} else {
 			s_vpu_register.phys_addr = VPU_REG_BASE_ADDR;
-			s_vpu_register.virt_addr = (ulong)ioremap_nocache(s_vpu_register.phys_addr, VPU_REG_SIZE);
+			s_vpu_register.virt_addr = (ulong)ioremap(s_vpu_register.phys_addr, VPU_REG_SIZE);
 			s_vpu_register.size = VPU_REG_SIZE;
 
 			enc_pr(LOG_DEBUG, "vpu base address get from defined value ");
@@ -3300,7 +3285,7 @@ static s32 vpu_suspend(struct platform_device *pdev, pm_message_t state)
 			clk_disable(s_vpu_clks.a_clk);
 		}
 		/* the power off */
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, false);
+		pwr_ctrl_psci_smc(PDID_CX_WAVE, false);
 	}
 	return 0;
 
@@ -3333,7 +3318,7 @@ static s32 vpu_resume(struct platform_device *pdev)
 		}
 		vpu_clk_config(1);
 		/* the power on */
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, true);
+		pwr_ctrl_psci_smc(PDID_CX_WAVE, true);
 		for (core = 0; core < MAX_NUM_VPU_CORE; core++) {
 			if (s_bit_firmware_info[core].size == 0)
 				continue;
@@ -3425,10 +3410,10 @@ static s32 __init vpu_init(void)
 
 	enc_pr(LOG_DEBUG, "vpu_init\n");
 
-	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) {
-		pr_err("The chip is not support multi encoder!!\n");
-		return -1;
-	}
+	//if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) {
+	//	pr_info("The chip is not support multi encoder!!\n");
+	//	return -1;
+	//}
 
 	res = platform_driver_register(&vpu_driver);
 	enc_pr(LOG_INFO,

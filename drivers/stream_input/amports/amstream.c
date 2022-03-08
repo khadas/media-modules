@@ -33,17 +33,10 @@
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
-#ifdef CONFIG_AMLOGIC_MEDIA_FRAME_SYNC
 #include <linux/amlogic/media/frame_sync/tsync.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/frame_sync/timestamp.h>
 #include <linux/amlogic/media/frame_sync/tsync_pcr.h>
-#else
-#include "../../include/frame_sync/tsync.h"
-#include "../../include/frame_sync/ptsserv.h"
-#include "../../include/frame_sync/timestamp.h"
-#include "../../include/frame_sync/tsync_pcr.h"
-#endif
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
