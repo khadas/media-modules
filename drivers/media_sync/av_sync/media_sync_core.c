@@ -135,7 +135,9 @@ long mediasync_ins_alloc(s32 sDemuxId,
 	}
 
 	if (index == MAX_INSTANCE_NUM) {
-		kzfree(pInstance);
+		//kfree(pInstance);
+		memset(pInstance, 0, sizeof(mediasync_ins));
+		kfree(pInstance);
 		return -1;
 	}
 
@@ -177,7 +179,9 @@ long mediasync_ins_delete(s32 sSyncInsId) {
 	if (pInstance == NULL)
 		return -1;
 
-	kzfree(pInstance);
+	//kzfree(pInstance);
+	memset(pInstance, 0, sizeof(mediasync_ins));
+	kfree(pInstance);
 	vMediaSyncInsList[index] = NULL;
 	return 0;
 }

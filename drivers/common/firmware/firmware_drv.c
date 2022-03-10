@@ -40,6 +40,23 @@
 #include <linux/crc32.h>
 #include "../chips/decoder_cpu_ver_info.h"
 
+#if !defined(CONFIG_AMLOGIC_TEE) && !defined(CONFIG_AMLOGIC_TEE_MODULE)
+static  inline bool tee_enabled(void) { return false; }
+static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
+{
+	return -1;
+}
+static inline int tee_load_video_fw(u32 index, u32 vdec)
+{
+	return -1;
+}
+#else
+#include <linux/amlogic/tee.h>
+#endif
+
+
+
+
 /* major.minor */
 #define PACK_VERS "v0.3"
 

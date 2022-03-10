@@ -30,7 +30,7 @@
 #include <linux/delay.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
-#include <linux/amlogic/media/frame_sync/tsync_pcr.h>
+//#include <linux/amlogic/media/frame_sync/tsync_pcr.h>
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "../../common/chips/decoder_cpu_ver_info.h"
 #include "stream_buffer_base.h"

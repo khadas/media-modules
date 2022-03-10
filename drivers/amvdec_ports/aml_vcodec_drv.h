@@ -30,7 +30,7 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/vfm/vframe.h>
-#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+//#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
 

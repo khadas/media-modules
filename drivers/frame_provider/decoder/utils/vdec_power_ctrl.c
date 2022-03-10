@@ -18,7 +18,7 @@
 #define DEBUG
 #include "vdec_power_ctrl.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include <linux/amlogic/power_ctrl.h>
+//#include <linux/amlogic/power_ctrl.h>
 //#include <dt-bindings/power/sc2-pd.h>
 //#include <linux/amlogic/pwr_ctrl.h>
 #include <linux/amlogic/power_domain.h>
@@ -301,7 +301,7 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 
 		/* vdec1 power on */
 #ifdef CONFIG_AMLOGIC_POWER
-		if (is_support_power_ctrl()) {
+		/*if (is_support_power_ctrl()) {
 			if (power_ctrl_sleep_mask(true, sleep_val, 0)) {
 				pr_err("vdec-1 power on ctrl sleep fail.\n");
 				return;
@@ -309,7 +309,7 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 		} else {
 			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
 				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-		}
+		}*/
 #else
 		WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
 			READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);

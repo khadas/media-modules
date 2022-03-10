@@ -25,61 +25,25 @@
 #if defined(CONFIG_AMLOGIC_TEE) || defined(CONFIG_AMLOGIC_TEE_MODULE)
 #include <linux/amlogic/tee.h>
 #else
-/* device ID used by tee_config_device_state() */
-#define DMC_DEV_ID_GPU                                     1
-#define DMC_DEV_ID_HEVC                                    4
-#define DMC_DEV_ID_PARSER                                  7
-#define DMC_DEV_ID_VPU                                     8
-#define DMC_DEV_ID_VDIN                                    9
-#define DMC_DEV_ID_VDEC                                    13
-#define DMC_DEV_ID_HCODEC                                  14
-#define DMC_DEV_ID_GE2D                                    15
-#define DMC_DEV_ID_DI_PRE                                  16
-#define DMC_DEV_ID_DI_POST                                 17
-#define DMC_DEV_ID_GDC                                     18
-
-bool __weak tee_enabled(void) { return false; }
-
-int __weak tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
+static inline bool tee_enabled(void) { return false; }
+static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
 {
 	return -1;
 }
-
-int __weak tee_load_video_fw(u32 index, u32 vdec)
+static inline int tee_load_video_fw(u32 index, u32 vdec)
 {
 	return -1;
 }
-
-int __weak tee_check_in_mem(u32 pa, u32 size)
-{
-	return -1;
-}
-
-int __weak tee_vp9_prob_free(u32 prob_addr)
-{
-	return -1;
-}
-
-void __weak vdec_profile(struct vdec_s *vdec, int event)
-{
-}
-
-int __weak tee_vp9_prob_malloc(u32 *prob_addr)
-{
-	return -1;
-}
-
-int __weak tee_config_device_state(int dev_id, int secure)
-{
-	return -1;
-}
-
-int __weak tee_vp9_prob_process(u32 cur_frame_type, u32 prev_frame_type,
-		u32 prob_status, u32 prob_addr)
+int tee_config_device_state(int dev_id, int secure)
 {
 	return -1;
 }
 #endif
+
+int tee_config_device_state(int dev_id, int secure)
+{
+	return -1;
+}
 
 #define FW_LOAD_FORCE	(0x1)
 #define FW_LOAD_TRY	(0X2)

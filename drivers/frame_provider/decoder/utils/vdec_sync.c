@@ -24,6 +24,7 @@
 #include <linux/sched/clock.h>
 #include <linux/sync_file.h>
 #include "vdec_sync.h"
+#include <linux/sync_file.h>
 
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
 #define VDEC_SYNC_COUNT 32

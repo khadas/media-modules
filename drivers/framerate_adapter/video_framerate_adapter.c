@@ -2,7 +2,7 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
-#include <uapi/linux/major.h>
+#include <linux/amlogic/major.h>
 #include "video_framerate_adapter.h"
 
 #define CLASS_NAME	"framerate_adapter"

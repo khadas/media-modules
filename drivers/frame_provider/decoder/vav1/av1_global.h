@@ -39,9 +39,9 @@
 #define SUPPORT_SCALE_FACTOR
 #define USE_SCALED_WIDTH_FROM_UCODE
 #define AML
-#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+//#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 #define AML_DEVICE
-#endif
+//#endif
 #ifdef BUFMGR_FOR_SIM
 #define printf io_printf
 #endif

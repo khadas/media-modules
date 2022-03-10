@@ -37,7 +37,7 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+//#include <linux/dma-contiguous.h>
 #include <linux/slab.h>
 //#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>

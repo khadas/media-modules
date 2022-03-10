@@ -58,3 +58,24 @@ int vdec_v4l_get_dw_mode(
 	unsigned int *dw_mode);
 
 #endif
+
+//#ifdef CONFIG_AMLOGIC_MEDIA_V4L_DEC
+/*
+ * v4l2_m2m_job_pause() - paused the schedule of data which from the job queue.
+ *
+ * @m2m_dev: opaque pointer to the internal data to handle M2M context
+ * @m2m_ctx: m2m context assigned to the instance given by struct &v4l2_m2m_ctx
+ */
+void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
+			struct v4l2_m2m_ctx *m2m_ctx);
+
+ /*
+  * v4l2_m2m_job_resume() - resumed the schedule of data which from the job que.
+  *
+  * @m2m_dev: opaque pointer to the internal data to handle M2M context
+  * @m2m_ctx: m2m context assigned to the instance given by struct &v4l2_m2m_ctx
+  */
+void v4l2_m2m_job_resume(struct v4l2_m2m_dev *m2m_dev,
+			 struct v4l2_m2m_ctx *m2m_ctx);
+//#endif
+

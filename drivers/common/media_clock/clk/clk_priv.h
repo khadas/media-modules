@@ -17,6 +17,7 @@
 
 #ifndef AMPORTS_CLK_PRIV_HEADER
 #define AMPORTS_CLK_PRIV_HEADER
+#include "../../../frame_provider/decoder/utils/vdec.h"
 
 struct clk_set {
 	u32 wh_X_fps;		/* [x*y*fps */

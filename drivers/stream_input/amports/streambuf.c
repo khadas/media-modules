@@ -21,7 +21,7 @@
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/io.h>
-#include <linux/amlogic/media/frame_sync/ptsserv.h>
+//#include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/iomap.h>
 #include <asm/cacheflush.h>
@@ -36,7 +36,7 @@
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "../amports/amports_priv.h"
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+//#include <linux/dma-contiguous.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 
 #define STBUF_SIZE   (64*1024)

@@ -30,7 +30,7 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include <asm-generic/checksum.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/crc32.h>
@@ -287,6 +287,7 @@ static int str_strip(char *str)
 static char *fget_crc_str(char *buf,
 	unsigned int size, struct pic_check_t *fc)
 {
+#if 0
 	unsigned int c = 0, sz, ret, index, crc1, crc2;
 	mm_segment_t old_fs;
 	char *cs;
@@ -300,11 +301,13 @@ static char *fget_crc_str(char *buf,
 	do {
 		cs = buf;
 		sz = size;
+#if 0
 		while (--sz && (c = vfs_read(fc->compare_fp,
 			cs, 1, &fc->compare_pos) != 0)) {
 			if (*cs++ == '\n')
 				break;
 		}
+#endif
 		*cs = '\0';
 		if ((c == 0) && (cs == buf)) {
 			set_fs(old_fs);
@@ -317,13 +320,14 @@ static char *fget_crc_str(char *buf,
 
 	set_fs(old_fs);
 	fc->cmp_crc_cnt++;
-
+#endif
 	return buf;
 }
 
 static char *fget_aux_data_crc_str(char *buf,
 	unsigned int size, struct aux_data_check_t *fc)
 {
+#if 0
 	unsigned int c = 0, sz, ret, index, crc;
 	mm_segment_t old_fs;
 	char *cs;
@@ -337,11 +341,13 @@ static char *fget_aux_data_crc_str(char *buf,
 	do {
 		cs = buf;
 		sz = size;
+#if 0
 		while (--sz && (c = vfs_read(fc->compare_fp,
 			cs, 1, &fc->compare_pos) != 0)) {
 			if (*cs++ == '\n')
 				break;
 		}
+#endif
 		*cs = '\0';
 		if ((c == 0) && (cs == buf)) {
 			set_fs(old_fs);
@@ -354,7 +360,7 @@ static char *fget_aux_data_crc_str(char *buf,
 
 	set_fs(old_fs);
 	fc->cmp_crc_cnt++;
-
+#endif
 	return buf;
 }
 
@@ -383,6 +389,7 @@ static struct file* file_open(int mode, const char *str, ...)
 
 static int write_yuv_work(struct pic_check_mgr_t *mgr)
 {
+#if 0
 	mm_segment_t old_fs;
 	unsigned int i, wr_size, pic_num;
 	struct pic_dump_t *dump = &mgr->pic_dump;
@@ -430,12 +437,13 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 			dump->buf_size = 0;
 		}
 	}
-
+#endif
 	return 0;
 }
 
 static int write_crc_work(struct pic_check_mgr_t *mgr)
 {
+#if 0
 	unsigned int wr_size;
 	char *crc_buf, *crc_tmp = NULL;
 	mm_segment_t old_fs;
@@ -470,11 +478,13 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 	}
 
 	vfree(crc_tmp);
+#endif
 	return 0;
 }
 
 static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 {
+#if 0
 	unsigned int wr_size;
 	char *crc_buf, crc_tmp[64*30];
 	mm_segment_t old_fs;
@@ -503,6 +513,7 @@ static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 			set_fs(old_fs);
 		}
 	}
+#endif
 	return 0;
 }
 
@@ -690,7 +701,7 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 	dump->dump_cnt++;
 	dbg_print(0, "----->dump %dst, size %x (%d x %d), dec total %d\n",
 		dump->dump_cnt, mgr->size_pic, vf->width, vf->height, mgr->frame_cnt);
-
+#if 0
 	if (single_mode_vdec != NULL) {
 		/* single mode need schedule work to write*/
 		if (dump->dump_cnt >= dump->num)
@@ -717,7 +728,7 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 		set_fs(old_fs);
 		vfs_fsync(dump->yuv_fp, 0);
 	}
-
+#endif
 	return 0;
 }
 
@@ -1557,6 +1568,7 @@ int print_decoder_info(struct vdec_s *vdec)
 		sprintf(checksum_info, "Type:%10s,framesize:%04dx%04d,out-nums:%08d,yuvsum:%08x",
 			format_name, vdec->vfc.width, vdec->vfc.height,
 			vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
+#if 0
 		if (checksum_enable) {
 			struct file *checksum_fp;
 			static loff_t checksum_pos;
@@ -1597,6 +1609,7 @@ int print_decoder_info(struct vdec_s *vdec)
 			checksum_fp = NULL;
 			num++;
 		}
+#endif
 	}
 
 	return 0;

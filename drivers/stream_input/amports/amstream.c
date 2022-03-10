@@ -24,7 +24,8 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
-#include <uapi/linux/major.h>
+//#include <uapi/linux/major.h>
+#include <linux/amlogic/major.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
@@ -32,9 +33,17 @@
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
+#ifdef CONFIG_AMLOGIC_MEDIA_FRAME_SYNC
 #include <linux/amlogic/media/frame_sync/tsync.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/frame_sync/timestamp.h>
+#include <linux/amlogic/media/frame_sync/tsync_pcr.h>
+#else
+#include "../../include/frame_sync/tsync.h"
+#include "../../include/frame_sync/ptsserv.h"
+#include "../../include/frame_sync/timestamp.h"
+#include "../../include/frame_sync/tsync_pcr.h"
+#endif
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
@@ -42,9 +51,10 @@
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+//#include <linux/dma-contiguous.h>
 #include <linux/uaccess.h>
 #include <linux/clk.h>
+#include <linux/compat.h>
 #if 1				/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 /* #include <mach/mod_gate.h> */
 /* #include <mach/power_gate.h> */
@@ -59,7 +69,6 @@
 #include "../parser/rmparser.h"
 #include "amports_priv.h"
 #include <linux/amlogic/media/utils/amports_config.h>
-#include <linux/amlogic/media/frame_sync/tsync_pcr.h>
 #include "../amports/thread_rw.h"
 #include <linux/firmware.h>
 #include <linux/of.h>
@@ -78,6 +87,7 @@
 #include "../subtitle/subtitle.h"
 #include "stream_buffer_base.h"
 #include "../../frame_provider/decoder/utils/vdec_feature.h"
+#include <linux/syscalls.h>
 
 //#define G12A_BRINGUP_DEBUG
 
@@ -709,13 +719,13 @@ static void audio_port_release(struct stream_port_s *port,
 	/*fallthrough*/
 	case 4:
 		esparser_release(pbuf);
-	/*fallthrough*/
+		fallthrough;
 	case 3:
 		adec_release(port->vformat);
-	/*fallthrough*/
+		fallthrough;
 	case 2:
 		stbuf_release(pbuf);
-	/*fallthrough*/
+		fallthrough;
 	case 1:
 		;
 	}
@@ -3713,13 +3723,17 @@ static long amstream_ioc_setget_ptr(struct port_priv_s *priv,
 	struct am_ioctl_parm_ptr __user *data;
 	struct am_ioctl_parm_ptr32 param;
 	int ret;
+	unsigned long mmm = current->mm->brk;
 
 	if (copy_from_user(&param,
 		(void __user *)arg,
 		sizeof(struct am_ioctl_parm_ptr32)))
 		return -EFAULT;
 
-	data = compat_alloc_user_space(sizeof(*data));
+	//data = compat_alloc_user_space(sizeof(*data));
+	//brk(mmm + sizeof(*data));
+	data = (void *)mmm;
+
 	if (!access_ok(data, sizeof(*data)))
 		return -EFAULT;
 
@@ -3739,35 +3753,39 @@ static long amstream_set_sysinfo(struct port_priv_s *priv,
 		struct dec_sysinfo32 __user *arg)
 {
 	struct dec_sysinfo __user *data;
-	struct dec_sysinfo32 __user *data32 = arg;
+	//struct dec_sysinfo32 __user *data32 = arg;
 	int ret;
 	struct dec_sysinfo32 param;
+	unsigned long mmm = current->mm->brk;
 
 	if (copy_from_user(&param,
 		(void __user *)arg,
 		sizeof(struct dec_sysinfo32)))
 		return -EFAULT;
 
-	data = compat_alloc_user_space(sizeof(*data));
+	//data = compat_alloc_user_space(sizeof(*data));
+	//brk(mmm + sizeof(*data));
+	data = (void *)mmm;
+
 	if (!access_ok(data, sizeof(*data)))
 		return -EFAULT;
-	if (copy_in_user(data, data32, 7 * sizeof(u32)))
-		return -EFAULT;
+	//if (copy_in_user(data, data32, 7 * sizeof(u32)))
+	//	return -EFAULT;
 	if (put_user(compat_ptr(param.param), &data->param))
 		return -EFAULT;
-	if (copy_in_user(&data->ratio64, &data32->ratio64,
-					sizeof(data->ratio64)))
-		return -EFAULT;
+	//if (copy_in_user(&data->ratio64, &data32->ratio64,
+	//				sizeof(data->ratio64)))
+	//	return -EFAULT;
 
 	ret = amstream_do_ioctl(priv, AMSTREAM_IOC_SYSINFO,
 			(unsigned long)data);
 	if (ret < 0)
 		return ret;
 
-	if (copy_in_user(&arg->format, &data->format, 7 * sizeof(u32)) ||
-			copy_in_user(&arg->ratio64, &data->ratio64,
-					sizeof(arg->ratio64)))
-		return -EFAULT;
+	//if (copy_in_user(&arg->format, &data->format, 7 * sizeof(u32)) ||
+	//		copy_in_user(&arg->ratio64, &data->ratio64,
+	//				sizeof(arg->ratio64)))
+	//	return -EFAULT;
 
 	return 0;
 }
@@ -3787,9 +3805,10 @@ static long amstream_ioc_get_userdata(struct port_priv_s *priv,
 		struct userdata_param32_t __user *arg)
 {
 	struct userdata_param_t __user *data;
-	struct userdata_param32_t __user *data32 = arg;
+	//struct userdata_param32_t __user *data32 = arg;
 	int ret;
 	struct userdata_param32_t param;
+	unsigned long mmm = current->mm->brk;
 
 
 	if (copy_from_user(&param,
@@ -3797,16 +3816,18 @@ static long amstream_ioc_get_userdata(struct port_priv_s *priv,
 		sizeof(struct userdata_param32_t)))
 		return -EFAULT;
 
-	data = compat_alloc_user_space(sizeof(*data));
+	//data = compat_alloc_user_space(sizeof(*data));
+	//brk(mmm + sizeof(*data));
+	data = (void *)mmm;
 	if (!access_ok(data, sizeof(*data)))
 		return -EFAULT;
 
-	if (copy_in_user(data, data32, 4 * sizeof(u32)))
-		return -EFAULT;
+	//if (copy_in_user(data, data32, 4 * sizeof(u32)))
+	//	return -EFAULT;
 
-	if (copy_in_user(&data->meta_info, &data32->meta_info,
-					sizeof(data->meta_info)))
-		return -EFAULT;
+	//if (copy_in_user(&data->meta_info, &data32->meta_info,
+	//				sizeof(data->meta_info)))
+	//	return -EFAULT;
 
 	if (put_user(compat_ptr(param.pbuf_addr), &data->pbuf_addr))
 		return -EFAULT;
@@ -3816,10 +3837,10 @@ static long amstream_ioc_get_userdata(struct port_priv_s *priv,
 	if (ret < 0)
 		return ret;
 
-	if (copy_in_user(&data32->version, &data->version, 4 * sizeof(u32)) ||
-			copy_in_user(&data32->meta_info, &data->meta_info,
-					sizeof(data32->meta_info)))
-		return -EFAULT;
+	//if (copy_in_user(&data32->version, &data->version, 4 * sizeof(u32)) ||
+	//		copy_in_user(&data32->meta_info, &data->meta_info,
+	//				sizeof(data32->meta_info)))
+	//	return -EFAULT;
 
 	return 0;
 }
@@ -4268,6 +4289,7 @@ ssize_t dump_stream_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
 {
+#if 0
 	struct stream_buf_s *p_buf;
 	int ret = 0, id = 0;
 	unsigned int stride, remain, level, vmap_size;
@@ -4356,7 +4378,7 @@ ssize_t dump_stream_store(struct class *class,
 
 	filp_close(fp, current->files);
 	pr_info("dump stream buf end\n");
-
+#endif
 	return size;
 }
 

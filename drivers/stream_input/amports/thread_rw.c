@@ -24,7 +24,7 @@
 #include <linux/kfifo.h>
 #include <linux/workqueue.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+//#include <linux/dma-contiguous.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
 #include <linux/vmalloc.h>

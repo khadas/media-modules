@@ -356,9 +356,15 @@ static void flush_output(struct vdec_mpeg4_hw_s * hw);
 
 #define PROVIDER_NAME   "vdec.mpeg4"
 
-/*
- *int query_video_status(int type, int *value);
- */
+#ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
+extern int query_video_status(int type, int *value);
+#else
+int query_video_status(int type, int *value)
+{
+	return -1;
+}
+#endif
+
 static const struct vframe_operations_s vf_provider_ops = {
 	.peek = vmpeg_vf_peek,
 	.get = vmpeg_vf_get,

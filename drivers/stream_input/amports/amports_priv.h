@@ -32,7 +32,11 @@ struct port_priv_s {
 struct stream_buf_s *get_buf_by_type(u32 type);
 
 /*video.c provide*/
+#ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 extern u32 trickmode_i;
+#else
+u32 __weak trickmode_i;
+#endif
 struct amvideocap_req;
 extern u32 set_blackout_policy(int policy);
 extern u32 get_blackout_policy(void);
@@ -42,7 +46,11 @@ int ext_put_video_frame(struct vframe_s *vf);
 int ext_register_end_frame_callback(struct amvideocap_req *req);
 int amstream_request_firmware_from_sys(const char *file_name,
 	char *buf, int size);
+#ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 void set_vsync_pts_inc_mode(int inc);
+#else
+void __weak set_vsync_pts_inc_mode(int inc) { return; }
+#endif
 
 void set_real_audio_info(void *arg);
 void amstream_wakeup_userdata_poll(struct vdec_s *vdec);

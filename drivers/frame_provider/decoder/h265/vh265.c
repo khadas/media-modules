@@ -35,7 +35,7 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/timer.h>
@@ -115,7 +115,7 @@ to enable DV of frame mode
 
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
-#include <linux/amlogic/media/video_sink/video.h>
+//#include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/vdec_feature.h"
 
@@ -622,7 +622,12 @@ void WRITE_VREG_DBG(unsigned adr, unsigned val)
 #undef WRITE_VREG
 #define WRITE_VREG WRITE_VREG_DBG
 #endif
+
+#ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 extern u32 trickmode_i;
+#else
+u32 trickmode_i;
+#endif
 
 static DEFINE_MUTEX(vh265_mutex);
 
@@ -4161,7 +4166,7 @@ static void init_decode_head_hw(struct hevc_state_s *hevc)
 {
 
 	struct BuffInfo_s *buf_spec = hevc->work_space_buf;
-	unsigned int data32;
+	unsigned int data32 = 0;
 
 	int losless_comp_header_size =
 		compute_losless_comp_header_size(hevc->pic_w,
@@ -7655,9 +7660,9 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		union param_u *rpm_param,
 		int decode_pic_begin)
 {
-#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+//#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	struct vdec_s *vdec = hw_to_vdec(hevc);
-#endif
+//#endif
 	int i;
 	int lcu_x_num_div;
 	int lcu_y_num_div;

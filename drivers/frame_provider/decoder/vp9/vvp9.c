@@ -35,7 +35,7 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include <linux/slab.h>
 //#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
@@ -53,7 +53,7 @@
 #include "../utils/vdec_profile.h"
 #endif
 
-#include <linux/amlogic/media/video_sink/video.h>
+//#include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/config_parser.h"
 #include "../utils/firmware.h"

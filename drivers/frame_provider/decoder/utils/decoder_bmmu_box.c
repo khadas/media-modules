@@ -29,7 +29,7 @@
 #include <linux/amlogic/media/codec_mm/codec_mm_scatter.h>
 #include <linux/platform_device.h>
 
-#include <linux/amlogic/media/video_sink/video_keeper.h>
+//#include <linux/amlogic/media/video_sink/video_keeper.h>
 #include "decoder_bmmu_box.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/codec_mm_keeper.h>

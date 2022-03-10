@@ -35,7 +35,7 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+//#include <linux/dma-contiguous.h>
 #include <linux/slab.h>
 //#include <linux/amlogic/tee.h>
 #include <uapi/linux/tee.h>
@@ -52,7 +52,7 @@
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 
-#include <linux/amlogic/media/video_sink/video.h>
+//#include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../utils/config_parser.h"
 #include "../utils/firmware.h"
@@ -4814,7 +4814,7 @@ static int vavs2_event_cb(int type, void *data, void *private_data)
 			(struct provider_aux_req_s *)data;
 		unsigned char index;
 		unsigned long flags;
-		struct avs2_frame_s *pic;
+		struct avs2_frame_s *pic = NULL;
 
 		if (!req->vf) {
 			req->aux_size = dec->vf_put_count;

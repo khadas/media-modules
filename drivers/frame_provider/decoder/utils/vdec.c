@@ -32,7 +32,7 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include <linux/amlogic/media/video_sink/ionvideo_ext.h>
+//#include <linux/amlogic/media/video_sink/ionvideo_ext.h>
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #endif
@@ -54,12 +54,11 @@
 #include <linux/of_fdt.h>
 #include <linux/libfdt_env.h>
 #include <linux/of_reserved_mem.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include <linux/cma.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
 #include "../../../stream_input/amports/amports_priv.h"
 
 #include <linux/amlogic/media/utils/amports_config.h>
@@ -70,12 +69,11 @@
 #include <linux/reset.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/media/video_sink/video_keeper.h>
+//#include <linux/amlogic/media/video_sink/video_keeper.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "frame_check.h"
-#include <linux/amlogic/tee.h>
 #include "vdec_canvas_utils.h"
 #include "../../../amvdec_ports/aml_vcodec_drv.h"
 
@@ -87,10 +85,17 @@
 #ifdef CONFIG_AMLOGIC_IONVIDEO
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
 #endif
+
+//#if defined(CONFIG_AMLOGIC_TEE) || defined(CONFIG_AMLOGIC_TEE_MODULE)
+#include <linux/amlogic/tee.h>
+//#endif
+
 //#include <dt-bindings/power/sc2-pd.h>
 //#include <linux/amlogic/pwr_ctrl.h>
 #include <linux/of_device.h>
 #include "vdec_power_ctrl.h"
+#include <linux/amlogic/media/frame_sync/timestamp.h>
+#include "firmware.h"
 
 static DEFINE_MUTEX(vdec_mutex);
 
@@ -2553,8 +2558,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path == FRAME_BASE_PATH_IONVIDEO) {
 #if 1
-			r = ionvideo_assign_map(&vdec->vf_receiver_name,
-					&vdec->vf_receiver_inst);
+			//r = ionvideo_assign_map(&vdec->vf_receiver_name,
+			//		&vdec->vf_receiver_inst);
 #else
 			/*
 			 * temporarily just use decoder instance ID as iondriver ID

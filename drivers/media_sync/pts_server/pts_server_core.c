@@ -105,7 +105,9 @@ long ptsserver_ins_alloc(s32 *pServerInsId,
 	}
 
 	if (index == MAX_INSTANCE_NUM) {
-		kzfree(pInstance);
+		//kzfree(pInstance);
+		memset(pInstance, 0, sizeof(ptsserver_ins));
+		kfree(pInstance);
 		return -1;
 	}
 
@@ -583,7 +585,9 @@ long ptsserver_ins_release(s32 pServerInsId) {
 		}
 	}
 
-	kzfree(pInstance);
+	//kzfree(pInstance);
+	memset(pInstance, 0, sizeof(ptsserver_ins));
+	kfree(pInstance);
 	pInstance = NULL;
 	vPtsServerInsList[index].pInstance = NULL;
 	mutex_unlock(&vPtsServerIns->mListLock);

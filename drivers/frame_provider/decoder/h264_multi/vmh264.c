@@ -37,7 +37,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include "../../../stream_input/amports/amports_priv.h"
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include "../utils/vdec_input.h"
@@ -47,7 +47,7 @@
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
-#include "../h264/vh264.h"
+#include "vh264.h"
 #include "../../../stream_input/amports/streambuf.h"
 #include <linux/delay.h>
 #include <linux/amlogic/media/codec_mm/configs.h>

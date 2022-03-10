@@ -25,9 +25,36 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 #include "aml_task_chain.h"
+
+#ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
+#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+#else
+struct metadata {
+	char *p_md;
+	char *p_comp;
+};
+
+struct file_private_data {
+	struct vframe_s vf;
+	struct vframe_s *vf_p;
+	bool is_keep;
+	int keep_id;
+	int keep_head_id;
+	struct file *file;
+	ulong vb_handle;
+	ulong v4l_dec_ctx;
+	u32 v4l_inst_id;
+	struct vframe_s vf_ext;
+	struct vframe_s *vf_ext_p;
+	u32 flag;
+	struct metadata md;
+	void *private;
+	struct file *cnt_file;
+};
+
+#endif
 
 #define VCODEC_CAPABILITY_4K_DISABLED	0x10
 #define VCODEC_DEC_4K_CODED_WIDTH	4096U
