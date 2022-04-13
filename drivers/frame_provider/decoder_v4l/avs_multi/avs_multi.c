@@ -541,6 +541,7 @@ struct vdec_avs_hw_s {
 	u32 canvas_mode;
 	struct aml_buf *aml_buf;
 	bool process_busy;
+	bool run_flag;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -3065,6 +3066,8 @@ void (*callback)(struct vdec_s *, void *),
 	int save_reg;
 	int size, ret;
 	int i;
+	hw->run_flag = 1;
+
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
 		amvdec_enable();
@@ -3103,6 +3106,7 @@ void (*callback)(struct vdec_s *, void *),
 			hw->input_empty++;
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
 			return;
 		}
 	} else {
@@ -3110,6 +3114,7 @@ void (*callback)(struct vdec_s *, void *),
 			hw->input_empty++;
 			hw->dec_result = DEC_RESULT_AGAIN;
 			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
 			return;
 		}
 	}
@@ -3189,6 +3194,7 @@ void (*callback)(struct vdec_s *, void *),
 				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
 			return;
 		}
 		vdec->mc_loaded = 1;
@@ -3215,6 +3221,7 @@ void (*callback)(struct vdec_s *, void *),
 		debug_print(hw, PRINT_FLAG_ERROR,
 		"ammvdec_avs: error HW context restore\n");
 		vdec_schedule_work(&hw->work);
+		hw->run_flag = 0;
 		return;
 	}
 
@@ -3272,6 +3279,7 @@ void (*callback)(struct vdec_s *, void *),
 	hw->stat |= STAT_TIMER_ARM;
 
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
+	hw->run_flag = 0;
 }
 
 static void reset(struct vdec_s *vdec)
@@ -4170,7 +4178,10 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		hw->frame_dur);
 
 	debug_print(hw, 0,
-		"is_framebase(%d), decode_status 0x%x, buf_status 0x%x, buf_recycle_status 0x%x, throw %d, eos %d, state 0x%x, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
+		"is_framebase(%d), decode_status 0x%x, buf_status 0x%x,"
+		"buf_recycle_status 0x%x, throw %d, eos %d, state 0x%x,"
+		"dec_result 0x%x dec_frm %d disp_frm %d run %d"
+		"not_run_ready %d input_empty %d run_flag %d\n",
 		vdec_frame_based(vdec),
 		READ_VREG(DECODE_STATUS) & 0xff,
 		hw->buf_status,
@@ -4183,7 +4194,9 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		hw->display_frame_count,
 		hw->run_count,
 		hw->not_run_ready,
-		hw->input_empty);
+		hw->input_empty,
+		hw->run_flag
+		);
 
 	debug_print(hw, 0,
 		"%s, newq(%d/%d), dispq(%d/%d)recycleq(%d/%d) drop %d vf peek %d, prepare/get/put (%d/%d/%d)\n",
@@ -4489,8 +4502,12 @@ error1:
 		cancel_work_sync(&hw->work);
 
 		if (hw->mm_blk_handle) {
-			decoder_bmmu_box_free(hw->mm_blk_handle);
+			void *bmmu_box_tmp = hw->mm_blk_handle;
 			hw->mm_blk_handle = NULL;
+			if (hw->run_flag)
+				usleep_range(1000, 2000);
+			decoder_bmmu_box_free(hw->mm_blk_handle);
+			bmmu_box_tmp = NULL;
 		}
 		if (vdec->parallel_dec == 1)
 			vdec_core_release(hw_to_vdec(hw), CORE_MASK_VDEC_1);

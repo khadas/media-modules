@@ -250,6 +250,7 @@ struct vdec_mjpeg_hw_s {
 	char new_q_name[32];
 	char disp_q_name[32];
 	int force_recycle;
+	bool run_flag;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -755,7 +756,8 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		hw->frame_height,
 		hw->buf_num);
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
-		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d put_frm %d run %d not_run_ready %d input_empty %d\n",
+		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x"
+		"dec_frm %d put_frm %d run %d not_run_ready %d input_empty %d run_flag %d\n",
 		input_frame_based(vdec),
 		hw->eos,
 		hw->stat,
@@ -764,7 +766,8 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		hw->put_num,
 		hw->run_count,
 		hw->not_run_ready,
-		hw->input_empty);
+		hw->input_empty,
+		hw->run_flag);
 
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"%s, newq(%d/%d), dispq(%d/%d) vf peek/get/put (%d/%d/%d)\n",
@@ -1423,6 +1426,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		(struct vdec_mjpeg_hw_s *)vdec->private;
 	int ret;
 
+	hw->run_flag = 1;
 	hw->vdec_cb_arg = arg;
 	hw->vdec_cb = callback;
 
@@ -1441,6 +1445,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 		hw->dec_result = DEC_RESULT_AGAIN;
 		vdec_schedule_work(&hw->work);
+		hw->run_flag = 0;
 		return;
 	}
 
@@ -1460,6 +1465,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 				vdec->id, tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
+			hw->run_flag = 0;
 			return;
 		}
 		vdec->mc_loaded = 1;
@@ -1471,6 +1477,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		mmjpeg_debug_print(DECODE_ID(hw), 0,
 			"amvdec_mmjpeg: error HW context restore\n");
 		vdec_schedule_work(&hw->work);
+		hw->run_flag = 0;
 		return;
 	}
 
@@ -1497,6 +1504,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		READ_VREG(VLD_MEM_VIFIFO_CONTROL),
 		READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
 		READ_VREG(VLD_MEM_VIFIFO_END_PTR));
+	hw->run_flag = 0;
 }
 static void wait_vmjpeg_search_done(struct vdec_mjpeg_hw_s *hw)
 {
@@ -1662,8 +1670,12 @@ static int vmjpeg_stop(struct vdec_mjpeg_hw_s *hw)
 	hw->init_flag = 0;
 
 	if (hw->mm_blk_handle) {
-		decoder_bmmu_box_free(hw->mm_blk_handle);
+		void *bmmu_box_tmp = hw->mm_blk_handle;
 		hw->mm_blk_handle = NULL;
+		if (hw->run_flag)
+			usleep_range(1000, 2000);
+		decoder_bmmu_box_free(hw->mm_blk_handle);
+		bmmu_box_tmp = NULL;
 	}
 
 	if (hw->fw) {
