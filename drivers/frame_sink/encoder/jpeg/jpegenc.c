@@ -618,12 +618,15 @@ static int jpeg_enc_clk_get(struct device *dev, struct jpeg_enc_clks *clks)
         ret = -ENOENT;
         goto err;
     }
-    clks->dos_apb_clk = devm_clk_get(dev, "clk_apb_dos");
-    if (IS_ERR(clks->dos_apb_clk)) {
-        jenc_pr(LOG_ERROR, "cannot get clk_apb_dos clock\n");
-        clks->dos_apb_clk = NULL;
-        ret = -ENOENT;
-        goto err;
+
+    if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_C3) {
+        clks->dos_apb_clk = devm_clk_get(dev, "clk_apb_dos");
+        if (IS_ERR(clks->dos_apb_clk)) {
+            jenc_pr(LOG_ERROR, "cannot get clk_apb_dos clock\n");
+            clks->dos_apb_clk = NULL;
+            ret = -ENOENT;
+            goto err;
+        }
     }
     clks->jpeg_enc_clk = devm_clk_get(dev, "clk_jpeg_enc");
     if (IS_ERR(clks->jpeg_enc_clk)) {
