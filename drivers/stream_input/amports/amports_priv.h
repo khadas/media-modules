@@ -22,7 +22,7 @@
 #include "../amports/streambuf.h"
 #include "../../common/media_clock/switch/amports_gate.h"
 #include <linux/amlogic/media/vfm/vframe.h>
-#include <linux/amlogic/media/registers/register.h>
+#include "../../include/regs/dos_registers.h"
 #include <linux/amlogic/media/utils/log.h>
 
 struct port_priv_s {

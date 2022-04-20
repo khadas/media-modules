@@ -41,7 +41,6 @@
 /* #endif */
 
 #include "../../frame_provider/decoder/utils/vdec.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../amports/streambuf_reg.h"
 #include "../amports/streambuf.h"
 #include <linux/amlogic/media/utils/amports_config.h>

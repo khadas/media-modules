@@ -19,7 +19,9 @@
  */
 #ifndef DECODER_CPU_VER_INFO_H
 #define DECODER_CPU_VER_INFO_H
+#include <linux/platform_device.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
+
 /* majoy chip id define */
 #define MAJOY_ID_MASK (0x000000ff)
 
@@ -63,6 +65,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_S4D	= 0x3a,
 	AM_MESON_CPU_MAJOR_ID_T5W	= 0x3b,
 	AM_MESON_CPU_MAJOR_ID_C3	= 0x3c,
+	AM_MESON_CPU_MAJOR_ID_S5	= 0x3d,
 	AM_MESON_CPU_MAJOR_ID_MAX,
 };
 
@@ -83,6 +86,8 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define AM_MESON_CPU_MINOR_ID_S4_S805X2  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S4)
 
 /* export functions */
+struct platform_device *initial_dos_device(void);
+
 enum AM_MESON_CPU_MAJOR_ID get_cpu_major_id(void);
 
 bool is_cpu_meson_revb(void);
@@ -92,5 +97,7 @@ bool is_cpu_tm2_revb(void);
 int get_cpu_sub_id(void);
 
 bool is_cpu_s4_s805x2(void);
+
+inline bool is_support_new_dos_dev(void);
 
 #endif

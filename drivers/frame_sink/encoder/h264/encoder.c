@@ -42,7 +42,6 @@
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 //#include "../../../frame_provider/decoder/utils/vdec_canvas_utils.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 //#include "../../../frame_provider/decoder/utils/vdec.h"
 #include <linux/delay.h>
 #include <linux/poll.h>
@@ -59,7 +58,6 @@
 //#include "../../../frame_provider/decoder/utils/vdec.h"
 //#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
 
-#include <linux/amlogic/media/utils/vdec_reg.h>
 //#include <linux/amlogic/power_ctrl.h>
 #include <dt-bindings/power/sc2-pd.h>
 #include <dt-bindings/power/t3-pd.h>

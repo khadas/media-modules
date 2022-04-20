@@ -19,7 +19,8 @@
  */
 #define DEBUG
 #include "vdec_power_ctrl.h"
-#include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../../../include/regs/dos_registers.h"
+#include "../../../common/register/register.h"
 //#include <linux/amlogic/power_ctrl.h>
 //#include <dt-bindings/power/sc2-pd.h>
 //#include <linux/amlogic/pwr_ctrl.h>
@@ -148,7 +149,8 @@ static void pm_vdec_clock_on(int id)
 		/* enable hevc clock */
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2 &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5))
 			amports_switch_gate("clk_hevcf_mux", 1);
 		else
 			amports_switch_gate("clk_hevc_mux", 1);
@@ -184,6 +186,18 @@ static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 
 	pm_vdec_clock_on(id);
 	pm_vdec_power_switch(pm->pd_data, id, true);
+	// debug s5, remove after pd done?
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
+		/* vdec mem pd */
+		pr_info("DOS_MEM_PD_VDEC %lx\n", DOS_MEM_PD_VDEC);
+		WRITE_VREG(DOS_MEM_PD_VDEC, 0);
+		/* hevc mem pd */
+		pr_info("DOS_MEM_PD_HEVC %lx\n", DOS_MEM_PD_HEVC);
+		WRITE_VREG(DOS_MEM_PD_HEVC, 0);
+		pr_info("DOS_MEM_PD_HEVC_DBE %lx\n", DOS_MEM_PD_HEVC_DBE);
+		WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0);
+		pr_info("--->s5 MEM PD set enable id %d\n", id);
+	}
 }
 
 static void pm_vdec_power_domain_power_off(struct device *dev, int id)
@@ -200,7 +214,7 @@ static bool pm_vdec_power_domain_power_state(struct device *dev, int id)
 
 	return pm_runtime_active(pm->pd_data[id].dev);
 }
-
+#if 0
 static bool test_hevc(u32 decomp_addr, u32 us_delay)
 {
 	int i;
@@ -267,11 +281,12 @@ static bool hevc_workaround_needed(void)
 		(get_meson_cpu_version(MESON_CPU_VERSION_LVL_MINOR)
 			== GXBB_REV_A_MINOR);
 }
-
+#endif
 static void pm_vdec_legacy_power_off(struct device *dev, int id);
 
 static void pm_vdec_legacy_power_on(struct device *dev, int id)
 {
+#if 0
 	void *decomp_addr = NULL;
 	ulong decomp_dma_addr;
 	ulong mem_handle;
@@ -505,10 +520,12 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 
 	if (decomp_addr)
 		codec_mm_dma_free_coherent(mem_handle);
+#endif
 }
 
 static void pm_vdec_legacy_power_off(struct device *dev, int id)
 {
+#if 0
 	int sleep_val, iso_val;
 	bool is_power_ctrl_ver2 = false;
 
@@ -660,12 +677,14 @@ static void pm_vdec_legacy_power_off(struct device *dev, int id)
 			}
 		}
 	}
+#endif
 }
 
 static bool pm_vdec_legacy_power_state(struct device *dev, int id)
 {
-	bool ret = false;
 
+	bool ret = false;
+#if 0
 	if (id == VDEC_1) {
 		if (((READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) &
 			(((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
@@ -698,7 +717,7 @@ static bool pm_vdec_legacy_power_state(struct device *dev, int id)
 				ret = true;
 		}
 	}
-
+#endif
 	return ret;
 }
 

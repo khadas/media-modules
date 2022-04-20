@@ -25,9 +25,8 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 //#include <linux/amlogic/media/clk/gp_pll.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 //#include <linux/amlogic/media/utils/amports_config.h>
-//#include "../../../frame_provider/decoder/utils/vdec.h"
+#include "../../../frame_provider/decoder/utils/vdec.h"
 #include <linux/amlogic/media/registers/register.h>
 #include "clk_priv.h"
 #include <linux/amlogic/media/utils/log.h>

@@ -42,7 +42,7 @@
 
 /* #include <mach/am_regs.h> */
 /* #include <mach/power_gate.h> */
-#include <linux/amlogic/media/utils/vdec_reg.h>
+//#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "amvdec.h"
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "firmware.h"
@@ -687,7 +687,8 @@ static s32 amhevc_loadmc(const u32 *p)
 		WRITE_VREG(HEVC_IMEM_DMA_ADR, mc_addr_map);
 		WRITE_VREG(HEVC_IMEM_DMA_COUNT, 0x1000);
 		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
 		else
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0x7 << 16)));

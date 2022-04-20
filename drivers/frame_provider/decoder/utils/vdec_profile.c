@@ -23,7 +23,6 @@
 #include <linux/debugfs.h>
 #include <linux/moduleparam.h>
 #include <linux/sched/clock.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <trace/events/meson_atrace.h>
 #include "vdec_profile.h"
 #include "vdec.h"

@@ -54,7 +54,6 @@
 
 #define MEM_NAME "codec_av1"
 /* #include <mach/am_regs.h> */
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 //#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
@@ -105,7 +104,9 @@
 #define FGS_TABLE_SIZE  (512 * 128 / 8)
 
 #define AV1_GMC_PARAM_BUFF_ADDR 	               0x316d
+#if 0
 #define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
+#endif
 #define HEVC_FGS_IDX                               0x3660
 #define HEVC_FGS_DATA                              0x3661
 #define HEVC_FGS_CTRL                              0x3662

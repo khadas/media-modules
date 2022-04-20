@@ -21,7 +21,7 @@
 #include "vdec_canvas_utils.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/amlogic/media/canvas/canvas.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
+//#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vdec.h"
 
 static struct canvas_status_s canvas_stat[CANVAS_MAX_SIZE];

@@ -55,6 +55,14 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include <media/v4l2-mem2mem.h>
 
+//#include <linux/amlogic/media/utils/vdec_reg.h>
+
+#include "../utils/vdec.h"
+#include "../utils/amvdec.h"
+#include <linux/amlogic/media/video_sink/video.h>
+#include <linux/amlogic/media/codec_mm/configs.h>
+#include "../utils/vdec_feature.h"
+
 /*
 to enable DV of frame mode
 #define DOLBY_META_SUPPORT in ucode
@@ -109,18 +117,11 @@ to enable DV of frame mode
 #define HEVC_DW_VH1_ADDDR                          0x365f
 
 #define HEVC_DBLK_CFGB                             0x350b
-#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
+//#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
+
 #define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define MEM_NAME "codec_265"
-/* #include <mach/am_regs.h> */
-#include <linux/amlogic/media/utils/vdec_reg.h>
-
-#include "../utils/vdec.h"
-#include "../utils/amvdec.h"
-//#include <linux/amlogic/media/video_sink/video.h>
-#include <linux/amlogic/media/codec_mm/configs.h>
-#include "../utils/vdec_feature.h"
 
 #define SEND_LMEM_WITH_RPM
 #define SUPPORT_10BIT
@@ -12723,6 +12724,7 @@ static void vh265_check_timer_func(struct timer_list *timer)
 		rval = 0;
 		radr = 0;
 	}
+#if 0
 	if (dbg_cmd != 0) {
 		if (dbg_cmd == 1) {
 			u32 disp_laddr;
@@ -12744,6 +12746,7 @@ static void vh265_check_timer_func(struct timer_list *timer)
 		}
 		dbg_cmd = 0;
 	}
+#endif
 	/*don't changed at start.*/
 	if (hevc->m_ins_flag == 0 &&
 		hevc->get_frame_dur && hevc->show_frame_num > 60 &&

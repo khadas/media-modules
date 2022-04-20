@@ -49,7 +49,6 @@
 #include "../utils/decoder_bmmu_box.h"
 
 #define MEM_NAME "codec_vp9"
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
@@ -76,10 +75,11 @@
 #define CO_MV_COMPRESS
 #define HW_MASK_FRONT    0x1
 #define HW_MASK_BACK     0x2
-
+#if 0
 #define VP9D_MPP_REFINFO_TBL_ACCCONFIG             0x3442
 #define VP9D_MPP_REFINFO_DATA                      0x3443
 #define VP9D_MPP_REF_SCALE_ENBL                    0x3441
+#endif
 #define HEVC_MPRED_CTRL4                           0x324c
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_DBLK_CFGB                             0x350b
@@ -10216,6 +10216,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 		pr_info("\r\nsum = %x\r\n", sum);
 		pop_shorts = 0;
 	}
+#if 0
 	if (dbg_cmd != 0) {
 		if (dbg_cmd == 1) {
 			u32 disp_laddr;
@@ -10236,6 +10237,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 		}
 		dbg_cmd = 0;
 	}
+#endif
 	/*don't changed at start.*/
 	if (pbi->get_frame_dur && pbi->show_frame_num > 60 &&
 		pbi->frame_dur > 0 && pbi->saved_resolution !=

@@ -45,7 +45,6 @@
 #include <linux/signal.h>
 /*for VDEC_DEBUG_SUPPORT*/
 #include <linux/time.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../stream_input/amports/streambuf.h"
 #include "vdec.h"
 #include "vdec_trace.h"
@@ -130,7 +129,7 @@ static int rdma_mode = 0x1;
 #define VDEC_DBG_CANVAS_STATUS	(0x4)
 #define VDEC_DBG_ENABLE_FENCE	(0x100)
 
-
+#if 0
 #define HEVC_RDMA_F_CTRL                           0x30f0
 #define HEVC_RDMA_F_START_ADDR                     0x30f1
 #define HEVC_RDMA_F_END_ADDR                       0x30f2
@@ -140,6 +139,7 @@ static int rdma_mode = 0x1;
 #define HEVC_RDMA_B_START_ADDR                     0x30f9
 #define HEVC_RDMA_B_END_ADDR                       0x30fa
 #define HEVC_RDMA_B_STATUS0                        0x30fb
+#endif
 
 
 static u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
@@ -197,14 +197,7 @@ static int enable_stream_mode_multi_dec;
 
 st_userdata userdata;
 
-typedef void (*vdec_frame_rate_event_func)(int);
-
-#if 1
-extern void vframe_rate_uevent(int duration);
-vdec_frame_rate_event_func frame_rate_notify = vframe_rate_uevent;
-#else
 vdec_frame_rate_event_func frame_rate_notify = NULL;
-#endif
 
 void vdec_frame_rate_uevent(int dur)
 {
@@ -585,9 +578,6 @@ static void vdec_stop_armrisc(int hw)
 		}
 	}
 }
-
-#define VDEC_ASSIST_DBUS_DISABLE		0x0046
-#define HEVC_ASSIST_AXI_STATUS2_LO		0x307f
 
 static void vdec_dbus_ctrl(bool enable)
 {
@@ -3723,7 +3713,7 @@ static int vdec_core_thread(void *data)
 			usleep_range(1000, 2000);
 			up(&core->sem);
 		}
-
+		usleep_range(1000, 2000);  /*sleep necessary when non-smp */
 	}
 
 	return 0;

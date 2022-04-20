@@ -35,6 +35,9 @@
 /*#define CONFIG_AM_VDEC_DV*/
 #include "../../../stream_input/amports/streambuf.h"
 #include "../../../stream_input/amports/stream_buffer_base.h"
+#include "../../../framerate_adapter/video_framerate_adapter.h"
+#include "../../../include/regs/dos_registers.h"
+#include "../../../common/register/register.h"
 
 #include "vdec_input.h"
 #include "frame_check.h"
@@ -692,7 +695,6 @@ unsigned long vdec_canvas_lock(void);
 
 int vdec_get_core_nr(void);
 
-
 int vdec_post_task(post_task_handler func, void *args);
 
 void rdma_front_end_wrok(dma_addr_t ddr_phy_addr, u32 size);
@@ -705,5 +707,8 @@ st_userdata *get_vdec_userdata_ctx(void);
 
 void vdec_frame_rate_uevent(int dur);
 
+void register_frame_rate_uevent_func(vdec_frame_rate_event_func func);
+
+void vdec_sync_irq(enum vdec_irq_num num);
 
 #endif				/* VDEC_H */

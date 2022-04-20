@@ -37,6 +37,9 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
+#include <linux/amlogic/media/video_sink/video.h>
+#include <linux/amlogic/media/codec_mm/configs.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/dma-mapping.h>
 //#include <linux/dma-contiguous.h>
 #include <linux/slab.h>
@@ -44,7 +47,13 @@
 #include <uapi/linux/tee.h>
 #include <linux/sched/clock.h>
 #include "../../../stream_input/amports/amports_priv.h"
-#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include "../../../common/chips/decoder_cpu_ver_info.h"
+#include "../../../include/regs/dos_registers.h"
+#include "../utils/vdec.h"
+#include "../utils/amvdec.h"
+#include "../utils/config_parser.h"
+#include "../utils/firmware.h"
+#include "../utils/vdec_feature.h"
 #include "../utils/decoder_mmu_box.h"
 #include "../utils/decoder_bmmu_box.h"
 #include "avs2_global.h"
@@ -71,7 +80,7 @@
 #include "vavs2.h"
 #define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
 #define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_MPRED_CTRL9                           0x325b
+//#define HEVC_MPRED_CTRL9                           0x325b
 #define HEVC_DBLK_CFGD                             0x350d
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_DBLK_CFGB                             0x350b

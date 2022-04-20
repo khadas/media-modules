@@ -58,11 +58,9 @@
 #include "../amports/streambuf.h"
 #include "../amports/streambuf_reg.h"
 #include "../parser/tsdemux.h"
-#include "../parser/psparser.h"
 #include "../parser/esparser.h"
 #include "../../frame_provider/decoder/utils/vdec.h"
 #include "adec.h"
-#include "../parser/rmparser.h"
 #include "amports_priv.h"
 #include <linux/amlogic/media/utils/amports_config.h>
 #include "../amports/thread_rw.h"
@@ -168,8 +166,6 @@ static ssize_t amstream_abuf_write
 (struct file *file, const char *buf, size_t count, loff_t *ppos);
 static ssize_t amstream_mpts_write
 (struct file *file, const char *buf, size_t count, loff_t *ppos);
-static ssize_t amstream_mpps_write
-(struct file *file, const char *buf, size_t count, loff_t *ppos);
 static ssize_t amstream_sub_read
 (struct file *file, char *buf, size_t count, loff_t *ppos);
 static ssize_t amstream_sub_write
@@ -180,10 +176,6 @@ static unsigned int amstream_userdata_poll
 (struct file *file, poll_table *wait_table);
 static int (*amstream_adec_status)
 (struct adec_status *astatus);
-#ifdef CONFIG_AM_VDEC_REAL
-static ssize_t amstream_mprm_write
-(struct file *file, const char *buf, size_t count, loff_t *ppos);
-#endif
 
 static const struct file_operations vbuf_fops = {
 	.owner = THIS_MODULE,
@@ -223,30 +215,6 @@ static const struct file_operations mpts_fops = {
 	.open = amstream_open,
 	.release = amstream_release,
 	.write = amstream_mpts_write,
-	.unlocked_ioctl = amstream_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = amstream_compat_ioctl,
-#endif
-};
-
-static const struct file_operations mpps_fops = {
-	.owner = THIS_MODULE,
-	.open = amstream_open,
-	.release = amstream_release,
-	.write = amstream_mpps_write,
-	.unlocked_ioctl = amstream_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = amstream_compat_ioctl,
-#endif
-};
-
-static const struct file_operations mprm_fops = {
-	.owner = THIS_MODULE,
-	.open = amstream_open,
-	.release = amstream_release,
-#ifdef CONFIG_AM_VDEC_REAL
-	.write = amstream_mprm_write,
-#endif
 	.unlocked_ioctl = amstream_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = amstream_compat_ioctl,
@@ -364,17 +332,6 @@ static struct stream_port_s ports[] = {
 		.fops = &mpts_fops,
 	},
 #endif
-	{
-		.name = "amstream_mpps",
-		.type = PORT_TYPE_MPPS | PORT_TYPE_VIDEO |
-			PORT_TYPE_AUDIO | PORT_TYPE_SUB,
-		.fops = &mpps_fops,
-	},
-	{
-		.name = "amstream_rm",
-		.type = PORT_TYPE_RM | PORT_TYPE_VIDEO | PORT_TYPE_AUDIO,
-		.fops = &mprm_fops,
-	},
 	{
 		.name = "amstream_sub",
 		.type = PORT_TYPE_SUB,
@@ -761,14 +718,6 @@ static int audio_port_reset(struct stream_port_s *port,
 	if (port->type & PORT_TYPE_MPTS)
 		tsdemux_audio_reset();
 
-	if (port->type & PORT_TYPE_MPPS)
-		psparser_audio_reset();
-
-#ifdef CONFIG_AM_VDEC_REAL
-	if (port->type & PORT_TYPE_RM)
-		rm_audio_reset();
-#endif
-
 	pbuf->flag |= BUF_FLAG_IN_USE;
 	amstream_audio_reset = 1;
 
@@ -796,9 +745,6 @@ static int sub_port_reset(struct stream_port_s *port,
 
 	if (port->type & PORT_TYPE_MPTS)
 		tsdemux_sub_reset();
-
-	if (port->type & PORT_TYPE_MPPS)
-		psparser_sub_reset();
 
 	if (port->sid == 0xffff) {	/* es sub */
 		esparser_sub_reset();
@@ -959,8 +905,6 @@ static int amstream_port_init(struct port_priv_s *priv)
 
 			if (port->type & PORT_TYPE_MPTS) {
 				ops = get_tsparser_stbuf_ops();
-			} else if (port->type & PORT_TYPE_MPPS) {
-				ops = get_psparser_stbuf_ops();
 			} else {
 				ops = !vdec_single(vdec) ?
 					get_stbuf_ops() :
@@ -1014,13 +958,6 @@ static int amstream_port_init(struct port_priv_s *priv)
 		}
 	}
 
-#ifdef CONFIG_AM_VDEC_REAL
-	if (port->type & PORT_TYPE_RM) {
-		rm_set_vasid(
-			(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
-			(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff);
-	}
-#endif
 #if 1	/* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6TVD */
 	if (!NO_VDEC2_INIT) {
 		if ((port->type & PORT_TYPE_VIDEO)
@@ -1073,11 +1010,6 @@ static int amstream_port_release(struct port_priv_s *priv)
 		tsdemux_release();
 	}
 
-	if ((port->type & PORT_TYPE_MPPS) &&
-		!(port->flag & PORT_FLAG_VFORMAT)) {
-		psparser_release();
-	}
-
 	if (port->type & PORT_TYPE_VIDEO) {
 		video_port_release(priv, pvbuf, 0);
 	}
@@ -1105,31 +1037,12 @@ static void amstream_change_avid(struct stream_port_s *port)
 		(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
 		(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff);
 	}
-
-	if (port->type & PORT_TYPE_MPPS) {
-		psparser_change_avid(
-		(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
-		(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff);
-	}
-
-#ifdef CONFIG_AM_VDEC_REAL
-	if (port->type & PORT_TYPE_RM) {
-		rm_set_vasid(
-		(port->flag & PORT_FLAG_VID) ? port->vid : 0xffff,
-		(port->flag & PORT_FLAG_AID) ? port->aid : 0xffff);
-	}
-#endif
 }
 
 static void amstream_change_sid(struct stream_port_s *port)
 {
 	if (port->type & PORT_TYPE_MPTS) {
 		tsdemux_change_sid(
-		(port->flag & PORT_FLAG_SID) ? port->sid : 0xffff);
-	}
-
-	if (port->type & PORT_TYPE_MPPS) {
-		psparser_change_sid(
 		(port->flag & PORT_FLAG_SID) ? port->sid : 0xffff);
 	}
 }
@@ -1236,40 +1149,6 @@ static ssize_t amstream_mpts_write(struct file *file, const char *buf,
 	}
 	return r;
 }
-
-static ssize_t amstream_mpps_write(struct file *file, const char *buf,
-					size_t count, loff_t *ppos)
-{
-	struct port_priv_s *priv = (struct port_priv_s *)file->private_data;
-	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
-	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
-	int r;
-
-	if (!(port_get_inited(priv))) {
-		r = amstream_port_init(priv);
-		if (r < 0)
-			return r;
-	}
-	return psparser_write(file, pvbuf, pabuf, buf, count);
-}
-
-#ifdef CONFIG_AM_VDEC_REAL
-static ssize_t amstream_mprm_write(struct file *file, const char *buf,
-					size_t count, loff_t *ppos)
-{
-	struct port_priv_s *priv = (struct port_priv_s *)file->private_data;
-	struct stream_buf_s *pvbuf = &bufs[BUF_TYPE_VIDEO];
-	struct stream_buf_s *pabuf = &bufs[BUF_TYPE_AUDIO];
-	int r;
-
-	if (!(port_get_inited(priv))) {
-		r = amstream_port_init(priv);
-		if (r < 0)
-			return r;
-	}
-	return rmparser_write(file, pvbuf, pabuf, buf, count);
-}
-#endif
 
 static ssize_t amstream_sub_read(struct file *file, char __user *buf,
 					size_t count, loff_t *ppos)
@@ -1893,9 +1772,6 @@ static long amstream_ioctl_get(struct port_priv_s *priv, ulong arg)
 	case AMSTREAM_GET_LAST_CHECKOUT_VPTS:
 		parm.data_32 = get_last_checkout_pts(PTS_TYPE_VIDEO);
 		break;
-	case AMSTREAM_GET_SUB_NUM:
-		parm.data_32 = psparser_get_sub_found_num();
-		break;
 	case AMSTREAM_GET_VIDEO_DELAY_LIMIT_MS:
 		parm.data_32 = bufs[BUF_TYPE_VIDEO].max_buffer_delay_ms;
 		break;
@@ -2467,49 +2343,6 @@ static long amstream_ioctl_set_ex(struct port_priv_s *priv, ulong arg)
 	long r = 0;
 	return r;
 }
-static long amstream_ioctl_get_ptr(struct port_priv_s *priv, ulong arg)
-{
-	long r = 0;
-
-	struct am_ioctl_parm_ptr parm;
-
-	if (copy_from_user
-		((void *)&parm, (void *)arg,
-		 sizeof(parm)))
-		return -EFAULT;
-
-	switch (parm.cmd) {
-	case AMSTREAM_GET_PTR_SUB_INFO:
-		{
-			struct subtitle_info msub_info[MAX_SUB_NUM];
-			struct subtitle_info *psub_info[MAX_SUB_NUM];
-			int i;
-
-			for (i = 0; i < MAX_SUB_NUM; i++)
-				psub_info[i] = &msub_info[i];
-
-			r = psparser_get_sub_info(psub_info);
-
-			if (r == 0) {
-				memcpy(parm.pdata_sub_info, msub_info,
-					sizeof(struct subtitle_info)
-					* MAX_SUB_NUM);
-			}
-		}
-		break;
-	default:
-		r = -ENOIOCTLCMD;
-		break;
-	}
-	/* pr_info("parm size:%d\n", sizeof(parm)); */
-	if (r == 0) {
-		if (copy_to_user((void *)arg, &parm, sizeof(parm)))
-			r = -EFAULT;
-	}
-
-	return r;
-
-}
 static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 {
 	struct stream_port_s *this = priv->port;
@@ -2601,9 +2434,6 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 		break;
 	case AMSTREAM_IOC_SET_EX:
 		r = amstream_ioctl_set_ex(priv, arg);
-		break;
-	case AMSTREAM_IOC_GET_PTR:
-		r = amstream_ioctl_get_ptr(priv, arg);
 		break;
 	case AMSTREAM_IOC_SET_PTR:
 		r = amstream_ioctl_set_ptr(priv, arg);
@@ -3361,37 +3191,6 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		break;
 	case AMSTREAM_IOC_GET_LAST_CHECKOUT_VPTS:
 		put_user(get_last_checkout_pts(PTS_TYPE_VIDEO), (int *)arg);
-		break;
-	case AMSTREAM_IOC_SUB_NUM:
-		put_user(psparser_get_sub_found_num(), (int *)arg);
-		break;
-
-	case AMSTREAM_IOC_SUB_INFO:
-		if (arg > 0) {
-			struct subtitle_info *msub_info =
-				vzalloc(sizeof(struct subtitle_info) * MAX_SUB_NUM);
-			struct subtitle_info **psub_info =
-				vzalloc(sizeof(struct subtitle_info) * MAX_SUB_NUM);
-			int i;
-
-			if (!msub_info || !psub_info) {
-				r = -ENOMEM;
-				break;
-			}
-
-			for (i = 0; i < MAX_SUB_NUM; i++)
-				psub_info[i] = &msub_info[i];
-
-			r = psparser_get_sub_info(psub_info);
-
-			if (r == 0) {
-				if (copy_to_user((void __user *)arg, msub_info,
-				sizeof(struct subtitle_info) * MAX_SUB_NUM))
-					r = -EFAULT;
-			}
-			vfree(msub_info);
-			vfree(psub_info);
-		}
 		break;
 	case AMSTREAM_IOC_SET_DEMUX:
 		tsdemux_set_demux((int)arg);
@@ -4491,7 +4290,9 @@ static int amstream_probe(struct platform_device *pdev)
 	init_waitqueue_head(&amstream_userdata_wait);
 	reset_canuse_buferlevel(10000);
 	amstream_pdev = pdev;
-	amports_clock_gate_init(&amstream_pdev->dev);
+
+	if (!is_support_new_dos_dev())
+		amports_clock_gate_init(&amstream_pdev->dev);
 
 	/*prealloc fetch buf to avoid no continue buffer later...*/
 	stbuf_fetch_init();
