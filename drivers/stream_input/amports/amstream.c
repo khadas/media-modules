@@ -140,18 +140,11 @@ static loff_t debug_file_pos;
 
 void debug_file_write(const char __user *buf, size_t count)
 {
-	mm_segment_t old_fs;
-
 	if (!debug_filp)
 		return;
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	if (count != vfs_write(debug_filp, buf, count, &debug_file_pos))
+	if (count != __kernel_write(debug_filp, buf, count, &debug_file_pos))
 		pr_err("Failed to write debug file\n");
-
-	set_fs(old_fs);
 }
 #endif
 
@@ -325,7 +318,9 @@ static int last_read_wi;
 static u32 force_dv_mode;
 
 static DEFINE_MUTEX(userdata_mutex);
-
+#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+#define CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+#endif
 static struct stream_port_s ports[] = {
 	{
 		.name = "amstream_vbuf",
@@ -3713,29 +3708,19 @@ struct am_ioctl_parm_ptr32 {
 static long amstream_ioc_setget_ptr(struct port_priv_s *priv,
 		unsigned int cmd, struct am_ioctl_parm_ptr32 __user *arg)
 {
-	struct am_ioctl_parm_ptr __user *data;
-	struct am_ioctl_parm_ptr32 param;
+	struct am_ioctl_parm_ptr data = {};
 	int ret;
-	unsigned long mmm = current->mm->brk;
+	compat_uptr_t pointer;
 
-	if (copy_from_user(&param,
-		(void __user *)arg,
-		sizeof(struct am_ioctl_parm_ptr32)))
+	if (copy_from_user(&data.cmd, &arg->cmd, sizeof(u32)) ||
+		copy_from_user(&data.len, &arg->len, sizeof(u32)) )
 		return -EFAULT;
 
-	//data = compat_alloc_user_space(sizeof(*data));
-	//brk(mmm + sizeof(*data));
-	data = (void *)mmm;
-
-	if (!access_ok(data, sizeof(*data)))
+	if (get_user(pointer, &arg->pointer))
 		return -EFAULT;
+	data.pointer = compat_ptr(pointer);
 
-	if (put_user(param.cmd, &data->cmd) ||
-		put_user(compat_ptr(param.pointer), &data->pointer) ||
-		put_user(param.len, &data->len))
-		return -EFAULT;
-
-	ret = amstream_do_ioctl(priv, cmd, (unsigned long)data);
+	ret = amstream_do_ioctl(priv, cmd, (unsigned long)&data);
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -3743,42 +3728,31 @@ static long amstream_ioc_setget_ptr(struct port_priv_s *priv,
 }
 
 static long amstream_set_sysinfo(struct port_priv_s *priv,
-		struct dec_sysinfo32 __user *arg)
+		struct dec_sysinfo32 __user *data32)
 {
-	struct dec_sysinfo __user *data;
-	//struct dec_sysinfo32 __user *data32 = arg;
+	struct dec_sysinfo data = {};
+	compat_uptr_t param;
 	int ret;
-	struct dec_sysinfo32 param;
-	unsigned long mmm = current->mm->brk;
 
-	if (copy_from_user(&param,
-		(void __user *)arg,
-		sizeof(struct dec_sysinfo32)))
+	/*seven args*/
+	if (copy_from_user(&data, data32, 7 * sizeof(u32)))
 		return -EFAULT;
-
-	//data = compat_alloc_user_space(sizeof(*data));
-	//brk(mmm + sizeof(*data));
-	data = (void *)mmm;
-
-	if (!access_ok(data, sizeof(*data)))
+	/*param*/
+	if (get_user(param, &data32->param))
 		return -EFAULT;
-	//if (copy_in_user(data, data32, 7 * sizeof(u32)))
-	//	return -EFAULT;
-	if (put_user(compat_ptr(param.param), &data->param))
+	data.param = compat_ptr(param);
+	/*ratio64*/
+	if (copy_from_user(&data.ratio64, &data32->ratio64, sizeof(data.ratio64)))
 		return -EFAULT;
-	//if (copy_in_user(&data->ratio64, &data32->ratio64,
-	//				sizeof(data->ratio64)))
-	//	return -EFAULT;
 
 	ret = amstream_do_ioctl(priv, AMSTREAM_IOC_SYSINFO,
-			(unsigned long)data);
+			(unsigned long)&data);
 	if (ret < 0)
 		return ret;
 
-	//if (copy_in_user(&arg->format, &data->format, 7 * sizeof(u32)) ||
-	//		copy_in_user(&arg->ratio64, &data->ratio64,
-	//				sizeof(arg->ratio64)))
-	//	return -EFAULT;
+	if (copy_to_user(&data32->format, &data.format, 7 * sizeof(u32)) ||
+			copy_to_user(&data32->ratio64, &data.ratio64, sizeof(data32->ratio64)))
+		return -EFAULT;
 
 	return 0;
 }
@@ -3797,43 +3771,29 @@ struct userdata_param32_t {
 static long amstream_ioc_get_userdata(struct port_priv_s *priv,
 		struct userdata_param32_t __user *arg)
 {
-	struct userdata_param_t __user *data;
-	//struct userdata_param32_t __user *data32 = arg;
+	struct userdata_param_t data = {};
 	int ret;
-	struct userdata_param32_t param;
-	unsigned long mmm = current->mm->brk;
+	compat_uptr_t pbuf_addr;
 
-
-	if (copy_from_user(&param,
-		(void __user *)arg,
-		sizeof(struct userdata_param32_t)))
+	if (copy_from_user(&data, &arg, 4 * sizeof(u32)))
 		return -EFAULT;
 
-	//data = compat_alloc_user_space(sizeof(*data));
-	//brk(mmm + sizeof(*data));
-	data = (void *)mmm;
-	if (!access_ok(data, sizeof(*data)))
+	if (copy_from_user(&data.meta_info, &arg->meta_info, sizeof(data.meta_info)))
 		return -EFAULT;
 
-	//if (copy_in_user(data, data32, 4 * sizeof(u32)))
-	//	return -EFAULT;
-
-	//if (copy_in_user(&data->meta_info, &data32->meta_info,
-	//				sizeof(data->meta_info)))
-	//	return -EFAULT;
-
-	if (put_user(compat_ptr(param.pbuf_addr), &data->pbuf_addr))
+	if (get_user(pbuf_addr, &arg->pbuf_addr))
 		return -EFAULT;
+	data.pbuf_addr = compat_ptr(pbuf_addr);
 
 	ret = amstream_do_ioctl(priv, AMSTREAM_IOC_UD_BUF_READ,
-		(unsigned long)data);
+		(unsigned long)&data);
 	if (ret < 0)
 		return ret;
 
-	//if (copy_in_user(&data32->version, &data->version, 4 * sizeof(u32)) ||
-	//		copy_in_user(&data32->meta_info, &data->meta_info,
-	//				sizeof(data32->meta_info)))
-	//	return -EFAULT;
+	if (copy_to_user(&arg->version, &data.version, 4 * sizeof(u32)) ||
+			copy_to_user(&arg->meta_info, &data.meta_info,
+					sizeof(arg->meta_info)))
+		return -EFAULT;
 
 	return 0;
 }
@@ -4282,7 +4242,6 @@ ssize_t dump_stream_store(struct class *class,
 		struct class_attribute *attr,
 		const char *buf, size_t size)
 {
-#if 0
 	struct stream_buf_s *p_buf;
 	int ret = 0, id = 0;
 	unsigned int stride, remain, level, vmap_size;
@@ -4290,7 +4249,6 @@ ssize_t dump_stream_store(struct class *class,
 	void *stbuf_vaddr;
 	unsigned long offset;
 	struct file *fp;
-	mm_segment_t old_fs;
 	loff_t fpos;
 
 	ret = sscanf(buf, "%d", &id);
@@ -4348,19 +4306,15 @@ ssize_t dump_stream_store(struct class *class,
 		}
 		codec_mm_dma_flush(stbuf_vaddr, vmap_size, DMA_FROM_DEVICE);
 
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-		write_size = vfs_write(fp, stbuf_vaddr, vmap_size, &fpos);
+		write_size = __kernel_write(fp, stbuf_vaddr, vmap_size, &fpos);
 		if (write_size < vmap_size) {
-			write_size += vfs_write(fp, stbuf_vaddr + write_size, vmap_size - write_size, &fpos);
+			write_size += __kernel_write(fp, stbuf_vaddr + write_size, vmap_size - write_size, &fpos);
 			pr_info("fail write retry, total %d, write %d\n", vmap_size, write_size);
 			if (write_size < vmap_size) {
 				pr_info("retry fail, interrupt dump stream, break\n");
-				set_fs(old_fs);
 				break;
 			}
 		}
-		set_fs(old_fs);
 		vfs_fsync(fp, 0);
 		pr_info("vmap_size 0x%x dump size 0x%x\n", vmap_size, write_size);
 
@@ -4371,7 +4325,7 @@ ssize_t dump_stream_store(struct class *class,
 
 	filp_close(fp, current->files);
 	pr_info("dump stream buf end\n");
-#endif
+
 	return size;
 }
 

@@ -38,6 +38,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/dma-map-ops.h>
 #include <linux/slab.h>
+#include <linux/fs.h>
+
 #if defined(CONFIG_AMLOGIC_TEE) || defined(CONFIG_AMLOGIC_TEE_MODULE)
 #include <linux/amlogic/tee.h>
 #endif
@@ -3512,7 +3514,6 @@ static void d_fill_zero(struct AV1HW_s *hw, unsigned int phyadr, int size)
 	debug_cmd_wait_type = 0;
 }
 
-#if 0
 static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 	struct file *fp, loff_t *wr_off)
 {
@@ -3534,7 +3535,7 @@ static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 	}
 
 	if (fp) {
-		vfs_write(fp, data,
+		__kernel_write(fp, data,
 			size, wr_off);
 
 	} else {
@@ -3555,7 +3556,7 @@ static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 	debug_cmd_wait_type = 0;
 
 }
-#endif
+
 static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
 	pr_info("fill dummy data pic index %d colocate addreses %x size %x\n",
@@ -3567,19 +3568,15 @@ static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *
 
 static void dump_mv_buffer(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-#if 0 /*get_fs has been removed*/
 	unsigned int adr, size;
 	unsigned int adr_end = pic_config->mpred_mv_wr_start_addr +
 		hw->m_mv_BUF[pic_config->mv_buf_index].size;
-	mm_segment_t old_fs;
 	loff_t off = 0;
 	int mode = O_CREAT | O_WRONLY | O_TRUNC;
 	char file[64];
 	struct file *fp;
 	sprintf(&file[0], "/data/tmp/colocate%d", hw->frame_count-1);
 	fp = filp_open(file, mode, 0666);
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 	for (adr = pic_config->mpred_mv_wr_start_addr;
 		adr < adr_end;
 		adr += UCODE_LOG_BUF_SIZE) {
@@ -3590,11 +3587,8 @@ static void dump_mv_buffer(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_c
 			pic_config->index, adr, size);
 		d_dump(hw, adr, size, fp, &off);
 	}
-	set_fs(old_fs);
-	vfs_fsync(fp, 0);
 
 	filp_close(fp, current->files);
-#endif
 }
 
 #endif

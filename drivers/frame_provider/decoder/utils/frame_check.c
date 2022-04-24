@@ -42,6 +42,7 @@
 #include <linux/page-flags.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <asm/cacheflush.h>
+#include <linux/fs.h>
 
 #define FC_ERROR	0x0
 
@@ -287,30 +288,22 @@ static int str_strip(char *str)
 static char *fget_crc_str(char *buf,
 	unsigned int size, struct pic_check_t *fc)
 {
-#if 0
 	unsigned int c = 0, sz, ret, index, crc1, crc2;
-	mm_segment_t old_fs;
 	char *cs;
 
 	if (!fc->compare_fp)
 		return NULL;
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
 	do {
 		cs = buf;
 		sz = size;
-#if 0
-		while (--sz && (c = vfs_read(fc->compare_fp,
+		while (--sz && (c = __kernel_write(fc->compare_fp,
 			cs, 1, &fc->compare_pos) != 0)) {
 			if (*cs++ == '\n')
 				break;
 		}
-#endif
 		*cs = '\0';
 		if ((c == 0) && (cs == buf)) {
-			set_fs(old_fs);
 			return NULL;
 		}
 		ret = sscanf(buf, "%08u: %8x %8x", &index, &crc1, &crc2);
@@ -318,39 +311,31 @@ static char *fget_crc_str(char *buf,
 			__func__, index, fc->cmp_crc_cnt);
 	}while(ret != 3 || index != fc->cmp_crc_cnt);
 
-	set_fs(old_fs);
 	fc->cmp_crc_cnt++;
-#endif
+
 	return buf;
 }
 
 static char *fget_aux_data_crc_str(char *buf,
 	unsigned int size, struct aux_data_check_t *fc)
 {
-#if 0
 	unsigned int c = 0, sz, ret, index, crc;
-	mm_segment_t old_fs;
 	char *cs;
 
 	if (!fc->compare_fp)
 		return NULL;
 
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
 	do {
 		cs = buf;
 		sz = size;
-#if 0
-		while (--sz && (c = vfs_read(fc->compare_fp,
+		while (--sz && (c = __kernel_write(fc->compare_fp,
 			cs, 1, &fc->compare_pos) != 0)) {
 			if (*cs++ == '\n')
 				break;
 		}
-#endif
+
 		*cs = '\0';
 		if ((c == 0) && (cs == buf)) {
-			set_fs(old_fs);
 			return NULL;
 		}
 		ret = sscanf(buf, "%08u: %8x", &index, &crc);
@@ -358,9 +343,8 @@ static char *fget_aux_data_crc_str(char *buf,
 			__func__, index, fc->cmp_crc_cnt);
 	}while(ret != 2 || index != fc->cmp_crc_cnt);
 
-	set_fs(old_fs);
 	fc->cmp_crc_cnt++;
-#endif
+
 	return buf;
 }
 
@@ -389,8 +373,6 @@ static struct file* file_open(int mode, const char *str, ...)
 
 static int write_yuv_work(struct pic_check_mgr_t *mgr)
 {
-#if 0
-	mm_segment_t old_fs;
 	unsigned int i, wr_size, pic_num;
 	struct pic_dump_t *dump = &mgr->pic_dump;
 
@@ -407,10 +389,8 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 
 			i = 0;
 			pic_num = dump->dump_cnt;
-			old_fs = get_fs();
-			set_fs(KERNEL_DS);
 			while (pic_num > 0) {
-				wr_size = vfs_write(dump->yuv_fp,
+				wr_size = __kernel_write(dump->yuv_fp,
 					(dump->buf_addr + i * mgr->size_pic),
 					mgr->size_pic, &dump->yuv_pos);
 				if (mgr->size_pic != wr_size) {
@@ -420,7 +400,6 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 				pic_num--;
 				i++;
 			}
-			set_fs(old_fs);
 			vfs_fsync(dump->yuv_fp, 0);
 
 			filp_close(dump->yuv_fp, current->files);
@@ -437,16 +416,14 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 			dump->buf_size = 0;
 		}
 	}
-#endif
+
 	return 0;
 }
 
 static int write_crc_work(struct pic_check_mgr_t *mgr)
 {
-#if 0
 	unsigned int wr_size;
 	char *crc_buf, *crc_tmp = NULL;
-	mm_segment_t old_fs;
 	struct pic_check_t *check = &mgr->pic_check;
 
 	crc_tmp = (char *)vzalloc(64 * 30);
@@ -467,27 +444,23 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 			kfifo_put(&check->new_chk_q, crc_buf);
 		}
 		if (check->check_fp && (wr_size != 0)) {
-			old_fs = get_fs();
-			set_fs(KERNEL_DS);
-			if (wr_size != vfs_write(check->check_fp,
+			if (wr_size != __kernel_write(check->check_fp,
 				crc_tmp, wr_size, &check->check_pos)) {
 				dbg_print(FC_ERROR, "failed to check_dump_filp\n");
 			}
-			set_fs(old_fs);
 		}
 	}
 
 	vfree(crc_tmp);
-#endif
+
 	return 0;
 }
 
 static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 {
-#if 0
 	unsigned int wr_size;
-	char *crc_buf, crc_tmp[64*30];
-	mm_segment_t old_fs;
+	char *crc_buf;
+	char *crc_tmp = kmalloc(64*30, GFP_KERNEL);
 	struct aux_data_check_t *check = &mgr->aux_data_check;
 
 	if (mgr->enable & AUX_MASK) {
@@ -504,16 +477,14 @@ static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 			kfifo_put(&check->new_chk_q, crc_buf);
 		}
 		if (check->check_fp && (wr_size != 0)) {
-			old_fs = get_fs();
-			set_fs(KERNEL_DS);
-			if (wr_size != vfs_write(check->check_fp,
+			if (wr_size != __kernel_write(check->check_fp,
 				crc_tmp, wr_size, &check->check_pos)) {
 				dbg_print(FC_ERROR, "failed to check_dump_filp\n");
 			}
-			set_fs(old_fs);
 		}
 	}
-#endif
+	kfree(crc_tmp);
+
 	return 0;
 }
 
@@ -701,14 +672,13 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 	dump->dump_cnt++;
 	dbg_print(0, "----->dump %dst, size %x (%d x %d), dec total %d\n",
 		dump->dump_cnt, mgr->size_pic, vf->width, vf->height, mgr->frame_cnt);
-#if 0
+
 	if (single_mode_vdec != NULL) {
 		/* single mode need schedule work to write*/
 		if (dump->dump_cnt >= dump->num)
 			check_schedule(mgr);
 	} else {
 		int wr_size;
-		mm_segment_t old_fs;
 
 		/* dump for dec pic not in isr */
 		if (dump->yuv_fp == NULL) {
@@ -718,17 +688,14 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 				return -1;
 			mgr->file_cnt++;
 		}
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-		wr_size = vfs_write(dump->yuv_fp, dump->buf_addr,
+		wr_size = __kernel_write(dump->yuv_fp, dump->buf_addr,
 			mgr->size_pic, &dump->yuv_pos);
 		if (mgr->size_pic != wr_size) {
 			dbg_print(FC_ERROR, "buf failed to write yuv file\n");
 		}
-		set_fs(old_fs);
 		vfs_fsync(dump->yuv_fp, 0);
 	}
-#endif
+
 	return 0;
 }
 
@@ -1568,11 +1535,10 @@ int print_decoder_info(struct vdec_s *vdec)
 		sprintf(checksum_info, "Type:%10s,framesize:%04dx%04d,out-nums:%08d,yuvsum:%08x",
 			format_name, vdec->vfc.width, vdec->vfc.height,
 			vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
-#if 0
+
 		if (checksum_enable) {
 			struct file *checksum_fp;
 			static loff_t checksum_pos;
-			mm_segment_t old_fs;
 			char checksum_buf[128]="\n";
 			static int num;
 			static char file_name[128];
@@ -1597,19 +1563,14 @@ int print_decoder_info(struct vdec_s *vdec)
 				num,format_name, vdec->vfc.width, vdec->vfc.height,
 				vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
 
-			old_fs = get_fs();
-			set_fs(KERNEL_DS);
-
-			vfs_write(checksum_fp, checksum_buf,
+			__kernel_write(checksum_fp, checksum_buf,
 				strlen(checksum_buf), &checksum_pos);
-
-			set_fs(old_fs);
 
 			filp_close(checksum_fp, current->files);
 			checksum_fp = NULL;
 			num++;
 		}
-#endif
+
 	}
 
 	return 0;

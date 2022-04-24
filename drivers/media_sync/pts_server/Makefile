@@ -1,4 +1,9 @@
-obj-m	+=	 pts_server.o
+MODULE_NAME = amlogic-pts-serve
+obj-m	+=	 ${MODULE_NAME}.o
 
-pts_server-objs	+=	pts_server_dev.o
-pts_server-objs	+=	pts_server_core.o
+${MODULE_NAME}-objs	+=	pts_server_dev.o
+${MODULE_NAME}-objs	+=	pts_server_core.o
+
+PR_FMT = $(subst amlogic-,,$(MODULE_NAME))
+PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"
+ccflags-y += $(PR_FMT_DEFINE)

@@ -1,19 +1,20 @@
-obj-m	+=	 stream_input.o
+MODULE_NAME = amlogic-stream-input
+obj-m	+=	 ${MODULE_NAME}.o
 
-stream_input-objs	+=	amports/amstream.o
-stream_input-objs	+=	amports/adec.o
-stream_input-objs	+=	amports/thread_rw.o
-stream_input-objs	+=	amports/streambuf.o
-stream_input-objs	+=	amports/stream_buffer_base.o
-stream_input-objs	+=	amports/stream_buffer_interface.o
+${MODULE_NAME}-objs	+=	amports/amstream.o
+${MODULE_NAME}-objs	+=	amports/adec.o
+${MODULE_NAME}-objs	+=	amports/thread_rw.o
+${MODULE_NAME}-objs	+=	amports/streambuf.o
+${MODULE_NAME}-objs	+=	amports/stream_buffer_base.o
+${MODULE_NAME}-objs	+=	amports/stream_buffer_interface.o
 
-stream_input-objs	+=	parser/esparser.o
-stream_input-objs	+=	parser/tsdemux.o
-stream_input-objs	+=	parser/psparser.o
-stream_input-objs	+=	parser/rmparser.o
-stream_input-objs	+=	subtitle/subtitle.o
+${MODULE_NAME}-objs	+=	parser/esparser.o
+${MODULE_NAME}-objs	+=	parser/tsdemux.o
+${MODULE_NAME}-objs	+=	parser/psparser.o
+${MODULE_NAME}-objs	+=	parser/rmparser.o
+${MODULE_NAME}-objs	+=	subtitle/subtitle.o
 
-stream_input-objs	+=	parser/dvb_common.o
+${MODULE_NAME}-objs	+=	parser/dvb_common.o
 obj-$(CONFIG_AMLOGIC_DVB)   += parser/hw_demux/
 obj-$(CONFIG_AMLOGIC_DVB)   += parser/dvb_ci/
 

@@ -1110,6 +1110,7 @@ int vdec_set_decinfo(struct vdec_s *vdec, struct dec_sysinfo *p)
 	if (copy_from_user((void *)&vdec->sys_info_store, (void *)p,
 		sizeof(struct dec_sysinfo)))
 		return -EFAULT;
+//	memcpy(&vdec->sys_info_store, p, sizeof(struct dec_sysinfo));
 
 	/* force switch to mult instance if supports this profile. */
 	if ((vdec->type == VDEC_TYPE_SINGLE) &&

@@ -1945,6 +1945,9 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 
 static bool is_ref_error(struct vdec_mpeg12_hw_s *hw)
 {
+	if (hw->refs[0] == -1 || hw->refs[1] == -1)
+		return 0;
+
 	if ((hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) ||
 		(hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR))
 		return 1;
