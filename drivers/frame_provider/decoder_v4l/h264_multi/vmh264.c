@@ -70,6 +70,7 @@
 #include "../../decoder/utils/vdec_feature.h"
 #include "h264_dpb.h"
 #include "../../decoder/utils/aml_buf_helper.h"
+#include "../../../amvdec_ports/aml_vcodec_ts.h"
 
 #define DETECT_WRONG_MULTI_SLICE
 
@@ -357,8 +358,7 @@ static u32 without_display_mode;
 static int loop_playback_poc_threshold = 400;
 static int poc_threshold = 50;
 
-static u32 lookup_check_count = 30;
-
+//static u32 lookup_check_conut = 30;
 
 /*
  *[3:0] 0: default use config from omx.
@@ -2583,6 +2583,7 @@ static int is_iframe(struct FrameStore *frame) {
 static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	int buffer_index = frame->buf_spec_num;
 
 	if (buffer_index < 0 || buffer_index >= BUFSPEC_POOL_SIZE) {
@@ -2638,17 +2639,13 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 	}
 	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
-		if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
-			if ((pts_lookup_offset_us64(PTS_TYPE_VIDEO,
-				frame->offset_delimiter, &frame->pts, &frame->frame_size,
-				0, &frame->pts64) == 0)) {
-				if ((lookup_check_count && (atomic_read(&hw->vf_pre_count) > lookup_check_count) &&
-					(hw->wrong_frame_count > hw->right_frame_count)) &&
-					((frame->decoded_frame_size * 2 < frame->frame_size))) {
-					/*resolve many frame only one check in pts, cause playback unsmooth issue*/
-					frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
-					frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-				}
+		if (vdec->is_v4l || (vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+			struct checkoutptsoffset pts_st;
+			u64 dur_offset = hw->frame_dur;
+			dur_offset = (dur_offset << 32 ) | frame->offset_delimiter;
+			if (!v4l2_ctx->pts_serves_ops->checkout(v4l2_ctx->ptsserver_id, dur_offset, &pts_st)) {
+				frame->pts = pts_st.pts;
+				frame->pts64 = pts_st.pts_64;
 				hw->right_frame_count++;
 			} else {
 				frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
@@ -3015,7 +3012,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
-		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+		if (!vdec->is_v4l && !vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 			/* offset for tsplayer pts lookup */
 			if (i == 0) {
 				vf->pts_us64 = (((u64)vf->duration << 32) &
@@ -6134,6 +6131,7 @@ static void check_decoded_pic_error(struct vdec_h264_hw_s *hw)
 static int vh264_pic_done_proc(struct vdec_s *vdec)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)(vdec->private);
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int ret;
 	int i;
@@ -6200,9 +6198,12 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				struct StorablePicture *pic =
 					p_H264_Dpb->mVideo.dec_picture;
 				u32 offset = pic->offset_delimiter;
+				struct checkoutptsoffset pts_st;
+				u64 dur_offset = hw->frame_dur;
+				dur_offset = (dur_offset << 32) | offset;
+
 				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
-				if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
-					offset, &pic->pts, 0, &pic->pts64)) {
+				if (ctx->pts_serves_ops->cal_offset(ctx->ptsserver_id, dur_offset, &pts_st)) {
 					pic->pts = 0;
 					pic->pts64 = 0;
 #ifdef MH264_USERDATA_ENABLE
@@ -6212,6 +6213,10 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 #endif
 				} else {
 #ifdef MH264_USERDATA_ENABLE
+
+					pic->pts = pts_st.pts;
+					pic->pts64 = pts_st.pts_64;
+
 					vmh264_udc_fill_vpts(hw,
 						p_H264_Dpb->mSlice.slice_type,
 						pic->pts, 1);
@@ -6654,8 +6659,31 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		if (hw->config_bufmgr_done == 0) {
 			hw->dec_result = DEC_RESULT_DONE;
-			if (input_frame_based(vdec))
+			if (input_frame_based(vdec)) {
 				vdec_v4l_post_error_frame_event(ctx);
+			} else {
+				if (p_H264_Dpb) {
+					u32 offset_lo, offset_hi;
+					u32 offset;
+					struct checkoutptsoffset pts_st;
+					offset_lo  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_LO];
+					offset_hi  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_HI];
+
+					offset = offset_lo | offset_hi << 16;
+
+					if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, offset, &pts_st)) {
+						ctx->current_timestamp = pts_st.pts_64;
+						dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT, "pts cal_offset current pts:0x%x pts_64:%llx\n", pts_st.pts, pts_st.pts_64);
+					} else {
+						dpb_print(DECODE_ID(hw), 0, "pts cal_offset fail\n");
+						ctx->current_timestamp = 0;
+					}
+					vdec_v4l_post_error_frame_event(ctx);
+				} else {
+					dpb_print(DECODE_ID(hw), 0, "p_H264_Dpb is null\n");
+				}
+			}
+
 			vdec_schedule_work(&hw->work);
 			dpb_print(DECODE_ID(hw),
 				PRINT_FLAG_UCODE_EVT,

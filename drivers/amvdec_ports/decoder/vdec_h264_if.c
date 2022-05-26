@@ -32,6 +32,7 @@
 #include "../vdec_drv_base.h"
 #include "aml_h264_parser.h"
 #include "../utils/common.h"
+#include "../aml_vcodec_ts.h"
 
 /* h264 NALU type */
 #define NAL_NON_IDR_SLICE			0x01
@@ -682,11 +683,18 @@ out:
 static int vdec_h264_probe(unsigned long h_vdec,
 	struct aml_vcodec_mem *bs, void *out)
 {
-	struct vdec_h264_inst *inst =
-		(struct vdec_h264_inst *)h_vdec;
+	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
+	struct aml_vdec_adapt *adapt_vdec = &inst->vdec;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
 	u8 *buf = (u8 *) bs->vaddr;
 	u32 size = bs->size;
 	int ret = 0;
+
+	if (ctx->stream_mode) {
+		ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, bs->timestamp);
+		vdec_write_stream_data(adapt_vdec, (u32)bs->addr, size);
+		return 0;
+	}
 
 	if (inst->ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
@@ -862,12 +870,22 @@ static int vdec_h264_decode(unsigned long h_vdec,
 {
 	struct vdec_h264_inst *inst = (struct vdec_h264_inst *)h_vdec;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
-	u8 *buf = (u8 *) bs->vaddr;
-	u32 size = bs->size;
+	struct aml_vcodec_ctx *ctx = inst->ctx;
+	u8 *buf;
+	u32 size;
 	int ret = -1;
 
 	if (bs == NULL)
 		return -1;
+
+	buf = (u8 *) bs->vaddr;
+	size = bs->size;
+
+	if (ctx->stream_mode) {
+		ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, bs->timestamp);
+		vdec_write_stream_data(vdec, (u32)bs->addr, size);
+		return size;
+	}
 
 	if (vdec_input_full(vdec))
 		return -EAGAIN;

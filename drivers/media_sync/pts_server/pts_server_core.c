@@ -133,7 +133,25 @@ long ptsserver_ins_alloc(s32 *pServerInsId,
 	pts_pr_info(index,"ptsserver_ins_alloc ok\n");
 	return 0;
 }
+EXPORT_SYMBOL(ptsserver_ins_alloc);
 
+void ptsserver_set_mode(s32 pServerInsId, bool set_mode) {
+	ptsserver_ins* pInstance = NULL;
+	PtsServerManage* vPtsServerIns = NULL;
+	s32 index = pServerInsId;
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return;
+	vPtsServerIns = &(vPtsServerInsList[index]);
+
+	pInstance = vPtsServerIns->pInstance;
+	if (pInstance == NULL) {
+		return;
+	}
+	pInstance->setC2Mode = set_mode;
+
+	return;
+}
+EXPORT_SYMBOL(ptsserver_set_mode);
 
 long ptsserver_set_first_checkin_offset(s32 pServerInsId,start_offset* mStartOffset) {
 	ptsserver_ins* pInstance = NULL;
@@ -157,12 +175,14 @@ long ptsserver_set_first_checkin_offset(s32 pServerInsId,start_offset* mStartOff
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
-
+EXPORT_SYMBOL(ptsserver_set_first_checkin_offset);
 
 long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSize) {
 	PtsServerManage* vPtsServerIns = NULL;
 	ptsserver_ins* pInstance = NULL;
 	pts_node* ptn = NULL;
+	pts_node* ptn_cur = NULL;
+	pts_node* ptn_tmp = NULL;
 	pts_node* del_ptn = NULL;
 	s32 index = pServerInsId;
 	s32 level = 0;
@@ -184,7 +204,7 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 		del_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
 		list_del(&del_ptn->node);
 		if (ptsserver_debuglevel >= 1) {
-			pts_pr_info(index,"Checkin delete node size:%d pts:0x%x pts_64:%lld\n",
+			pts_pr_info(index,"Checkin delete node size:%d pts:0x%x pts_64:%llx\n",
 								del_ptn->offset,
 								del_ptn->pts,
 								del_ptn->pts_64);
@@ -193,8 +213,17 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 		pInstance->mListSize--;
 	}
 
-
-	list_add_tail(&ptn->node, &pInstance ->pts_list);
+	if (pInstance->setC2Mode) {
+		list_for_each_entry_safe(ptn_cur,ptn_tmp,&pInstance->pts_list, node) {
+			if (ptn_cur != NULL) {
+				if (ptn_cur->pts_64 >= ptn->pts_64)
+					break;
+			}
+		}
+		list_add_tail(&ptn->node, &ptn_cur->node);
+	} else {
+		list_add_tail(&ptn->node, &pInstance ->pts_list);
+	}
 
 	pInstance->mListSize++;
 	if (!pInstance->mPtsCheckinStarted) {
@@ -216,7 +245,7 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 								pInstance->mListSize,
 								pInstance->mLastCheckinOffset,
 								pInstance->mLastCheckinSize);
-		pts_pr_info(index,"Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%x 64:%lld)\n",
+		pts_pr_info(index,"Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%x 64:%llx)\n",
 							mCheckinPtsSize->size,
 							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
 							ptn->offset,
@@ -240,6 +269,31 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
+EXPORT_SYMBOL(ptsserver_checkin_pts_size);
+
+void ptsserver_delete_invalid_pts_node(ptsserver_ins* pInstance, pts_node* ptn){
+	pts_node* ptn_cur = NULL;
+	pts_node* ptn_tmp = NULL;
+
+	if (ptn == NULL || pInstance == NULL)
+		return;
+
+	list_for_each_entry_safe(ptn_cur,ptn_tmp,&pInstance->pts_list, node) {
+		if (ptn_cur == ptn)
+			break;
+		if (ptn->offset > ptn_cur->offset) {
+			list_del(&ptn_cur->node);
+			vfree(ptn_cur);
+			pInstance->mListSize--;
+			if (ptsserver_debuglevel >= 1 ||
+				!pInstance->mPtsCheckoutStarted) {
+				pts_pr_info(0,"delete invalid node offset:0x%x pts(32:0x%x 64:%llx)\n",
+					ptn_cur->offset,ptn_cur->pts,ptn_cur->pts_64);
+			}
+		}
+	}
+}
+
 
 long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPtsOffset) {
 	PtsServerManage* vPtsServerIns = NULL;
@@ -255,7 +309,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	u32 offsetDiff = 2500;
 	s32 find_framenum = 0;
 	s32 find = 0;
-	s32 offsetAbs = 0;
+	u32 offsetAbs = 0;
 	u32 FrameDur = 0;
 	u64 FrameDur64 = 0;
 	s32 number = -1;
@@ -317,7 +371,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				} else if (/*cur_offset > ptn->offset && */offsetAbs > 251658240) {
 					// > 240M (15M*16)
 					if (ptsserver_debuglevel >= 1) {
-						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%lld\n",
+						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%llx\n",
 											i,
 											offsetAbs,
 											ptn->offset,
@@ -340,15 +394,47 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 		if (find) {
 			mCheckoutPtsOffset->pts = find_ptn->pts;
 			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
-			list_del(&find_ptn->node);
 			if (ptsserver_debuglevel >= 1 ||
 				!pInstance->mPtsCheckoutStarted) {
-				pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%lld)\n",
+				pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llx)\n",
 									pInstance->mListSize,number,offsetDiff,
 									find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
 			}
-			vfree(find_ptn);
-			pInstance->mListSize--;
+
+			if (pInstance->setC2Mode) {
+				ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
+			} else {
+				list_del(&find_ptn->node);
+				vfree(find_ptn);
+				pInstance->mListSize--;
+			}
+		} else if(pInstance->setC2Mode) {
+			if (cur_offset != 0xFFFFFFFF && !list_empty(&pInstance->pts_list)) {
+				u32 min_offsetAbs = 0xFFFFFFFF;
+				find_framenum = 0;
+				list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
+
+					if (ptn != NULL && (cur_offset > ptn->offset)) {
+						offsetAbs = abs(cur_offset - ptn->offset);
+
+						if (offsetAbs < min_offsetAbs) {
+							min_offsetAbs = offsetAbs;
+							find_ptn = ptn;
+							if (ptsserver_debuglevel >= 1)
+								pts_pr_info(index,"Checkout change to i:%d offset(diff:%d L:0x%x C:0x%x)\n",i,offsetAbs,find_ptn->offset,cur_offset);
+						}
+					}
+				}
+				if (find_ptn) {
+					find = 1;
+					mCheckoutPtsOffset->pts = find_ptn->pts;
+					mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
+					if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
+						pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llx)\n",
+							pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
+					ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
+				}
+			}
 		}
 	}
 	if (!find) {
@@ -361,7 +447,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			pInstance->mLastCheckoutPts = pInstance->mLastCheckoutPts + pInstance->mDecoderDuration;
 			pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mDecoderDuration * 1000 / 96;
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkout fail mDecoderDuration:%d pts(32:%d 64:%lld)\n",
+				pts_pr_info(index,"Checkout fail mDecoderDuration:%d pts(32:%d 64:%llx)\n",
 									pInstance->mDecoderDuration,
 									pInstance->mLastCheckoutPts,
 									pInstance->mLastCheckoutPts64);
@@ -374,7 +460,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mFrameDuration64;
 			}
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkout fail FrameDuration(32:%d 64:%lld) pts(32:%d 64:%lld)\n",
+				pts_pr_info(index,"Checkout fail FrameDuration(32:%d 64:%lld) pts(32:%d 64:%llx)\n",
 									pInstance->mFrameDuration,
 									pInstance->mFrameDuration64,
 									pInstance->mLastCheckoutPts,
@@ -415,7 +501,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 									pInstance->mPtsCheckoutFailCount + 1);
 
 			if (ptsserver_debuglevel > 1) {
-				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%lld)\n",
+				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%llx)\n",
 									FrameDur,
 									FrameDur64,
 									pInstance->mDoubleCheckFrameDuration,
@@ -439,7 +525,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			}
 			if (pInstance->mDoubleCheckFrameDurationCount > pInstance->kDoubleCheckThreshold) {
 				if (ptsserver_debuglevel > 1) {
-					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%lld)\n",
+					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%llx)\n",
 										pInstance->mDoubleCheckFrameDurationCount,
 										pInstance->mDoubleCheckFrameDuration,
 										pInstance->mDoubleCheckFrameDuration64);
@@ -464,6 +550,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
+EXPORT_SYMBOL(ptsserver_checkout_pts_offset);
 
 long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPtsOffset) {
 	PtsServerManage* vPtsServerIns = NULL;
@@ -530,7 +617,7 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
 
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"peek ok ListSize:%d find:%d offset(diff:%d L:0x%x C:0x%x) pts(32:0x%x 64:%lld)\n",
+				pts_pr_info(index,"peek ok ListSize:%d find:%d offset(diff:%d L:0x%x C:0x%x) pts(32:0x%x 64:%llx)\n",
 									pInstance->mListSize,number,offsetDiff,
 									find_ptn->offset ,cur_offset,find_ptn->pts, find_ptn->pts_64);
 			}
@@ -640,7 +727,7 @@ long ptsserver_ins_release(s32 pServerInsId) {
 	pts_pr_info(pServerInsId,"ptsserver_ins_release ok \n");
 	return 0;
 }
-
+EXPORT_SYMBOL(ptsserver_ins_release);
 
 module_param(ptsserver_debuglevel, uint, 0664);
 MODULE_PARM_DESC(ptsserver_debuglevel, "\n pts server debug level\n");

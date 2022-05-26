@@ -43,6 +43,7 @@
 #include "frame_check.h"
 #include "vdec_sync.h"
 #include "vdec_canvas_utils.h"
+#include "../../../media_sync/pts_server/pts_server_core.h"
 
 s32 vdec_dev_register(void);
 s32 vdec_dev_unregister(void);
@@ -214,12 +215,6 @@ extern void vdec_fill_vdec_frame(struct vdec_s *vdec,
 
 extern void vdec_vframe_ready(struct vdec_s *vdec, struct vframe_s *vf);
 extern void vdec_set_vframe_comm(struct vdec_s *vdec, char *n);
-
-typedef struct checkoutptsoffset {
-	u64 offset;
-	u32 pts;
-	u64 pts_64;
-} checkout_pts_offset;
 
 typedef long (*pfun_ptsserver_peek_pts_offset)(int pServerInsId,
 	checkout_pts_offset* mCheckoutPtsOffset);
@@ -752,6 +747,8 @@ void vdec_data_buffer_count_increase(ulong data, int index, int cb_index);
 struct vdec_data_info_s *vdec_data_get(void);
 
 int vdec_data_get_index(ulong data);
+
+int vdec_init_stbuf_info(struct vdec_s *vdec);
 
 void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
 

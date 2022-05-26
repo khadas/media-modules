@@ -39,6 +39,7 @@
 #include "../stream_input/parser/stream_parser.h"
 #include <linux/delay.h>
 #include "aml_vcodec_adapt.h"
+#include "aml_vcodec_ts.h"
 #include <linux/crc32.h>
 #include "../common/media_utils/media_utils.h"
 
@@ -53,7 +54,7 @@
 #define SYNC_OUTSIDE	(2)
 
 //#define DATA_DEBUG
-
+extern int dump_es_output_frame;
 extern int dump_output_frame;
 extern char dump_path[32];
 extern u32 dump_output_start_position;
@@ -263,16 +264,14 @@ static void set_vdec_property(struct vdec_s *vdec,
 	vdec->port->type |= PORT_TYPE_FRAME;
 	vdec->frame_base_video_path = FRAME_BASE_PATH_V4L_OSD;
 
-	if (aml_set_vdec_type_enable) {
-		if (aml_set_vdec_type == VDEC_TYPE_STREAM_PARSER) {
-			vdec->type = VDEC_TYPE_STREAM_PARSER;
-			vdec->port->type &= ~PORT_TYPE_FRAME;
-			vdec->port->type |= PORT_TYPE_ES;
-		} else if (aml_set_vdec_type == VDEC_TYPE_FRAME_BLOCK) {
-			vdec->type = VDEC_TYPE_FRAME_BLOCK;
-			vdec->port->type &= ~PORT_TYPE_ES;
-			vdec->port->type |= PORT_TYPE_FRAME;
-		}
+	if (ada_ctx->ctx->stream_mode) {
+		vdec->type = VDEC_TYPE_STREAM_PARSER;
+		vdec->port->type &= ~PORT_TYPE_FRAME;
+		vdec->port->type |= PORT_TYPE_ES;
+	} else {
+		vdec->type = VDEC_TYPE_FRAME_BLOCK;
+		vdec->port->type &= ~PORT_TYPE_ES;
+		vdec->port->type |= PORT_TYPE_FRAME;
 	}
 
 	if (aml_set_vfm_enable)
@@ -319,7 +318,17 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 				vdec->port->vformat == VFORMAT_VP9)
 				pvbuf = &bufs[BUF_TYPE_HEVC];
 		}
+		if (vdec_stream_based(vdec)) {
+			struct parser_args pars;
+			struct stream_buf_ops *ops = get_stbuf_ops();
 
+			ret = stream_buffer_base_init(&vdec->vbuf, ops, &pars);
+			if (ret) {
+				v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
+					"stream buffer base init failed\n");
+				return ret;
+			}
+		}
 		ret = video_component_init(vdec->port, pvbuf);
 		if (ret < 0) {
 			v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_ERROR, "video_component_init  failed\n");
@@ -471,7 +480,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	}
 
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
-		"write frames[%d], vbuf: %p, size: %u, ret: %d, crc: %x, ts: %llu\n",
+		"write frames[%d], vbuf: %p, size: %u, ret: %d, crc: %x, ts: %llx\n",
 		ada_ctx->ctx->write_frames, buf, count, ret,
 		crc32_le(0, buf, count), timestamp);
 
@@ -506,7 +515,7 @@ int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 	}
 
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT,
-		"write frames[%d], vbuf: %lx, size: %u, ret: %d, ts: %llu\n",
+		"write frames[%d], vbuf: %lx, size: %u, ret: %d, ts: %llx\n",
 		ada_ctx->ctx->write_frames, addr, count, ret, timestamp);
 
 	ada_ctx->ctx->write_frames++;
@@ -610,3 +619,90 @@ void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
 		ctx->vdec_recycle_dec_resource(ctx->ada_ctx->vdec->private, aml_buf);
 }
 
+void vdec_dump_strea_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size)
+{
+	char file_name[64] = {0};
+	ulong buf_start = ada_ctx->vdec->vbuf.buf_start;
+	ulong buf_end = ada_ctx->vdec->vbuf.buf_start + ada_ctx->vdec->vbuf.buf_size;
+	u32 first_size = size;
+	u32 second_size = 0;
+	void *stbuf_vaddr;
+
+	if ((addr +size) > buf_end) {
+		first_size = buf_end - addr;
+		second_size = size - first_size;
+	}
+
+	stbuf_vaddr = codec_mm_vmap(addr, first_size);
+	if (stbuf_vaddr) {
+		codec_mm_dma_flush(stbuf_vaddr, first_size, DMA_FROM_DEVICE);
+		snprintf(file_name, 64, "%s/es.data", dump_path);
+		dump(file_name, stbuf_vaddr, first_size);
+
+		codec_mm_unmap_phyaddr(stbuf_vaddr);
+		pr_info("dump es buffer (%lx, %u)\n", addr, first_size);
+	} else {
+		pr_err("es buffer (%lx, %u) vmap fail\n", addr, first_size);
+	}
+
+	if (second_size) {
+		stbuf_vaddr = codec_mm_vmap(buf_start, second_size);
+		if (stbuf_vaddr) {
+			codec_mm_dma_flush(stbuf_vaddr, second_size, DMA_FROM_DEVICE);
+			snprintf(file_name, 64, "%s/es.data", dump_path);
+			dump(file_name, stbuf_vaddr, second_size);
+
+			codec_mm_unmap_phyaddr(stbuf_vaddr);
+			pr_info("dump next part es buffer (%lx, %u)\n", buf_start, second_size);
+		} else {
+			pr_err("next part es buffer (%lx, %u) vmap fail\n", buf_start, second_size);
+		}
+	}
+}
+
+void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size)
+{
+	struct stream_buffer_metainfo stbuf_data = { 0 };
+	stbuf_data.stbuf_pktaddr = addr;
+	stbuf_data.stbuf_pktsize = size;
+	stream_buffer_meta_write(&ada_ctx->vdec->vbuf, &stbuf_data);
+
+	if (dump_es_output_frame) {
+		vdec_dump_strea_data(ada_ctx, addr, size);
+	}
+}
+
+void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, int fd)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+	u32 rp_addr;
+	struct dmabuf_dmx_sec_es_data *es_data;
+
+	/* get rp addr from vdec */
+	rp_addr = STBUF_READ(&vdec->vbuf, get_rp);
+	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_OUTPUT, "stream rp_addr is %x\n",rp_addr);
+
+	if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_DMX_ES) {
+		pr_err("current dmabuf type is not DMA_BUF_TYPE_DMX_ES\n");
+		return;
+	}
+
+	es_data = (struct dmabuf_dmx_sec_es_data *)dmabuf_manage_get_info(fd, DMA_BUF_TYPE_DMX_ES);
+
+	es_data->buf_rp = rp_addr;
+}
+
+void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec_es_data *es_data, int offset)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+	u32 buf_size = 0;
+
+	buf_size = es_data->buf_end - es_data->buf_start;
+
+	stream_buffer_set_ext_buf(&vdec->vbuf, es_data->buf_start, buf_size, 0);
+	vdec_init_stbuf_info(vdec);
+	ada_ctx->ctx->pts_serves_ops->first_checkin(ada_ctx->ctx->output_pix_fmt, ada_ctx->ctx->ptsserver_id,
+		es_data->data_start + offset, es_data->buf_start);
+
+	return;
+}

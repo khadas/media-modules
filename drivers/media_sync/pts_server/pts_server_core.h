@@ -65,6 +65,7 @@ typedef struct psinstance {
 	struct mutex mPtsListLock;
 	u32 mListSize;
 	u32 mLastCheckoutCurOffset;
+	bool setC2Mode;
 } ptsserver_ins;
 
 
@@ -108,6 +109,7 @@ typedef struct lastcheckoutpts {
 
 long ptsserver_init(void);
 long ptsserver_ins_alloc(s32 *pServerInsId,ptsserver_ins **pIns,ptsserver_alloc_para* allocParm);
+void ptsserver_set_mode(s32 pServerInsId, bool set_mode);
 long ptsserver_set_first_checkin_offset(s32 pServerInsId,start_offset* mStartOffset);
 long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSize);
 long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPtsOffset);

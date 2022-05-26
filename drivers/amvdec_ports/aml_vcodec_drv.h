@@ -36,6 +36,7 @@
 #include "utils/aml_dec_trace.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
+#include "aml_vcodec_ts.h"
 
 #define AML_VCODEC_DRV_NAME	"aml_vcodec_drv"
 #define AML_VCODEC_DEC_NAME	"aml-vcodec-dec"
@@ -775,11 +776,19 @@ struct aml_vcodec_ctx {
 	bool			film_grain_present;
 	void			*bmmu_box_dw;
 	void			*mmu_box_dw;
+
 	void (*cal_compress_buff_info)(ulong, struct aml_vcodec_ctx *ctx);
 	struct mutex			compressed_buf_info_lock;
 	struct v4l_compressed_buffer_info	compressed_buf_info;
+
+	u32				stream_mode;
+	bool				set_ext_buf_flg;
+	s32				ptsserver_id;
+	struct pts_server_ops			*pts_serves_ops;
+
 	struct aml_buf_mgr_s		bm;
 	void (*vdec_recycle_dec_resource)(void *, struct aml_buf *);
+
 	atomic_t		vpp_cache_num;
 	atomic_t		ge2d_cache_num;
 	int 			cache_input_buffer_num;

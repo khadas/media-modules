@@ -2509,6 +2509,32 @@ int vdec_resource_checking(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_resource_checking);
 
+int vdec_init_stbuf_info(struct vdec_s *vdec)
+{
+	int r = 0;
+	/* stream buffer init. */
+	if (vdec->vbuf.ops && !vdec->master) {
+		r = vdec->vbuf.ops->init(&vdec->vbuf, vdec);
+		if (r) {
+			pr_err("stream buffer init err (%d)\n", r);
+
+			mutex_lock(&vdec_mutex);
+			inited_vcodec_num--;
+			mutex_unlock(&vdec_mutex);
+
+			return r;
+		}
+
+		if (vdec->slave) {
+			memcpy(&vdec->slave->vbuf, &vdec->vbuf,
+				sizeof(vdec->vbuf));
+		}
+	}
+
+	return r;
+}
+EXPORT_SYMBOL(vdec_init_stbuf_info);
+
 /*
  *register vdec_device
  * create output, vfm or create ionvideo output
@@ -2614,23 +2640,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 #ifdef FRAME_CHECK
 	vdec_frame_check_init(vdec);
 #endif
+
 	/* stream buffer init. */
-	if (vdec->vbuf.ops && !vdec->master) {
-		r = vdec->vbuf.ops->init(&vdec->vbuf, vdec);
-		if (r) {
-			pr_err("%s stream buffer init err (%d)\n", dev_name, r);
-
-			mutex_lock(&vdec_mutex);
-			inited_vcodec_num--;
-			mutex_unlock(&vdec_mutex);
-
+	if (!is_v4l && vdec->vbuf.ops && !vdec->master) {
+		if (vdec_init_stbuf_info(vdec) != 0)
 			goto error;
-		}
-
-		if (vdec->slave) {
-			memcpy(&vdec->slave->vbuf, &vdec->vbuf,
-				sizeof(vdec->vbuf));
-		}
 	}
 
 	p->dev = platform_device_register_data(

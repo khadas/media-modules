@@ -47,6 +47,7 @@
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
 #include "../common/chips/decoder_cpu_ver_info.h"
 #include "utils/common.h"
+#include "../media_sync/pts_server/pts_server_core.h"
 #include "../frame_provider/decoder/utils/vdec_sync.h"
 #include "../frame_provider/decoder/utils/aml_buf_helper.h"
 #include "../common/media_utils/media_utils.h"
@@ -75,6 +76,7 @@
 #define AML_V4L2_GET_BITDEPTH (V4L2_CID_USER_AMLOGIC_BASE + 6)
 #define AML_V4L2_DEC_PARMS_CONFIG (V4L2_CID_USER_AMLOGIC_BASE + 7)
 #define AML_V4L2_GET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 8)
+#define AML_V4L2_SET_STREAM_MODE (V4L2_CID_USER_AMLOGIC_BASE + 9)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -707,8 +709,12 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	ctx->index_disp++;
 	ctx->post_to_upper_done = false;
 
+	if (ctx->stream_mode) {
+		vf->timestamp = vf->pts_us64;
+	}
+
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
-		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
+		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%llx, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 		ctx->ada_ctx->frm_name, aml_buf->state, ctx->out_buff_cnt,
 		vb2_buf->index, vb2_buf,
@@ -1324,14 +1330,23 @@ static void aml_vdec_worker(struct work_struct *work)
 		goto out;
 	}
 
+	if (ctx->stream_mode) {
+		struct dmabuf_dmx_sec_es_data *es_data = (struct dmabuf_dmx_sec_es_data *)aml_vb->dma_buf;
+		int offset = vb->planes[0].data_offset;
+		buf.addr = es_data->data_start + offset;
+		buf.size = vb->planes[0].bytesused - offset;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "stream update wp 0x%x + sz 0x%x offset 0x%x ori start 0x%x\n",
+			buf.addr, buf.size, offset, es_data->data_start);
+	} else {
+		buf.addr	= aml_vb->addr ? aml_vb->addr : sg_dma_address(aml_vb->out_sgt->sgl);
+		buf.size	= vb->planes[0].bytesused;
+	}
 	buf.index	= vb->index;
 	if (!ctx->is_drm_mode)
 		buf.vaddr = vb2_plane_vaddr(vb, 0);
-	buf.addr	= aml_vb->addr ? aml_vb->addr :
-				sg_dma_address(aml_vb->out_sgt->sgl);
-	buf.size	= vb->planes[0].bytesused;
+
 	buf.model	= vb->memory;
-	buf.timestamp	= vb->timestamp;
+	buf.timestamp = vb->timestamp;
 	buf.meta_ptr	= (ulong)aml_vb->meta_data;
 
 	if (!buf.vaddr && !buf.addr) {
@@ -1351,7 +1366,7 @@ static void aml_vdec_worker(struct work_struct *work)
 	/*v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"timestamp: 0x%llx\n", src_buf->timestamp);*/
 
-	if (ctx->output_dma_mode) {
+	if ((!ctx->stream_mode) && ctx->output_dma_mode) {
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_3, buf.size);
 	} else {
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_2, buf.size);
@@ -1368,7 +1383,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->output_dma_mode) {
+		if ((!ctx->stream_mode) && ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_8, buf.size);
@@ -1379,7 +1394,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->output_dma_mode) {
+		if ((!ctx->stream_mode) && ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_10, buf.size);
@@ -2881,7 +2896,8 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 			if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_VIDEODEC_ES) {
 				return 0;
 			}
-			videodec_es_data = (struct dmabuf_videodec_es_data *)dmabuf_manage_get_info(fd, DMA_BUF_TYPE_VIDEODEC_ES);
+			videodec_es_data = (struct dmabuf_videodec_es_data *)dmabuf_manage_get_info(fd,
+					DMA_BUF_TYPE_VIDEODEC_ES);
 
 			if (videodec_es_data && videodec_es_data->data_type == DMA_BUF_VIDEODEC_HDR10PLUS) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "buf_prepare hdr10+ info type %d, len: %d\n",
@@ -3235,6 +3251,12 @@ void aml_v4l_ctx_release(struct kref *kref)
 				"%s: dv_inst_unmap ctx %p, dv_id %d\n", __func__, ctx, ctx->dv_id);
 	}
 #endif
+
+	if (ctx->stream_mode) {
+		ctx->set_ext_buf_flg = false;
+		ptsserver_ins_release(ctx->ptsserver_id);
+	}
+
 	kfree(ctx);
 }
 
@@ -3420,6 +3442,17 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 					"dbuf %px dev %px\n", dbuf, dev);
 	}
 
+	if (ctx->stream_mode) {
+		int fd = vb->planes[0].m.fd;
+		struct dmabuf_dmx_sec_es_data *es_data;
+
+		if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_DMX_ES) {
+			pr_err("lelexiang not DMA_BUF_TYPE_DMX_ES\n");
+			return;
+		}
+		es_data = (struct dmabuf_dmx_sec_es_data *)dmabuf_manage_get_info(fd, DMA_BUF_TYPE_DMX_ES);
+		buf->dma_buf = (void *)es_data;
+	}
 	v4l2_m2m_buf_queue(ctx->m2m_ctx, to_vb2_v4l2_buffer(vb));
 
 	if (ctx->state != AML_STATE_INIT) {
@@ -3435,18 +3468,33 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"Invalid flush buffer.\n");
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		if (ctx->output_dma_mode)
+		if ((!ctx->stream_mode) && ctx->output_dma_mode)
 			wake_up_interruptible(&ctx->wq);
 
 		return;
 	}
 
+	if (ctx->stream_mode) {
+		struct dmabuf_dmx_sec_es_data *es_data = (struct dmabuf_dmx_sec_es_data *)buf->dma_buf;
+		int offset = vb->planes[0].data_offset;
+		if (ctx->set_ext_buf_flg == false) {
+			v4l2_set_ext_buf_addr(ctx->ada_ctx, es_data, offset);
+			ctx->set_ext_buf_flg = true;
+		}
+
+		src_mem.addr = es_data->data_start + offset;
+		src_mem.size = vb->planes[0].bytesused - offset;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "update wp 0x%x + sz 0x%x offset 0x%x ori start 0x%x\n",
+		src_mem.addr, src_mem.size, offset, es_data->data_start);
+	} else {
+		src_mem.addr	= buf->addr ? buf->addr :
+				sg_dma_address(buf->out_sgt->sgl);
+		src_mem.size	= vb->planes[0].bytesused;
+	}
 	src_mem.index	= vb->index;
 	if (!ctx->is_drm_mode)
 		src_mem.vaddr = vb2_plane_vaddr(vb, 0);
-	src_mem.addr	= buf->addr ? buf->addr :
-				sg_dma_address(buf->out_sgt->sgl);
-	src_mem.size	= vb->planes[0].bytesused;
+
 	src_mem.model	= vb->memory;
 	src_mem.timestamp = vb->timestamp;
 	src_mem.meta_ptr = (ulong)buf->meta_data;
@@ -3455,7 +3503,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->output_dma_mode) {
+		if ((!ctx->stream_mode) && ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			v4l2_buff_done(to_vb2_v4l2_buffer(vb),
@@ -3472,7 +3520,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	buf->used = false;
 	v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-	if (ctx->output_dma_mode) {
+	if ((!ctx->stream_mode) && ctx->output_dma_mode) {
 		wake_up_interruptible(&ctx->wq);
 	} else if (ctx->param_sets_from_ucode) {
 		v4l2_buff_done(to_vb2_v4l2_buffer(vb),
@@ -3536,6 +3584,10 @@ static void vb2ops_vdec_buf_finish(struct vb2_buffer *vb)
 
 	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
 	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
+
+	if (ctx->stream_mode && V4L2_TYPE_IS_OUTPUT(vb->type)) {
+		v4l2_set_rp_addr(ctx->ada_ctx, vb->planes[0].m.fd);
+	}
 
 	if (buf->error) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -3857,7 +3909,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct aml_vcodec_ctx *ctx = ctrl_to_ctx(ctrl);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s\n", __func__);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s id %d val %d\n", __func__, ctrl->id, ctrl->val);
 
 	if (ctrl->id == AML_V4L2_SET_DRMMODE) {
 		ctx->is_drm_mode = ctrl->val;
@@ -3874,6 +3926,23 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 			"cache_input_buffer_num: %d\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_DEC_PARMS_CONFIG) {
 		vidioc_vdec_s_parm_ext(ctrl, ctx);
+	} else if (ctrl->id == AML_V4L2_SET_STREAM_MODE) {
+		u32 ret;
+		ctx->stream_mode = ctrl->val;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "set streambase: %x\n", ctrl->val);
+
+		if (ctx->stream_mode == true) {
+			ptsserver_ins *pIns = NULL;
+			ret = ptsserver_ins_alloc(&ctx->ptsserver_id, &pIns, NULL);
+			if (ret < 0) {
+				v4l_dbg(ctx, 0, "%s Alloc pts server fail!\n", __func__);
+			}
+			ptsserver_set_mode(ctx->ptsserver_id, true);
+			ctx->pts_serves_ops = get_pts_server_ops();
+			if (ctx->pts_serves_ops == NULL) {
+				v4l_dbg(ctx, 0, "%s pts_serves_ops is NULL!\n", __func__);
+			}
+		}
 	}
 	return 0;
 }
@@ -3926,6 +3995,18 @@ static const struct v4l2_ctrl_config ctrl_st_duration = {
 	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
 	.min	= 0,
 	.max	= 96000,
+	.step	= 1,
+	.def	= 0,
+};
+
+static const struct v4l2_ctrl_config ctrl_stream_mode = {
+	.name	= "stream mode",
+	.id	= AML_V4L2_SET_STREAM_MODE,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
+	.min	= 0,
+	.max	= 1,
 	.step	= 1,
 	.def	= 0,
 };
@@ -4024,6 +4105,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_duration, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_stream_mode, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

@@ -144,6 +144,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->cal_compress_buff_info = cal_compress_buff_info;
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
+	ctx->set_ext_buf_flg = false;
 
 	ctx->aux_infos.dv_index = 0;
 	ctx->aux_infos.sei_index = 0;
@@ -821,6 +822,10 @@ module_param(force_enable_nr, int, 0644);
 int force_enable_di_local_buffer;
 EXPORT_SYMBOL(force_enable_di_local_buffer);
 module_param(force_enable_di_local_buffer, int, 0644);
+
+int dump_es_output_frame;
+EXPORT_SYMBOL(dump_es_output_frame);
+module_param(dump_es_output_frame, int, 0644);
 
 int vpp_bypass_frames;
 EXPORT_SYMBOL(vpp_bypass_frames);

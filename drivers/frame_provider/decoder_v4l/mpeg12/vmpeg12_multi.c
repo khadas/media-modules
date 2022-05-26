@@ -1698,7 +1698,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 				hw->mm_blk_handle, index);
-			if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+			if (!vdec->is_v4l && !vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 				/* offset for tsplayer pts lookup */
 				if (i == 0) {
 					vf->pts_us64 =
@@ -1917,8 +1917,7 @@ static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 
 static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
-	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp_h, tmp_w;
-	u64 pts_us64 = 0;
+	u32 reg, index, info, seqinfo, offset, frame_size=0, tmp_h, tmp_w;
 	struct pic_info_t *new_pic, *disp_pic;
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)(vdec->private);
@@ -1965,8 +1964,6 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		}
 
 		if (!v4l_res_change(hw, frame_width, frame_height, frame_prog)) {
-			struct aml_vcodec_ctx *ctx =
-				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 				struct aml_vdec_ps_infos ps;
 
@@ -1974,7 +1971,9 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->v4l_params_parsed = true;
 				hw->report_field = frame_prog ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 				vdec_v4l_set_ps_infos(ctx, &ps);
-				cal_chunk_offset_and_size(hw);
+				if (vdec_frame_based(vdec)) {
+					cal_chunk_offset_and_size(hw);
+				}
 				userdata_pushed_drop(hw);
 				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_AGAIN;
@@ -2115,14 +2114,19 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 						"pts invalid\n");
 				}
 			} else {
-				if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
-					if (pts_lookup_offset_us64(PTS_TYPE_VIDEO, offset,
-						&pts, &frame_size, 0, &pts_us64) == 0) {
+				if (vdec->is_v4l || (vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+					struct checkoutptsoffset pts_st;
+					u64 dur_offset = hw->frame_dur;
+					dur_offset = (dur_offset << 32 ) | offset;
+					if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
 						new_pic->pts_valid = true;
-						new_pic->pts = pts;
-						new_pic->pts64 = pts_us64;
-					} else
+						new_pic->pts = pts_st.pts;
+						new_pic->pts64 = pts_st.pts_64;
+						debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+							"stream checkout pts is%lx\n", new_pic->pts);
+					} else {
 						new_pic->pts_valid = false;
+					}
 				}
 			}
 		} else {
@@ -2134,8 +2138,23 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 					new_pic->last_timestamp = hw->chunk->timestamp;
 				hw->first_field_timestamp_valid = false;
 				new_pic->timestamp = hw->chunk->timestamp;
+				new_pic->pts_valid = false;
+			} else {
+				if (vdec->is_v4l && vdec_stream_based(vdec)) {
+					struct checkoutptsoffset pts_st;
+					u64 dur_offset = hw->frame_dur;
+					dur_offset = (dur_offset << 32 ) | offset;
+					if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+						new_pic->pts_valid = true;
+						new_pic->pts = pts_st.pts;
+						new_pic->pts64 = pts_st.pts_64;
+						debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+							"stream checkout pts is%lx\n", new_pic->pts);
+					} else {
+						new_pic->pts_valid = false;
+					}
+				}
 			}
-			new_pic->pts_valid = false;
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,

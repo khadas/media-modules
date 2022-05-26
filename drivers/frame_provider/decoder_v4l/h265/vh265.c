@@ -66,6 +66,7 @@
 #include "../../decoder/utils/amvdec.h"
 #include "../../decoder/utils/vdec_feature.h"
 #include "../../decoder/utils/aml_buf_helper.h"
+#include "../../../amvdec_ports/aml_vcodec_ts.h"
 
 #define HEVC_8K_LFTOFFSET_FIX
 #define SUPPORT_LONG_TERM_RPS
@@ -8453,19 +8454,22 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			hevc_print(hevc, H265_DEBUG_OUT_PTS,
 				"call pts_lookup_offset_us64(0x%x)\n",
 				stream_offset);
-			if ((vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
-				if (pts_lookup_offset_us64
-					(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
-					&frame_size, 0, &vf->pts_us64) != 0) {
+			if (vdec->is_v4l || (vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
+				struct checkoutptsoffset pts_st;
+				u64 dur_offset = hevc->frame_dur;
+				dur_offset = (dur_offset << 32 ) | stream_offset;
+				if (!v4l2_ctx->pts_serves_ops->checkout(v4l2_ctx->ptsserver_id, dur_offset, &pts_st)) {
+					vf->pts = pts_st.pts;
+					vf->pts_us64 = pts_st.pts_64;
+#ifdef DEBUG_PTS
+					hevc->pts_hit++;
+#endif
+				} else {
 #ifdef DEBUG_PTS
 					hevc->pts_missed++;
 #endif
 					vf->pts = 0;
 					vf->pts_us64 = 0;
-				} else {
-#ifdef DEBUG_PTS
-					hevc->pts_hit++;
-#endif
 				}
 			}
 
@@ -8633,7 +8637,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->pts = 0;
 			vf->pts_us64 = 0;
 		}
-		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
+		if (!vdec->is_v4l && !vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 			vf->pts_us64 = stream_offset;
 			vf->pts = 0;
 		}

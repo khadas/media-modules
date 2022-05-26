@@ -138,7 +138,7 @@ struct aml_v4l2_buf {
 
 	/*4 bytes data for data len*/
 	char meta_data[META_DATA_SIZE + 4];
-
+	void *dma_buf;
 	struct sg_table *out_sgt;
 	struct sg_table *cap_sgt;
 	ulong addr;

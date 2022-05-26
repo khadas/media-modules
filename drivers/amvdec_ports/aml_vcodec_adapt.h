@@ -22,6 +22,7 @@
 
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/amstream.h>
+#include <linux/amlogic/media/codec_mm/dmabuf_manage.h>
 #include "../stream_input/amports/streambuf.h"
 #include "../frame_provider/decoder/utils/vdec_input.h"
 #include "aml_vcodec_drv.h"
@@ -76,6 +77,12 @@ void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx);
 int vdec_get_instance_num(void);
 
 void vdec_set_duration(s32 duration);
+
+void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size);
+
+void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, int fd);
+
+void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec_es_data *es_data, int offset);
 
 int vdec_get_vdec_id(struct aml_vdec_adapt *ada_ctx);
 
