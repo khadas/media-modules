@@ -1857,11 +1857,19 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #ifdef NV21
 	SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
 #endif
-	if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
-		(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
-		SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
-	else
-		CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	if (is_cpu_t7()) {
+		if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+			(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+		else
+			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	} else {
+		if ((ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+			(ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+			SET_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+		else
+			CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
+	}
 #ifdef PIC_DC_NEED_CLEAR
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 31);
 #endif
@@ -3431,7 +3439,11 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-			endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+			if (is_cpu_t7()) {
+				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+			} else {
+				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+			}
 
 			vf->canvas0_config[0].endian = endian_tmp;
 			vf->canvas0_config[1].endian = endian_tmp;
@@ -3529,7 +3541,11 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-			endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+			if (is_cpu_t7()) {
+				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+			} else {
+				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+			}
 
 			vf->canvas0_config[0].endian = endian_tmp;
 			vf->canvas0_config[1].endian = endian_tmp;
@@ -3627,7 +3643,11 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			vf->canvas1_config[0] = hw->canvas_config[buffer_index][0];
 			vf->canvas1_config[1] = hw->canvas_config[buffer_index][1];
 
-			endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+			if (is_cpu_t7()) {
+				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
+			} else {
+				endian_tmp = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;
+			}
 
 			vf->canvas0_config[0].endian = endian_tmp;
 			vf->canvas0_config[1].endian = endian_tmp;

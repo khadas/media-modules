@@ -84,6 +84,7 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define AM_MESON_CPU_MINOR_ID_REVB_G12B	 (REVB_MASK | AM_MESON_CPU_MAJOR_ID_G12B)
 #define AM_MESON_CPU_MINOR_ID_REVB_TM2   (REVB_MASK | AM_MESON_CPU_MAJOR_ID_TM2)
 #define AM_MESON_CPU_MINOR_ID_S4_S805X2  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S4)
+#define AM_MESON_CPU_MINOR_ID_T7C        (REVC_MASK | AM_MESON_CPU_MAJOR_ID_T7)
 
 /* export functions */
 struct platform_device *initial_dos_device(void);
@@ -99,5 +100,7 @@ int get_cpu_sub_id(void);
 bool is_cpu_s4_s805x2(void);
 
 inline bool is_support_new_dos_dev(void);
+bool is_cpu_t7(void);
+bool is_cpu_t7c(void);
 
 #endif

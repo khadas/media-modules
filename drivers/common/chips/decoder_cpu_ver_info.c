@@ -219,6 +219,9 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 	{
 		.chip_id = AM_MESON_CPU_MINOR_ID_S4_S805X2,
 	},
+	{
+		.chip_id = AM_MESON_CPU_MINOR_ID_T7C,
+	},
 };
 
 static const struct of_device_id cpu_sub_id_of_match[] = {
@@ -233,6 +236,10 @@ static const struct of_device_id cpu_sub_id_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-s4-805x2",
 		.data = &dos_dev_sub_table[2],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-t7c",
+		.data = &dos_dev_sub_table[3],
 	},
 };
 
@@ -341,4 +348,18 @@ bool is_cpu_s4_s805x2(void)
 		&& (get_cpu_sub_id() == CHIP_REVX));
 }
 EXPORT_SYMBOL(is_cpu_s4_s805x2);
+
+bool is_cpu_t7(void)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		&& (get_cpu_sub_id() != CHIP_REVC));
+}
+EXPORT_SYMBOL(is_cpu_t7);
+
+bool is_cpu_t7c(void)
+{
+	return ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)
+		&& (get_cpu_sub_id() == CHIP_REVC));
+}
+EXPORT_SYMBOL(is_cpu_t7c);
 
