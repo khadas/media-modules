@@ -71,6 +71,7 @@
 #include "h264_dpb.h"
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
+#include "../../decoder/utils/decoder_dma_alloc.h"
 
 #define DETECT_WRONG_MULTI_SLICE
 
@@ -937,6 +938,10 @@ struct vdec_h264_hw_s {
 	bool high_bandwidth_flag;
 	bool hevc_enable_flag;
 	struct afbc_buf  afbc_buf_table[BUF_FBC_NUM_MAX];
+	ulong lmem_phy_handle;
+	ulong aux_mem_handle;
+	ulong frame_mmu_map_handle;
+	ulong mc_cpu_handle;
 };
 
 static u32 again_threshold;
@@ -7982,8 +7987,8 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 #endif
 	if (hw->mmu_enable) {
 		hw->frame_mmu_map_addr =
-			dma_alloc_coherent(amports_get_dma_device(), FRAME_MMU_MAP_SIZE,
-				&hw->frame_mmu_map_phy_addr, GFP_KERNEL);
+			decoder_dma_alloc_coherent(&hw->frame_mmu_map_handle,
+				FRAME_MMU_MAP_SIZE, &hw->frame_mmu_map_phy_addr, "H264_MMU_BUF");
 		if (hw->frame_mmu_map_addr == NULL) {
 			pr_err("%s: failed to alloc count_buffer\n", __func__);
 			return -ENOMEM;
@@ -8023,8 +8028,8 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	if (!tee_enabled()) {
 		/* -- ucode loading (amrisc and swap code) */
 		hw->mc_cpu_addr =
-			dma_alloc_coherent(amports_get_dma_device(), MC_TOTAL_SIZE,
-					&hw->mc_dma_handle, GFP_KERNEL);
+			decoder_dma_alloc_coherent(&hw->mc_cpu_handle, MC_TOTAL_SIZE,
+					&hw->mc_dma_handle, "H264_MC_CPU_BUF");
 		if (!hw->mc_cpu_addr) {
 			amvdec_enable_flag = false;
 			amvdec_disable();
@@ -8061,8 +8066,8 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 			fw->data + 0x5000, 0x1000);
 	}
 
-	hw->lmem_addr = (dma_addr_t)dma_alloc_coherent(amports_get_dma_device(),
-			PAGE_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, GFP_KERNEL);
+	hw->lmem_addr = (dma_addr_t)decoder_dma_alloc_coherent(&hw->lmem_phy_handle,
+			PAGE_SIZE, (dma_addr_t *)&hw->lmem_phy_addr, "H264_LMEM_BUF");
 
 	if (hw->lmem_addr == 0) {
 		pr_err("%s: failed to alloc lmem buffer\n", __func__);
@@ -8077,9 +8082,9 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 		hw->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hw->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hw->prefix_aux_size + hw->suffix_aux_size;
-		hw->aux_addr = dma_alloc_coherent(amports_get_dma_device(),
+		hw->aux_addr = decoder_dma_alloc_coherent(&hw->aux_mem_handle,
 						  aux_buf_size, &hw->aux_phy_addr,
-						  GFP_KERNEL);
+						  "H264_AUX_BUF");
 		if (hw->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
 			return -1;
@@ -8095,7 +8100,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 		if (hw->sei_itu_data_buf == NULL) {
 			pr_err("%s: failed to alloc sei itu data buffer\n",
 				__func__);
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->aux_mem_handle,
 				hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
 				hw->aux_phy_addr);
 			hw->aux_addr = NULL;
@@ -8111,7 +8116,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 			if (!hw->sei_user_data_buffer) {
 				pr_info("%s: Can not allocate sei_data_buffer\n",
 					   __func__);
-				dma_free_coherent(amports_get_dma_device(),
+				decoder_dma_free_coherent(hw->aux_mem_handle,
 					hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
 					hw->aux_phy_addr);
 				hw->aux_addr = NULL;
@@ -8152,13 +8157,13 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 
 	if (hw->stat & STAT_MC_LOAD) {
 		if (hw->mc_cpu_addr != NULL) {
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->mc_cpu_handle,
 					MC_TOTAL_SIZE, hw->mc_cpu_addr,
 					hw->mc_dma_handle);
 			hw->mc_cpu_addr = NULL;
 		}
 		if (hw->frame_mmu_map_addr != NULL) {
-			dma_free_coherent(amports_get_dma_device(),
+			decoder_dma_free_coherent(hw->frame_mmu_map_handle,
 				FRAME_MMU_MAP_SIZE, hw->frame_mmu_map_addr,
 					hw->frame_mmu_map_phy_addr);
 			hw->frame_mmu_map_addr = NULL;
@@ -8170,14 +8175,14 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 		hw->stat &= ~STAT_ISR_REG;
 	}
 	if (hw->lmem_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->lmem_phy_handle,
 			PAGE_SIZE, (void *)hw->lmem_addr,
 			hw->lmem_phy_addr);
 		hw->lmem_addr = 0;
 	}
 
 	if (hw->aux_addr) {
-		dma_free_coherent(amports_get_dma_device(),
+		decoder_dma_free_coherent(hw->aux_mem_handle,
 			hw->prefix_aux_size + hw->suffix_aux_size, hw->aux_addr,
 			hw->aux_phy_addr);
 		hw->aux_addr = NULL;

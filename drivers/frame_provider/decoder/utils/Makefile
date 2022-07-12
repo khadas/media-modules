@@ -11,6 +11,7 @@ ${MODULE_NAME}-objs	+=	vdec_power_ctrl.o
 ${MODULE_NAME}-objs	+=	vdec_canvas_utils.o
 ${MODULE_NAME}-objs	+=	vdec_feature.o
 ${MODULE_NAME}-objs	+=	vdec_ge2d_utils.o
+${MODULE_NAME}-objs	+=	decoder_dma_alloc.o
 
 PR_FMT = "amlcom"
 PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"
