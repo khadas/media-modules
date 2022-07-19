@@ -1705,8 +1705,8 @@ int vp9_alloc_mmu(
 				ambuf->fbc->frame_size,
 				mmu_index_adr);
 
-	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s cur fb idx mmu %d dma 0x%lx\n",
-			__func__, ambuf->fbc->index, ambuf->planes[0].addr);
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s cur fb idx mmu %d, haddr:%lx, dma 0x%lx\n",
+			__func__, ambuf->fbc->index, ambuf->fbc->haddr, ambuf->planes[0].addr);
 
 	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 	return ret;
@@ -2352,7 +2352,7 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 			free_count++;
 			vp9_print(pbi,
 			PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
-			__func__, frame_bufs[i].buf.cma_alloc_addr, pbi->ambuf->index);
+			__func__, pbi->ambuf, pbi->ambuf->index);
 		}
 
 		/* trigger to parse head data. */
@@ -2558,27 +2558,85 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		int frame_to_show;
 		unsigned long flags;
 		struct PIC_BUFFER_CONFIG_s *tmp_pic = NULL;
+		struct PIC_BUFFER_CONFIG_s *src_pic = NULL;
 		if (frame_to_show_idx >= REF_FRAMES) {
 			pr_info("frame_to_show_idx %d exceed max index\r\n",
 					frame_to_show_idx);
 			return -1;
 		}
 
-		if (!pbi->show_fake_frame) {
-			frame_to_show = cm->ref_frame_map[frame_to_show_idx];
-			lock_buffer_pool(pool, flags);
-			if (frame_to_show < 0 ||
-				frame_bufs[frame_to_show].ref_count < 1) {
-				unlock_buffer_pool(pool, flags);
-				pr_err
-				("Error:Buffer %d does not contain a decoded frame",
-				frame_to_show);
-				return -1;
-			}
+		frame_to_show = cm->ref_frame_map[frame_to_show_idx];
+		lock_buffer_pool(pool, flags);
+		if (frame_to_show < 0 ||
+			frame_bufs[frame_to_show].ref_count < 1) {
+			unlock_buffer_pool(pool, flags);
+			pr_err
+			("Error:Buffer %d does not contain a decoded frame",
+			frame_to_show);
+			return -1;
+		}
 
+		src_pic = &cm->buffer_pool->frame_bufs[frame_to_show].buf;
+
+		if (src_pic->vf_ref > 0)
+			pbi->show_fake_frame = 1;
+
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
+				"show_fake_frame %d\n", pbi->show_fake_frame);
+
+		if (!pbi->show_fake_frame) {
 			ref_cnt_fb(frame_bufs, &cm->new_fb_idx, frame_to_show);
-		} else
+		} else {
+			struct aml_buf *dstbuf =
+				(struct aml_buf *)pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr;
+			struct vb2_buffer *dst_vb2_buf = dstbuf->vb;
+			struct aml_buf *srcbuf =
+				(struct aml_buf *)pbi->m_BUF[frame_to_show].v4l_ref_buf_addr;
+			struct vb2_buffer *src_vb2_buf = srcbuf->vb;
+			int index, BUF_index;
+			ulong cma_alloc_addr;
+			unlock_buffer_pool(pool, flags);
+			for (i = 0 ; i < src_vb2_buf->num_planes; i++) {
+				if (i == 0) {
+					//Y
+					if (src_vb2_buf->num_planes == 1) {
+						memcpy((void *)vb2_plane_vaddr(dst_vb2_buf, 0),
+							(void *)vb2_plane_vaddr(src_vb2_buf, 0),
+							srcbuf->planes[0].length);
+					}
+				} else {
+					//UV
+					if (src_vb2_buf->num_planes == 2) {
+						memcpy((void *)vb2_plane_vaddr(dst_vb2_buf, 1),
+							(void *)vb2_plane_vaddr(src_vb2_buf, 1),
+							srcbuf->planes[1].length);
+					}
+				}
+			}
+			tmp_pic = &cm->buffer_pool->frame_bufs[cm->new_fb_idx].buf;
+
+			index = tmp_pic->index;
+			BUF_index = tmp_pic->BUF_index;
+			cma_alloc_addr = tmp_pic->cma_alloc_addr;
+
+			vp9_print(pbi, VP9_DEBUG_BUFMGR,
+				"src(index %d): %lx dst(index %d): %lx\n",
+				frame_to_show,
+				src_pic->cma_alloc_addr,
+				cm->new_fb_idx,
+				tmp_pic->cma_alloc_addr);
+
+			memcpy((void *)tmp_pic, (void *)src_pic,
+				sizeof(struct PIC_BUFFER_CONFIG_s));
+			lock_buffer_pool(pool, flags);
+
+			tmp_pic->index = index;
+			tmp_pic->BUF_index = BUF_index;
+			tmp_pic->cma_alloc_addr = cma_alloc_addr;
+			tmp_pic->vf_ref = 0;
+
 			pbi->show_fake_frame = 0;
+		}
 
 		tmp_pic = &cm->buffer_pool->frame_bufs[cm->new_fb_idx].buf;
 		tmp_pic->timestamp = pbi->chunk->timestamp;
@@ -6974,6 +7032,8 @@ static void vp9_recycle_dec_resource(void *priv,
 	}
 
 	if (index < pbi->used_buf_num) {
+		vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
+			__func__, ambuf->fbc->index, ambuf->fbc->haddr, ambuf->planes[0].addr);
 		pbi->afbc_buf_table[ambuf->fbc->index].used = 0;
 		pbi->afbc_buf_table[ambuf->fbc->index].fb = 0;
 	}
@@ -8424,45 +8484,6 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 	return ret;
 }
 
-static int v4l_check_and_config_existing_buff(struct VP9Decoder_s *pbi)
-{
-	struct VP9_Common_s *const cm = &pbi->common;
-	struct PIC_BUFFER_CONFIG_s *pic = NULL;
-	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
-	int index = pbi->existing_buff_index;
-	int ret = 1;
-	pic = &frame_bufs[index].buf;
-
-	if (pbi->check_existing_buff_flag) {
-		if ((pic->vf_ref == 0) &&
-			(pic->index != -1) &&
-			pic->cma_alloc_addr &&
-			(cm->cur_frame != &frame_bufs[index])) {
-			pbi->check_existing_buff_flag = 0;
-			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
-				"%s existing buff is back, index:%d\n",
-				__func__, index);
-		} else if (pic->vf_ref &&
-			(pic->index != -1) &&
-			pic->cma_alloc_addr &&
-			(cm->cur_frame != &frame_bufs[index])) {
-			pbi->check_existing_buff_flag = 0;
-			pbi->show_fake_frame = 1;
-			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
-				"%s existing buff is outside, index:%d,"
-				"show a fake frame!\n",
-				__func__, index);
-		} else {
-			ret = 0;
-			vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
-				"%s waiting existing buff back, index:%d\n",
-				__func__, index);
-		}
-	}
-
-	return ret;
-}
-
 static void vp9_buf_ref_process_for_exception(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
@@ -8806,49 +8827,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 		dec_again_process(pbi);
 		return IRQ_HANDLED;
-	}
-
-	if (pbi->vp9_param.p.show_existing_frame) {
-		int frame_to_show_idx = pbi->vp9_param.p.frame_to_show_idx;
-		int frame_to_show;
-		struct VP9_Common_s *const cm = &pbi->common;
-		struct BufferPool_s *pool = cm->buffer_pool;
-		unsigned long flags;
-
-		cm->show_existing_frame = pbi->vp9_param.p.show_existing_frame;
-		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS, "%s show_existing_frame!\n",__func__);
-		pbi->one_package_frame_cnt--;
-		if (frame_to_show_idx >= REF_FRAMES) {
-			pr_info("frame_to_show_idx %d exceed max index\r\n",
-					frame_to_show_idx);
-
-			pbi->dec_result = DEC_RESULT_DONE;
-			amhevc_stop();
-			vdec_schedule_work(&pbi->work);
-			return IRQ_HANDLED;
-		}
-
-		frame_to_show = cm->ref_frame_map[frame_to_show_idx];
-		lock_buffer_pool(pool, flags);
-		if (frame_to_show < 0) {
-			unlock_buffer_pool(pool, flags);
-			pr_err("Error:Buffer %d does not contain a decoded frame",
-				frame_to_show);
-			WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DISCARD_NAL);
-			pbi->dec_result = DEC_RESULT_DONE;
-			amhevc_stop();
-			vdec_schedule_work(&pbi->work);
-			return IRQ_HANDLED;
-		}
-		pbi->existing_buff_index = frame_to_show;
-		unlock_buffer_pool(pool, flags);
-		pbi->check_existing_buff_flag = 1;
-		if (!v4l_check_and_config_existing_buff(pbi)) {
-			pbi->process_busy = 0;
-			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-			dec_again_process(pbi);
-			return IRQ_HANDLED;
-		}
 	}
 
 	continue_decoding(pbi);
@@ -10033,12 +10011,6 @@ static int vp9_reset_frame_buffer(struct VP9Decoder_s *pbi)
 	int i;
 
 	for (i = 0; i < pbi->used_buf_num; ++i) {
-		vp9_print(pbi, VP9_DEBUG_BUFMGR,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i, frame_bufs[i].ref_count,
-				frame_bufs[i].buf.cma_alloc_addr,
-				frame_bufs[i].buf.vf_ref);
-
 		if (frame_bufs[i].buf.cma_alloc_addr) {
 			ambuf = (struct aml_buf *)pbi->m_BUF[i].v4l_ref_buf_addr;
 
@@ -10196,7 +10168,7 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 		free_count++;
 		vp9_print(pbi,
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
-		__func__, frame_bufs[i].buf.cma_alloc_addr, pbi->ambuf->index);
+		__func__, pbi->ambuf, pbi->ambuf->index);
 	}
 
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
@@ -10212,8 +10184,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 	int tvp = vdec_secure(hw_to_vdec(pbi)) ? CODEC_MM_FLAGS_TVP : 0;
 	unsigned long ret = 0;
 
-	if (!v4l_check_and_config_existing_buff(pbi))
-		return ret;
 	if (!pbi->pic_list_init_done2 || pbi->eos)
 		return ret;
 	if (!pbi->first_sc_checked && pbi->mmu_enable) {
@@ -11070,7 +11040,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 					&vf_dp.luminance[0]);
 			get_config_int(pdata->config, "mMinDL",
 					&vf_dp.luminance[1]);
-			vf_dp.content_light_level.present_flag = 1;
 			get_config_int(pdata->config, "mMaxCLL",
 					&content_light_level.max_content);
 			get_config_int(pdata->config, "mMaxFALL",
@@ -11085,6 +11054,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 			vp9_print(pbi, 0, "transfer_val=%d\n",transfer_val);
 
 			vf_dp.content_light_level = content_light_level;
+			vf_dp.content_light_level.present_flag = 1;
 			if (!pbi->video_signal_type) {
 				pbi->video_signal_type = (1 << 29)
 					| (5 << 26)	/* unspecified */

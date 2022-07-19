@@ -7715,6 +7715,13 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	}
 	if (hevc->video_signal_type & VIDEO_SIGNAL_TYPE_AVAILABLE_MASK) {
 		vf->signal_type = pic->video_signal_type;
+		/* When the matrix_coeffiecents, transfer_characteristics and colour_primaries
+		 * syntax elements are absent, their values shall be presumed to be equal to 2
+		 */
+		if ((vf->signal_type & 0x1000000) == 0) {
+			vf->signal_type = vf->signal_type & 0xff000000;
+			vf->signal_type = vf->signal_type | 0x20202;
+		}
 		if (hevc->sei_present_flag & SEI_HDR10PLUS_MASK) {
 			u32 data;
 			data = vf->signal_type;
@@ -11977,7 +11984,7 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 	if (hevc->ambuf) {
 		free_count++;
 		hevc_print(hevc, H265_DEBUG_BUFMGR, "%s get fb: 0x%lx fb idx: %d\n",
-		__func__, pic->cma_alloc_addr, hevc->ambuf->index);
+		__func__, hevc->ambuf, hevc->ambuf->index);
 	}
 
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);

@@ -3284,7 +3284,7 @@ static bool is_avaliable_buffer(struct vdec_mpeg12_hw_s *hw)
 		free_count++;
 		debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s get fb: 0x%lx fb idx: %d\n",
-		__func__, hw->pics[i].v4l_ref_buf_addr, hw->ambuf->index);
+		__func__, hw->ambuf, hw->ambuf->index);
 	}
 
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);

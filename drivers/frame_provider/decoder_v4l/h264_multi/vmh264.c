@@ -4295,8 +4295,6 @@ static void h264_recycle_dec_resource(void *priv,
 	}
 
 	if (hw->mmu_enable) {
-		decoder_mmu_box_free_idx(ambuf->fbc->mmu,
-						ambuf->fbc->index);
 		hw->afbc_buf_table[ambuf->fbc->index].used = 0;
 		hw->afbc_buf_table[ambuf->fbc->index].fb = 0;
 	}

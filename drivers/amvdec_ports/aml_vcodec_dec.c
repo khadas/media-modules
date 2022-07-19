@@ -1219,7 +1219,8 @@ static void aml_vdec_worker(struct work_struct *work)
 	}
 
 	buf.index	= vb->index;
-	buf.vaddr	= vb2_plane_vaddr(vb, 0);
+	if (!ctx->is_drm_mode)
+		buf.vaddr = vb2_plane_vaddr(vb, 0);
 	buf.addr	= sg_dma_address(aml_vb->out_sgt->sgl);
 	buf.size	= vb->planes[0].bytesused;
 	buf.model	= vb->memory;
@@ -3201,7 +3202,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	}
 
 	src_mem.index	= vb->index;
-	src_mem.vaddr	= vb2_plane_vaddr(vb, 0);
+	if (!ctx->is_drm_mode)
+		src_mem.vaddr = vb2_plane_vaddr(vb, 0);
 	src_mem.addr	= sg_dma_address(buf->out_sgt->sgl);
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;

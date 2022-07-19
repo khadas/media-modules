@@ -1759,7 +1759,7 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 			free_count++;
 			av1_print(hw,
 			PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
-			__func__, frame_bufs[i].buf.cma_alloc_addr, hw->ambuf->index);
+			__func__, hw->ambuf, hw->ambuf->index);
 		}
 
 		/* trigger to parse head data. */
@@ -5611,6 +5611,9 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf)
 		hdr.color_parms = hw->vf_dp;
 		hdr.color_parms.luminance[0] = hdr.color_parms.luminance[0] / 1000;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
+		av1_print(hw, AOM_DEBUG_VFRAME,
+			"%s present_flag: %d\n", __func__,
+			hdr.color_parms.content_light_level.present_flag);
 	}
 
 	vf->sidebind_type = hw->sidebind_type;
@@ -9593,7 +9596,7 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 		free_count++;
 		av1_print(hw,
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
-		__func__, frame_bufs[i].buf.cma_alloc_addr, hw->ambuf->index);
+		__func__, hw->ambuf, hw->ambuf->index);
 	}
 #if 0
 	for (i = 0; i < hw->used_buf_num; ++i) {
@@ -10386,12 +10389,12 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 					&vf_dp.luminance[0]);
 			get_config_int(pdata->config, "mMinDL",
 					&vf_dp.luminance[1]);
-			vf_dp.content_light_level.present_flag = 1;
 			get_config_int(pdata->config, "mMaxCLL",
 					&content_light_level.max_content);
 			get_config_int(pdata->config, "mMaxFALL",
 					&content_light_level.max_pic_average);
 			vf_dp.content_light_level = content_light_level;
+			vf_dp.content_light_level.present_flag = 1;
 			if (!hw->video_signal_type) {
 				hw->video_signal_type = (1 << 29)
 					| (5 << 26)	/* unspecified */
