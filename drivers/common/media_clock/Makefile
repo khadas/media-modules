@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-media-clock
+MODULE_NAME = media_clock
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-media-clock
+endif
+endif
 obj-m = $(MODULE_NAME).o
 $(MODULE_NAME)-y += ../chips/chips.o
 $(MODULE_NAME)-y += clk/clkg12.o

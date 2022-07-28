@@ -907,6 +907,14 @@ static int vvc1_canvas_init(void)
 		/* HD & SD */
 		canvas_width = 1920;
 		canvas_height = 1088;
+		if (vvc1_amstream_dec_info.width < vvc1_amstream_dec_info.height) {
+			canvas_width = 1088;
+			canvas_height = 1920;
+			if (vvc1_amstream_dec_info.width > 1088) {
+				canvas_width = ALIGN(vvc1_amstream_dec_info.width, 64);
+				canvas_height = ALIGN(vvc1_amstream_dec_info.height, 64);
+			}
+		}
 		decbuf_y_size = 0x200000;
 		decbuf_uv_size = 0x80000;
 		decbuf_size = 0x300000;
@@ -1122,7 +1130,8 @@ static void vvc1_local_init(bool is_reset)
 			MAX_BMMU_BUFFER_NUM,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
-			CODEC_MM_FLAGS_FOR_VDECODER);
+			CODEC_MM_FLAGS_FOR_VDECODER,
+			BMMU_ALLOC_FLAGS_WAITCLEAR);
 }
 
 #ifdef CONFIG_AMLOGIC_POST_PROCESS_MANAGER

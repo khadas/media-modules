@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-amvdec-mavs
+MODULE_NAME = amvdec_mavs
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-amvdec-mavs
+endif
+endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_AVS_MULTI) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += avs_multi.o
 

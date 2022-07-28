@@ -27,8 +27,13 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
-//#include <uapi/linux/major.h>
-#include <linux/amlogic/major.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE == KERNEL_VERSION(5, 4, 0)
+#include <uapi/linux/major.h>
+#else
+#include <linux/amlogic/major.h> //if kernel is 4.9 then use this one
+#endif
+#include <uapi/linux/major.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
@@ -36,10 +41,17 @@
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
+#ifdef CONFIG_AMLOGIC_MEDIA_FRAME_SYNC
 #include <linux/amlogic/media/frame_sync/tsync.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/frame_sync/timestamp.h>
 #include <linux/amlogic/media/frame_sync/tsync_pcr.h>
+#else
+#include "../../include/frame_sync/tsync.h"
+#include "../../include/frame_sync/ptsserv.h"
+#include "../../include/frame_sync/timestamp.h"
+#include "../../include/frame_sync/tsync_pcr.h"
+#endif
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
@@ -47,7 +59,6 @@
 #include <linux/mutex.h>
 #include <linux/poll.h>
 #include <linux/dma-mapping.h>
-//#include <linux/dma-contiguous.h>
 #include <linux/uaccess.h>
 #include <linux/clk.h>
 #include <linux/compat.h>
@@ -82,6 +93,7 @@
 #include "stream_buffer_base.h"
 #include "../../frame_provider/decoder/utils/vdec_feature.h"
 #include <linux/syscalls.h>
+#include "../../common/media_utils/media_utils.h"
 
 //#define G12A_BRINGUP_DEBUG
 
@@ -144,7 +156,7 @@ void debug_file_write(const char __user *buf, size_t count)
 	if (!debug_filp)
 		return;
 
-	if (count != __kernel_write(debug_filp, buf, count, &debug_file_pos))
+	if (count != media_write(debug_filp, buf, count, &debug_file_pos))
 		pr_err("Failed to write debug file\n");
 }
 #endif
@@ -487,7 +499,7 @@ static void amstream_change_vbufsize(struct port_priv_s *priv,
 			pvbuf->buf_start, pvbuf->ext_buf_addr);
 		return;
 	}
-	if (priv->port->is_4k) {
+	if (priv->is_4k) {
 		pvbuf->buf_size = def_4k_vstreambuf_sizeM * SZ_1M;
 		if (priv->vdec->port_flag & PORT_FLAG_DRM)
 			pvbuf->buf_size = DEFAULT_VIDEO_BUFFER_SIZE_4K_TVP;
@@ -579,13 +591,13 @@ static int video_port_init(struct port_priv_s *priv,
 	if (port->vformat == VFORMAT_H264_4K2K ||
 		(priv->vdec->sys_info->height *
 			priv->vdec->sys_info->width) > 1920*1088) {
-		port->is_4k = true;
+		priv->is_4k = true;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264) {
 			vdec_poweron(VDEC_HEVC);
 		}
 	} else {
-		port->is_4k = false;
+		priv->is_4k = false;
 	}
 
 	if (port->type & PORT_TYPE_FRAME) {
@@ -893,7 +905,7 @@ static int amstream_port_init(struct port_priv_s *priv)
 	}
 
 	if ((port->type & PORT_TYPE_VIDEO) &&
-		(port->flag & PORT_FLAG_VFORMAT)) {
+		(vdec->port_flag & PORT_FLAG_VFORMAT)) {
 		if (vdec_stream_based(vdec)) {
 			struct stream_buf_ops *ops = NULL;
 			struct parser_args pars	= {
@@ -1530,8 +1542,8 @@ static int amstream_open(struct inode *inode, struct file *file)
 
 	port->flag = PORT_FLAG_IN_USE;
 	port->pcr_inited = 0;
-#ifdef DATA_DEBUG
-	debug_filp = filp_open(DEBUG_FILE_NAME, O_WRONLY, 0);
+#ifdef DATA_DEBU
+	debug_filp = media_open(DEBUG_FILE_NAME, O_WRONLY, 0);
 	if (IS_ERR(debug_filp)) {
 		pr_err("amstream: open debug file failed\n");
 		debug_filp = NULL;
@@ -1621,7 +1633,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 #ifdef DATA_DEBUG
 	if (debug_filp) {
-		filp_close(debug_filp, current->files);
+		media_close(debug_filp, current->files);
 		debug_filp = NULL;
 		debug_file_pos = 0;
 	}
@@ -1637,7 +1649,7 @@ static int amstream_release(struct inode *inode, struct file *file)
 #else
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
 				&& port->vformat == VFORMAT_H264
-				&& port->is_4k) {
+				&& priv->is_4k) {
 				vdec_poweroff(VDEC_HEVC);
 			}
 
@@ -2128,6 +2140,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		break;
 	case AMSTREAM_SET_VIDEO_ID:
 		priv->vdec->video_id = parm.data_32;
+		priv->vdec->afd_video_id = parm.data_32;
 		mutex_lock(&userdata->mutex);
 		for (i = 0;i < MAX_USERDATA_CHANNEL_NUM; i++) {
 			if (userdata->used[i] == 0) {
@@ -2140,7 +2153,7 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 		}
 		mutex_unlock(&userdata->mutex);
 
-		pr_info("AMSTREAM_SET_VIDEO_ID video_id: %d\n", parm.data_32);
+		pr_info("AMSTREAM_SET_VIDEO_ID vdec %p video_id: %d\n", priv->vdec, parm.data_32);
 		break;
 	default:
 		r = -ENOIOCTLCMD;
@@ -2343,26 +2356,41 @@ static long amstream_ioctl_set_ex(struct port_priv_s *priv, ulong arg)
 	long r = 0;
 	return r;
 }
+static inline unsigned long
+amstream_copy_compat(void *des, void *src, unsigned long size, bool flag)
+{
+	if (flag)
+		return copy_from_user(des, src, size);
+	else
+		memcpy(des, src, size);
+
+	return 0;
+}
 static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 {
 	struct stream_port_s *this = priv->port;
 	struct am_ioctl_parm_ptr parm;
 	long r = 0;
+	bool user_space_flag = false;
 
-	if (copy_from_user
+	if (access_ok((void *)arg, sizeof(struct am_ioctl_parm_ptr))) {
+		user_space_flag = true;
+	}
+	if (amstream_copy_compat
 		((void *)&parm, (void *)arg,
-		 sizeof(parm))) {
+		 sizeof(parm), user_space_flag)) {
 		pr_err("[%s]%d, arg err\n", __func__, __LINE__);
 		r = -EFAULT;
 	}
+
 	switch (parm.cmd) {
 	case AMSTREAM_SET_PTR_AUDIO_INFO:
 		if ((this->type & PORT_TYPE_VIDEO)
 			|| (this->type & PORT_TYPE_AUDIO)) {
 			if (parm.pdata_audio_info != NULL) {
-				if (copy_from_user
-					((void *)&audio_dec_info, (void *)parm.pdata_audio_info,
-					 sizeof(audio_dec_info))) {
+				if (amstream_copy_compat(
+					(void *)&audio_dec_info, (void *)parm.pdata_audio_info,
+					 sizeof(audio_dec_info), user_space_flag)) {
 					pr_err("[%s]%d, arg err\n", __func__, __LINE__);
 					r = -EFAULT;
 				}
@@ -2376,8 +2404,8 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 				(parm.len > PAGE_SIZE)) {
 				r = -EINVAL;
 			} else {
-				r = copy_from_user(priv->vdec->config,
-						parm.pointer, parm.len);
+				r = amstream_copy_compat(priv->vdec->config,
+						parm.pointer, parm.len, user_space_flag);
 				if (r)
 					r = -EINVAL;
 				else
@@ -2392,8 +2420,8 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 				(parm.len > PAGE_SIZE)) {
 				r = -EINVAL;
 			} else {
-				r = copy_from_user(priv->vdec->hdr10p_data_buf,
-						parm.pointer, parm.len);
+				r = amstream_copy_compat(priv->vdec->hdr10p_data_buf,
+						parm.pointer, parm.len, user_space_flag);
 				if (r) {
 					priv->vdec->hdr10p_data_size = 0;
 					priv->vdec->hdr10p_data_valid = false;
@@ -3049,11 +3077,17 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 				struct vdec_s *vdec;
 
 				p_userdata_param = &param;
-				if (copy_from_user(p_userdata_param,
-					(void __user *)arg,
-					sizeof(struct userdata_param_t))) {
-					r = -EFAULT;
-					break;
+				if (access_ok((void*)arg, sizeof(struct userdata_param_t))) {
+					if (copy_from_user(p_userdata_param,
+						(void __user *)arg,
+						sizeof(struct userdata_param_t))) {
+						r = -EFAULT;
+						break;
+					}
+				} else {
+					memcpy(p_userdata_param,
+							(void __user *)arg,
+							sizeof(struct userdata_param_t));
 				}
 				mutex_lock(&amstream_mutex);
 				if (vdec_get_debug_flags() & 0x10000000)
@@ -4079,7 +4113,7 @@ ssize_t dump_stream_store(struct class *class,
 		return size;
 	}
 
-	fp = filp_open(DUMP_STREAM_FILE, O_CREAT | O_RDWR, 0666);
+	fp = media_open(DUMP_STREAM_FILE, O_CREAT | O_RDWR, 0666);
 	if (IS_ERR(fp)) {
 		fp = NULL;
 		pr_info("create dump stream file failed\n");
@@ -4108,16 +4142,15 @@ ssize_t dump_stream_store(struct class *class,
 		}
 		codec_mm_dma_flush(stbuf_vaddr, vmap_size, DMA_FROM_DEVICE);
 
-		write_size = __kernel_write(fp, stbuf_vaddr, vmap_size, &fpos);
+		write_size = media_write(fp, stbuf_vaddr, vmap_size, &fpos);
 		if (write_size < vmap_size) {
-			write_size += __kernel_write(fp, stbuf_vaddr + write_size, vmap_size - write_size, &fpos);
+			write_size += media_write(fp, stbuf_vaddr + write_size, vmap_size - write_size, &fpos);
 			pr_info("fail write retry, total %d, write %d\n", vmap_size, write_size);
 			if (write_size < vmap_size) {
 				pr_info("retry fail, interrupt dump stream, break\n");
 				break;
 			}
 		}
-		vfs_fsync(fp, 0);
 		pr_info("vmap_size 0x%x dump size 0x%x\n", vmap_size, write_size);
 
 		offset += vmap_size;
@@ -4125,7 +4158,7 @@ ssize_t dump_stream_store(struct class *class,
 		codec_mm_unmap_phyaddr(stbuf_vaddr);
 	}
 
-	filp_close(fp, current->files);
+	media_close(fp, current->files);
 	pr_info("dump stream buf end\n");
 
 	return size;
@@ -4433,7 +4466,8 @@ MODULE_PARM_DESC(def_vstreambuf_sizeM,
 module_param(slow_input, uint, 0664);
 MODULE_PARM_DESC(slow_input, "\n amstream slow_input\n");
 
-
+/*just for kernel 5.15 compilation, will modify later*/
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 MODULE_DESCRIPTION("AMLOGIC streaming port driver");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tim Yao <timyao@amlogic.com>");

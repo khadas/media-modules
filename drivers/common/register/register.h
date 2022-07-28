@@ -23,6 +23,7 @@
 #include <linux/platform_device.h>
 #include "../../include/regs/dos_registers.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../chips/decoder_cpu_ver_info.h"
 
 
 typedef enum {
@@ -36,23 +37,26 @@ struct bus_reg_desc {
 };
 
 
+#define WRITE_VREG(addr, val) write_dos_reg_comp(addr, val)
 
-#define WRITE_VREG(addr, val) write_dos_reg(addr, val)
+#define READ_VREG(addr) read_dos_reg_comp(addr)
 
-#define READ_VREG(addr) read_dos_reg(addr)
 
 int read_dos_reg(ulong addr);
 void write_dos_reg(ulong addr, int val);
 void dos_reg_write_bits(unsigned int reg, u32 val, int start, int len);
 
+int read_dos_reg_comp(ulong addr);
+void write_dos_reg_comp(ulong addr, int val);
+
 
 #define WRITE_VREG_BITS(r, val, start, len) dos_reg_write_bits(r, val, start, len)
-#define CLEAR_VREG_MASK(r, mask)   write_dos_reg(r, read_dos_reg(r) & ~(mask))
-#define SET_VREG_MASK(r, mask)     write_dos_reg(r, read_dos_reg(r) | (mask))
+#define CLEAR_VREG_MASK(r, mask)   write_dos_reg_comp(r, read_dos_reg_comp(r) & ~(mask))
+#define SET_VREG_MASK(r, mask)     write_dos_reg_comp(r, read_dos_reg_comp(r) | (mask))
 
 
-#define READ_HREG(r) read_dos_reg((r) | 0x1000)
-#define WRITE_HREG(r, val) write_dos_reg((r) | 0x1000, val)
+#define READ_HREG(r) read_dos_reg_comp((r) | 0x1000)
+#define WRITE_HREG(r, val) write_dos_reg_comp((r) | 0x1000, val)
 #define WRITE_HREG_BITS(r, val, start, len) \
 	dos_reg_write_bits((r) | 0x1000, val, start, len)
 //#define SET_HREG_MASK(r, mask) codec_set_dosbus_mask((r) | 0x1000, mask)
@@ -61,10 +65,6 @@ void dos_reg_write_bits(unsigned int reg, u32 val, int start, int len);
 //##############################################################
 
 typedef void (*reg_compat_func)(struct bus_reg_desc *, MM_BUS_ENUM bus);
-
-#ifdef DEBUG_SC2
-void sc2_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
-#endif
 
 void t3_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 void s5_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);

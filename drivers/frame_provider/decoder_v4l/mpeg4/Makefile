@@ -1,2 +1,12 @@
-obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_MPEG4_MULTI) += amvdec_mmpeg4_v4l.o
-amvdec_mmpeg4_v4l-objs += vmpeg4_multi.o
+MODULE_NAME = amvdec_mmpeg4_v4l
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-amvdec-mmpeg4_v4l
+endif
+endif
+obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_MPEG4_MULTI) += ${MODULE_NAME}.o
+${MODULE_NAME}-objs += vmpeg4_multi.o
+
+PR_FMT = $(subst amlogic-,,$(MODULE_NAME))
+PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"
+ccflags-y += $(PR_FMT_DEFINE)

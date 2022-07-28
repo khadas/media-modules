@@ -1283,6 +1283,8 @@ typedef struct PIC_BUFFER_CONFIG_s {
     int32_t slice_idx;
     /*buffer*/
     uint32_t fgs_table_adr;
+    uint32_t sfgs_table_phy;
+    char *sfgs_table_ptr;
 #ifdef AOM_AV1_MMU
     uint32_t header_adr;
 #endif
@@ -1547,7 +1549,10 @@ typedef struct RefCntBuffer_s {
 #ifdef AML
   int dec_width;
   uint8_t film_grain_reg_valid;
+  wait_queue_head_t wait_sfgs;
+  atomic_t fgs_done;
   uint32_t film_grain_reg[FILM_GRAIN_REG_SIZE];
+  uint32_t film_grain_ctrl;
 #endif
   aom_codec_frame_buffer_t raw_frame_buffer;
   PIC_BUFFER_CONFIG buf;
@@ -2239,6 +2244,7 @@ typedef union param_u {
         unsigned short mmu_used_num;
         unsigned short dw_mmu_used_num;
         unsigned short seq_flags_2;
+		unsigned short film_grain_present_flag;
 
         /*ucode end*/
         /*other*/

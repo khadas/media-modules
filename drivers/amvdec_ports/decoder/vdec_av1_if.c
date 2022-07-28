@@ -1093,8 +1093,12 @@ static int vdec_av1_decode(unsigned long h_vdec,
  static void get_param_config_info(struct vdec_av1_inst *inst,
 	struct aml_dec_params *parms)
  {
-	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO)
-		 parms->cfg = inst->parms.cfg;
+	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_CFGINFO) {
+		/* dw use v4l cfg */
+		inst->parms.cfg.double_write_mode =
+			inst->ctx->config.parm.dec.cfg.double_write_mode;
+		parms->cfg = inst->parms.cfg;
+	 }
 	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
 		 parms->ps = inst->parms.ps;
 	 if (inst->parms.parms_status & V4L2_CONFIG_PARM_DECODE_HDRINFO)
@@ -1173,7 +1177,7 @@ static void set_param_write_sync(struct vdec_av1_inst *inst)
 
 static int vdec_get_dw_mode(struct vdec_av1_inst *inst, int dw_mode)
 {
-	u32 valid_dw_mode = inst->parms.cfg.double_write_mode;
+	u32 valid_dw_mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
 	int w = inst->vsi->pic.coded_width;
 	int h = inst->vsi->pic.coded_height;
 	u32 dw = 0x1; /*1:1*/
@@ -1212,6 +1216,7 @@ static int vdec_pic_scale(struct vdec_av1_inst *inst, int length, int dw_mode)
 		break;
 	case 0x2: /* afbc and (w/4 x h/4), output YUV420 */
 	case 0x3: /* afbc and (w/4 x h/4), output afbc and YUV420 */
+	case 0x21: /* only afbc, But di will output YUV420 (w/4 x h/4) */
 		ret = length >> 2;
 		break;
 	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */
@@ -1281,8 +1286,7 @@ static void set_param_comp_buf_info(struct vdec_av1_inst *inst,
 static void set_param_hdr_info(struct vdec_av1_inst *inst,
 	struct aml_vdec_hdr_infos *hdr)
 {
-	if ((inst->parms.parms_status &
-		V4L2_CONFIG_PARM_DECODE_HDRINFO)) {
+	if (hdr->signal_type != 0) {
 		inst->parms.hdr = *hdr;
 		inst->parms.parms_status |=
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;

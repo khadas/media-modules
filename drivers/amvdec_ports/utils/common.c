@@ -22,6 +22,7 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/string.h>
+#include "../../common/media_utils/media_utils.h"
 
 #include "common.h"
 #ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER
@@ -257,11 +258,11 @@ u8 *aml_yuv_dump(struct file *fp, u8 *start_addr, u32 real_width, u32 real_heigh
 
 	if (real_width != coded_width) {
 		for (index = 0; index < real_height; index++) {
-			kernel_write(fp, yuv_data_addr, real_width, 0);
+			media_write(fp, yuv_data_addr, real_width, 0);
 			yuv_data_addr += coded_width;
 		}
 	} else {
-		kernel_write(fp, yuv_data_addr, real_width * real_height, 0);
+		media_write(fp, yuv_data_addr, real_width * real_height, 0);
 	}
 
 	return (start_addr + coded_width * coded_height);

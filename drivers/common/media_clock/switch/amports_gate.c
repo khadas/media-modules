@@ -25,8 +25,9 @@
 #include <linux/spinlock.h>
 #include <linux/clk.h>
 #include "amports_gate.h"
-//#include "../../../stream_input/amports/amports_priv.h"
-//#include "../../../frame_provider/decoder/utils/vdec.h"
+#include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../../../stream_input/amports/amports_priv.h"
+#include "../../../frame_provider/decoder/utils/vdec.h"
 #include "../clk/clk.h"
 
 

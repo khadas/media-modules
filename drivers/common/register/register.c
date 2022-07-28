@@ -174,14 +174,33 @@ int read_dos_reg(ulong addr)
 }
 EXPORT_SYMBOL(read_dos_reg);
 
+int read_dos_reg_comp(ulong addr)
+{
+	if (is_support_new_dos_dev())
+		return read_dos_reg(addr);
+	else
+		return aml_read_dosbus((uint)addr);
+}
+EXPORT_SYMBOL(read_dos_reg_comp);
+
+void write_dos_reg_comp(ulong addr, int val)
+{
+	if (is_support_new_dos_dev())
+		write_dos_reg(addr, val);
+	else
+		aml_write_dosbus((uint)addr, (uint)val);
+}
+EXPORT_SYMBOL(write_dos_reg_comp);
+
+
 void dos_reg_write_bits(unsigned int reg, u32 val, int start, int len)
 {
-	u32 toval = read_dos_reg(reg);
+	u32 toval = read_dos_reg_comp(reg);
 	u32 mask = (((1L << (len)) - 1) << (start));
 
 	toval &= ~mask;
 	toval |= (val << start) & mask;
-	write_dos_reg(reg, toval);
+	write_dos_reg_comp(reg, toval);
 }
 EXPORT_SYMBOL(dos_reg_write_bits);
 
@@ -205,8 +224,9 @@ int dos_register_probe(struct platform_device *pdev, reg_compat_func reg_compat_
 		res_size = resource_size(&res);
 		reg_base[i] = ioremap(res.start, res_size);
 
-		pr_info("%s, res start %zx, end %zx, iomap: %px\n",
-			__func__, res.start, res.end, reg_base[i]);
+		pr_info("%s, res start %llx, end %llx, iomap: %px\n",
+			__func__, (unsigned long long)res.start,
+			(unsigned long long)res.end, reg_base[i]);
 
 		reg_desc[i] = (struct bus_reg_desc *)kzalloc(res_size *
 			sizeof(struct bus_reg_desc), GFP_KERNEL);

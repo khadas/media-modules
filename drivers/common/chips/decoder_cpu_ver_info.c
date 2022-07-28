@@ -51,78 +51,74 @@ struct dos_of_dev_s {
 };
 
 static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_START] = {
-[AM_MESON_CPU_MAJOR_ID_M8B - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_M8B,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_M8B - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_M8B,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_GXL - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_M8B,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_GXL - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_GXL,
+		.reg_compat = NULL,
 	},
 
-[AM_MESON_CPU_MAJOR_ID_G12A - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_G12A,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_G12A - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_G12A,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_G12B - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_G12B,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_G12B - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_G12B,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_GXLX2 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_GXLX2,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_GXLX2 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_GXLX2,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_SM1 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_SM1,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_SM1 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_SM1,
+		.reg_compat = NULL,
+		},
+	[AM_MESON_CPU_MAJOR_ID_TL1 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_TL1,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_TL1 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_TL1,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_TM2 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_TM2,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_TM2 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_TM2,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_SC2 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_SC2,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_SC2 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_SC2,
-#ifdef DEBUG_SC2
-	.reg_compat = sc2_mm_registers_compat,
-#else
-	.reg_compat = NULL,
-#endif
+	[AM_MESON_CPU_MAJOR_ID_T5 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T5,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_T5 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_T5,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_T5D - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T5D,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_T5D - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_T5D,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_T7 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T7,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_T7 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_T7,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_S4 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_S4,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_S4 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_S4,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_T3 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T3,
+		.reg_compat = t3_mm_registers_compat,
 	},
-[AM_MESON_CPU_MAJOR_ID_T3 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_T3,
-	.reg_compat = t3_mm_registers_compat,
+	[AM_MESON_CPU_MAJOR_ID_S4D - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_S4D,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_S4D - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_S4D,
-	.reg_compat = NULL,
+	[AM_MESON_CPU_MAJOR_ID_T5W - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T5W,
+		.reg_compat = NULL,
 	},
-[AM_MESON_CPU_MAJOR_ID_T5W - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_T5W,
-	.reg_compat = NULL,
-	},
-[AM_MESON_CPU_MAJOR_ID_S5 - MAJOR_ID_START] = {
-	.chip_id = AM_MESON_CPU_MAJOR_ID_S5,
-	.reg_compat = s5_mm_registers_compat,
+	[AM_MESON_CPU_MAJOR_ID_S5 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_S5,
+		.reg_compat = s5_mm_registers_compat,
 	},
 };
 

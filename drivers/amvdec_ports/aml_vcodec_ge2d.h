@@ -38,7 +38,7 @@ struct aml_v4l2_ge2d_buf {
 	u32			flag;
 	struct vframe_s		*vf;
 	void			*caller_data;
-	struct aml_video_dec_buf *aml_buf;
+	struct aml_v4l2_buf	*aml_vb;
 };
 
 struct aml_v4l2_ge2d {
@@ -72,9 +72,6 @@ struct aml_v4l2_ge2d {
 	int			in_num[2];
 	int			out_num[2];
 	ulong			fb_token;
-
-	int			src_canvas_id[3];
-	int			dst_canvas_id[3];
 };
 
 struct task_ops_s *get_ge2d_ops(void);
@@ -85,5 +82,9 @@ int aml_v4l2_ge2d_init(
 		struct aml_v4l2_ge2d** ge2d_handle);
 
 int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d);
+
+void aml_v4l2_ge2d_recycle(struct aml_v4l2_ge2d *ge2d,
+					struct aml_v4l2_buf *aml_vb);
+
 
 #endif

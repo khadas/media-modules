@@ -19,11 +19,11 @@
  */
 #define DEBUG
 #include "vdec_power_ctrl.h"
+#include <linux/amlogic/media/utils/vdec_reg.h>
+//#include <linux/amlogic/power_ctrl.h>
 #include "../../../include/regs/dos_registers.h"
 #include "../../../common/register/register.h"
-//#include <linux/amlogic/power_ctrl.h>
 //#include <dt-bindings/power/sc2-pd.h>
-//#include <linux/amlogic/pwr_ctrl.h>
 #include <linux/amlogic/power_domain.h>
 #include <dt-bindings/power/sc2-pd.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
@@ -189,12 +189,12 @@ static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 	// debug s5, remove after pd done?
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
 		/* vdec mem pd */
-		pr_info("DOS_MEM_PD_VDEC %lx\n", DOS_MEM_PD_VDEC);
+		pr_info("DOS_MEM_PD_VDEC %x\n", DOS_MEM_PD_VDEC);
 		WRITE_VREG(DOS_MEM_PD_VDEC, 0);
 		/* hevc mem pd */
-		pr_info("DOS_MEM_PD_HEVC %lx\n", DOS_MEM_PD_HEVC);
+		pr_info("DOS_MEM_PD_HEVC %x\n", DOS_MEM_PD_HEVC);
 		WRITE_VREG(DOS_MEM_PD_HEVC, 0);
-		pr_info("DOS_MEM_PD_HEVC_DBE %lx\n", DOS_MEM_PD_HEVC_DBE);
+		pr_info("DOS_MEM_PD_HEVC_DBE %x\n", DOS_MEM_PD_HEVC_DBE);
 		WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0);
 		pr_info("--->s5 MEM PD set enable id %d\n", id);
 	}
@@ -318,7 +318,7 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 
 		/* vdec1 power on */
 #ifdef CONFIG_AMLOGIC_POWER
-		/*if (is_support_power_ctrl()) {
+		if (is_support_power_ctrl()) {
 			if (power_ctrl_sleep_mask(true, sleep_val, 0)) {
 				pr_err("vdec-1 power on ctrl sleep fail.\n");
 				return;
@@ -326,7 +326,7 @@ static void pm_vdec_legacy_power_on(struct device *dev, int id)
 		} else {
 			WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
 				READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);
-		}*/
+		}
 #else
 		WRITE_AOREG(AO_RTI_GEN_PWR_SLEEP0,
 			READ_AOREG(AO_RTI_GEN_PWR_SLEEP0) & ~sleep_val);

@@ -28,8 +28,8 @@
 
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
-//#include "../../stream_input/amports/amports_priv.h"
-//#include "../../frame_provider/decoder/utils/vdec.h"
+#include "../../stream_input/amports/amports_priv.h"
+#include "../../frame_provider/decoder/utils/vdec.h"
 #include "chips.h"
 #include <linux/amlogic/media/utils/log.h>
 #include "decoder_cpu_ver_info.h"

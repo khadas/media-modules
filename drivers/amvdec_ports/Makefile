@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-amvdec-ports
+MODULE_NAME = amvdec_ports
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-amvdec-ports
+endif
+endif
 obj-m += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += aml_vcodec_dec_drv.o
 ${MODULE_NAME}-objs += aml_vcodec_dec.o
@@ -8,12 +13,15 @@ ${MODULE_NAME}-objs += aml_vcodec_vpp.o
 ${MODULE_NAME}-objs += aml_vcodec_ge2d.o
 ${MODULE_NAME}-objs += vdec_drv_if.o
 ${MODULE_NAME}-objs += aml_task_chain.o
+${MODULE_NAME}-objs += aml_buf_mgr.o
+${MODULE_NAME}-objs += aml_buf_core.o
 ${MODULE_NAME}-objs += decoder/vdec_h264_if.o
 ${MODULE_NAME}-objs += decoder/vdec_hevc_if.o
 ${MODULE_NAME}-objs += decoder/vdec_vp9_if.o
 ${MODULE_NAME}-objs += decoder/vdec_mpeg12_if.o
 ${MODULE_NAME}-objs += decoder/vdec_mpeg4_if.o
 ${MODULE_NAME}-objs += decoder/vdec_mjpeg_if.o
+${MODULE_NAME}-objs += decoder/vdec_avs_if.o
 ${MODULE_NAME}-objs += decoder/vdec_av1_if.o
 ${MODULE_NAME}-objs += decoder/vdec_avs2_if.o
 ifdef CONFIG_AMLOGIC_MEDIA_V4L_SOFTWARE_PARSER

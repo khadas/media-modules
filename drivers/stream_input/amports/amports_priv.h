@@ -29,6 +29,7 @@ struct port_priv_s {
 	struct vdec_s *vdec;
 	struct stream_port_s *port;
 	struct mutex mutex;
+	bool is_4k;
 };
 
 struct stream_buf_s *get_buf_by_type(u32 type);
@@ -51,7 +52,7 @@ int amstream_request_firmware_from_sys(const char *file_name,
 #ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 void set_vsync_pts_inc_mode(int inc);
 #else
-//void __weak set_vsync_pts_inc_mode(int inc) { return; }
+void __weak set_vsync_pts_inc_mode(int inc) { return; }
 #endif
 
 void set_real_audio_info(void *arg);

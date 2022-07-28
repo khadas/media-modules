@@ -883,6 +883,7 @@ struct h264_dpb_stru {
 		 0, init; 1, odd; 2, even*/
 	u8 poc_even_odd_flag;
 	u32 decode_pic_count;
+	int         cur_idx;
 	/**/
 	unsigned int max_reference_size;
 
@@ -945,6 +946,9 @@ unsigned char dpb_is_debug(int index, int debug_flag);
 int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame);
 
 int release_buf_spec_num(struct vdec_s *vdec, int buf_spec_num);
+
+int recycle_frame_buffer(struct h264_dpb_stru *p_H264_Dpb, int buf_spec_num,
+						int frame_index);
 
 void set_frame_output_flag(struct h264_dpb_stru *p_H264_Dpb, int index);
 

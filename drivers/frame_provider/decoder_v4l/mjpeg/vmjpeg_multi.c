@@ -31,26 +31,26 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-//#include <linux/amlogic/tee.h>
-#include <uapi/linux/tee.h>
-
 #include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/codec_mm/configs.h>
+
+#include <uapi/linux/tee.h>
+#include <media/v4l2-mem2mem.h>
+
 #include "../../../stream_input/amports/amports_priv.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-
 #include "../../decoder/utils/vdec_input.h"
 #include "../../decoder/utils/vdec.h"
 #include "../../decoder/utils/amvdec.h"
 #include "../../decoder/utils/decoder_mmu_box.h"
 #include "../../decoder/utils/decoder_bmmu_box.h"
-#include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/media/codec_mm/configs.h>
 #include "../../decoder/utils/firmware.h"
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/config_parser.h"
-#include <media/v4l2-mem2mem.h>
 #include "../../decoder/utils/vdec_feature.h"
+#include "../../decoder/utils/aml_buf_helper.h"
 
 #define MEM_NAME "codec_mmjpeg"
 
@@ -108,9 +108,9 @@ static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x2000;
 static u32 without_display_mode;
 static u32 dynamic_buf_num_margin;
-static u32 run_ready_min_buf_num = 2;
+static u32 run_ready_min_buf_num = 1;
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 unsigned int mmjpeg_debug_mask = 0xff;
 #define PRINT_FLAG_ERROR              0x0
 #define PRINT_FLAG_RUN_FLOW           0X0001
@@ -225,7 +225,7 @@ struct vdec_mjpeg_hw_s {
 	u32 decode_timeout_count;
 	u32 start_process_time;
 	u32 last_vld_level;
-	u8 eos;
+	bool eos;
 	u32 frame_num;
 	u32 run_count;
 	u32	not_run_ready;
@@ -244,7 +244,7 @@ struct vdec_mjpeg_hw_s {
 	u32 res_ch_flag;
 	u32 canvas_mode;
 	u32 canvas_endian;
-	ulong fb_token;
+	struct aml_buf *ambuf;
 	char vdec_name[32];
 	char pts_name[32];
 	char new_q_name[32];
@@ -255,19 +255,18 @@ static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
 
 static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
-	u32 temp;
+	u32 width, height;
 	u32 temp_endian;
 
-	temp = READ_VREG(MREG_PIC_WIDTH);
-	if (temp > 1920)
-		vf->width = hw->frame_width = 1920;
-	else if (temp > 0)
-		vf->width = hw->frame_width = temp;
-	temp = READ_VREG(MREG_PIC_HEIGHT);
-	if (temp > 1088)
-		vf->height = hw->frame_height = 1088;
-	else if (temp > 0)
-		vf->height = hw->frame_height = temp;
+	width = READ_VREG(MREG_PIC_WIDTH);
+	height = READ_VREG(MREG_PIC_HEIGHT);
+	vf->width = hw->frame_width = ((width > 1920) ? 1920 : width);
+	vf->height = hw->frame_height = ((height > 1088) ? 1088 : height);
+
+	if (width < height) {
+		vf->width = hw->frame_width = ((width > 1088) ? 1088 : width);
+		vf->height = hw->frame_height = ((height > 1920) ? 1920 : height);
+	}
 	vf->duration = hw->frame_dur;
 	vf->ratio_control = DISP_RATIO_ASPECT_RATIO_MAX << DISP_RATIO_ASPECT_RATIO_BIT;
 	vf->sar_width = 1;
@@ -361,7 +360,6 @@ static int v4l_res_change(struct vdec_mjpeg_hw_s *hw, int width, int height)
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
-			hw->eos = 1;
 			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
 			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
@@ -377,7 +375,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)(vdec->private);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
-	struct vdec_v4l2_buffer *fb = NULL;
+	struct aml_buf *ambuf = NULL;
 	u32 reg;
 	struct vframe_s *vf = NULL;
 	u32 index, offset = 0, pts;
@@ -393,44 +391,41 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	}
 
 	if (READ_VREG(DEC_STATUS_REG) == 1) {
-		if (hw->is_used_v4l) {
-			int frame_width = READ_VREG(MREG_PIC_WIDTH);
-			int frame_height = READ_VREG(MREG_PIC_HEIGHT);
+		int frame_width = READ_VREG(MREG_PIC_WIDTH);
+		int frame_height = READ_VREG(MREG_PIC_HEIGHT);
 
-			if (!v4l_res_change(hw, frame_width, frame_height)) {
-				struct aml_vcodec_ctx *ctx =
-					(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-				if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
-					struct aml_vdec_ps_infos ps;
+		if (!v4l_res_change(hw, frame_width, frame_height)) {
+			struct aml_vcodec_ctx *ctx =
+				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+			if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
+				struct aml_vdec_ps_infos ps;
 
-					vmjpeg_get_ps_info(hw, frame_width, frame_height, &ps);
-					hw->v4l_params_parsed = true;
-					vdec_v4l_set_ps_infos(ctx, &ps);
-					reset_process_time(hw);
-					hw->dec_result = DEC_RESULT_AGAIN;
-					vdec_schedule_work(&hw->work);
-				} else {
-					struct vdec_pic_info pic;
-
-					if (!hw->buf_num) {
-						vdec_v4l_get_pic_info(ctx, &pic);
-						hw->buf_num = pic.dpb_frames +
-							pic.dpb_margin;
-						if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
-							hw->buf_num = DECODE_BUFFER_NUM_MAX;
-					}
-
-					WRITE_VREG(DEC_STATUS_REG, 0);
-
-					hw->res_ch_flag = 1;
-				}
-			} else {
+				vmjpeg_get_ps_info(hw, frame_width, frame_height, &ps);
+				hw->v4l_params_parsed = true;
+				vdec_v4l_set_ps_infos(ctx, &ps);
 				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_AGAIN;
 				vdec_schedule_work(&hw->work);
+			} else {
+				struct vdec_pic_info pic;
+
+				if (!hw->buf_num) {
+					vdec_v4l_get_pic_info(ctx, &pic);
+					hw->buf_num = pic.dpb_frames +
+						pic.dpb_margin;
+					if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+						hw->buf_num = DECODE_BUFFER_NUM_MAX;
+				}
+
+				WRITE_VREG(DEC_STATUS_REG, 0);
+
+				hw->res_ch_flag = 1;
 			}
-		} else
-			WRITE_VREG(DEC_STATUS_REG, 0);
+		} else {
+			reset_process_time(hw);
+			hw->dec_result = DEC_RESULT_AGAIN;
+			vdec_schedule_work(&hw->work);
+		}
 		return IRQ_HANDLED;
 	}
 	reset_process_time(hw);
@@ -449,22 +444,18 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	}
 
-	if (hw->is_used_v4l) {
-		vf->v4l_mem_handle
-			= hw->buffer_spec[index].v4l_ref_buf_addr;
-		fb = (struct vdec_v4l2_buffer *)vf->v4l_mem_handle;
-		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-			"[%d] %s(), v4l mem handle: 0x%lx\n",
-			((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
-			__func__, vf->v4l_mem_handle);
-	}
+	vf->v4l_mem_handle
+		= hw->buffer_spec[index].v4l_ref_buf_addr;
+	ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+		"[%d] %s(), v4l mem handle: 0x%lx\n",
+		((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
+		__func__, vf->v4l_mem_handle);
 
 	vf->index = index;
 	set_frame_info(hw, vf);
 
 	vf->type = VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD;
-	/* vf->pts = (pts_valid) ? pts : 0; */
-	/* vf->pts_us64 = (pts_valid) ? pts_us64 : 0; */
 
 	if (hw->chunk) {
 		vf->pts = hw->chunk->pts;
@@ -492,9 +483,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	vf->orientation = 0;
 	hw->vfbuf_use[index]++;
 
-	vf->mem_handle =
-		decoder_bmmu_box_get_mem_handle(
-			hw->mm_blk_handle, index);
+	vf->mem_handle = decoder_bmmu_box_get_mem_handle(hw->mm_blk_handle, index);
 	decoder_do_frame_check(vdec, vf);
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
@@ -504,27 +493,20 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	hw->frame_num++;
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s:frame num:%d,pts=%d,pts64=%lld. dur=%d\n",
-	__func__, hw->frame_num,
-	vf->pts, vf->pts_us64, vf->duration);
+		__func__, hw->frame_num,
+		vf->pts, vf->pts_us64, vf->duration);
 	vdec->vdec_fps_detec(vdec->id);
 	if (without_display_mode == 0) {
-		if (hw->is_used_v4l) {
-			if (v4l2_ctx->is_stream_off) {
-				vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
-			} else {
-				ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
-				fb->task->submit(fb->task, TASK_TYPE_DEC);
-			}
+		if (v4l2_ctx->is_stream_off) {
+			vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 		} else {
-			vf_notify_receiver(vdec->vf_provider_name,
-					VFRAME_EVENT_PROVIDER_VFRAME_READY,
-					NULL);
+			ATRACE_COUNTER("VC_OUT_DEC-submit", ambuf->index);
+			aml_buf_done(&v4l2_ctx->bm, ambuf, BUF_USER_DEC);
 		}
 	} else
 		vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 
 	hw->dec_result = DEC_RESULT_DONE;
-
 	vdec_schedule_work(&hw->work);
 
 	return IRQ_HANDLED;
@@ -573,6 +555,13 @@ static struct vframe_s *vmjpeg_vf_get(void *op_arg)
 		vf->index_disp = atomic_read(&hw->get_num);
 		atomic_add(1, &hw->get_num);
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
+
+		hw->vfbuf_use[vf->index]--;
+
+		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
+		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+		atomic_add(1, &hw->put_num);
+
 		return vf;
 	}
 	return NULL;
@@ -594,11 +583,10 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 
 	if (vf->v4l_mem_handle !=
 		hw->buffer_spec[vf->index].v4l_ref_buf_addr) {
-		hw->buffer_spec[vf->index].v4l_ref_buf_addr
-			= vf->v4l_mem_handle;
+		hw->buffer_spec[vf->index].v4l_ref_buf_addr = vf->v4l_mem_handle;
 
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-			"MJPEG update fb handle, old:%llx, new:%llx\n",
+			"MJPEG update ambuf handle, old:%llx, new:%llx\n",
 			hw->buffer_spec[vf->index].v4l_ref_buf_addr,
 			vf->v4l_mem_handle);
 	}
@@ -733,12 +721,9 @@ static void init_scaler(void)
 	WRITE_VREG(PSCALE_BMEM_DAT, 0x10000);
 
 	/* reset pscaler */
-#if 1/*MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6*/
 	WRITE_VREG(DOS_SW_RESET0, (1 << 10));
 	WRITE_VREG(DOS_SW_RESET0, 0);
-#else
-	WRITE_RESET_REG(RESET2_REGISTER, RESET_PSCALE);
-#endif
+
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SC2) {
 		READ_RESET_REG(RESET2_REGISTER);
 		READ_RESET_REG(RESET2_REGISTER);
@@ -752,16 +737,14 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 {
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)(vdec->private);
-	mmjpeg_debug_print(DECODE_ID(hw), 0,
-		"====== %s\n", __func__);
+	mmjpeg_debug_print(DECODE_ID(hw), 0, "====== %s\n", __func__);
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"width/height (%d/%d) buf_num %d\n",
 		hw->frame_width,
 		hw->frame_height,
-		hw->buf_num
-		);
+		hw->buf_num);
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
-	"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d put_frm %d run %d not_run_ready %d input_empty %d\n",
+		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d put_frm %d run %d not_run_ready %d input_empty %d\n",
 		input_frame_based(vdec),
 		hw->eos,
 		hw->stat,
@@ -770,29 +753,18 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		hw->put_num,
 		hw->run_count,
 		hw->not_run_ready,
-		hw->input_empty
-		);
-	if (!hw->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
-		vf_notify_receiver(vdec->vf_provider_name,
-			VFRAME_EVENT_PROVIDER_QUREY_STATE,
-			NULL);
-		mmjpeg_debug_print(DECODE_ID(hw), 0,
-			"\nreceiver(%s) state %d\n",
-			vdec->vf_provider_name,
-			state);
-	}
+		hw->input_empty);
+
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
-	"%s, newq(%d/%d), dispq(%d/%d) vf peek/get/put (%d/%d/%d)\n",
-	__func__,
-	kfifo_len(&hw->newframe_q),
-	VF_POOL_SIZE,
-	kfifo_len(&hw->display_q),
-	VF_POOL_SIZE,
-	hw->peek_num,
-	hw->get_num,
-	hw->put_num
-	);
+		"%s, newq(%d/%d), dispq(%d/%d) vf peek/get/put (%d/%d/%d)\n",
+		__func__,
+		kfifo_len(&hw->newframe_q),
+		VF_POOL_SIZE,
+		kfifo_len(&hw->display_q),
+		VF_POOL_SIZE,
+		hw->peek_num,
+		hw->get_num,
+		hw->put_num);
 	mmjpeg_debug_print(DECODE_ID(hw), 0,
 		"VIFF_BIT_CNT=0x%x\n",
 		READ_VREG(VIFF_BIT_CNT));
@@ -812,8 +784,7 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		"PARSER_VIDEO_WP=0x%x\n",
 		STBUF_READ(&vdec->vbuf, get_wp));
 	if (input_frame_based(vdec) &&
-		debug_enable & PRINT_FRAMEBASE_DATA
-		) {
+		debug_enable & PRINT_FRAMEBASE_DATA) {
 		int jj;
 		if (hw->chunk && hw->chunk->block &&
 			hw->chunk->size > 0) {
@@ -827,20 +798,16 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 					hw->chunk->offset;
 
 			mmjpeg_debug_print(DECODE_ID(hw), 0,
-				"frame data size 0x%x\n",
-				hw->chunk->size);
+				"frame data size 0x%x\n", hw->chunk->size);
 			for (jj = 0; jj < hw->chunk->size; jj++) {
 				if ((jj & 0xf) == 0)
 					mmjpeg_debug_print(DECODE_ID(hw),
-					PRINT_FRAMEBASE_DATA,
-						"%06x:", jj);
+					PRINT_FRAMEBASE_DATA, "%06x:", jj);
 				mmjpeg_debug_print(DECODE_ID(hw),
-				PRINT_FRAMEBASE_DATA,
-					"%02x ", data[jj]);
+					PRINT_FRAMEBASE_DATA, "%02x ", data[jj]);
 				if (((jj + 1) & 0xf) == 0)
 					mmjpeg_debug_print(DECODE_ID(hw),
-					PRINT_FRAMEBASE_DATA,
-						"\n");
+					PRINT_FRAMEBASE_DATA, "\n");
 			}
 
 			if (!hw->chunk->block->is_mapped)
@@ -906,8 +873,7 @@ static void check_timer_func(struct timer_list *timer)
 	if (((debug_enable & PRINT_FLAG_TIMEOUT_STATUS) == 0) &&
 		(timeout_val > 0) &&
 		(hw->start_process_time > 0) &&
-		((1000 * (jiffies - hw->start_process_time) / HZ)
-			> timeout_val)) {
+		((1000 * (jiffies - hw->start_process_time) / HZ) > timeout_val)) {
 		if (hw->last_vld_level == READ_VREG(VLD_MEM_VIFIFO_LEVEL)) {
 			if (hw->decode_timeout_count > 0)
 				hw->decode_timeout_count--;
@@ -934,9 +900,9 @@ static void mjpeg_put_video_frame(void *vdec_ctx, struct vframe_s *vf)
 	vmjpeg_vf_put(vf, vdec_ctx);
 }
 
-static void mjpeg_get_video_frame(void *vdec_ctx, struct vframe_s **vf)
+static void mjpeg_get_video_frame(void *vdec_ctx, struct vframe_s *vf)
 {
-	*vf = vmjpeg_vf_get(vdec_ctx);
+	memcpy(vf, vmjpeg_vf_get(vdec_ctx), sizeof(struct vframe_s));
 }
 
 static struct task_ops_s task_dec_ops = {
@@ -947,36 +913,29 @@ static struct task_ops_s task_dec_ops = {
 
 static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i)
 {
-	int ret;
 	u32 canvas;
 	ulong decbuf_start = 0, decbuf_u_start = 0, decbuf_v_start = 0;
 	int decbuf_y_size = 0, decbuf_u_size = 0, decbuf_v_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct vdec_v4l2_buffer *fb = NULL;
+	struct aml_buf *ambuf = hw->ambuf;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->buffer_spec[i].v4l_ref_buf_addr) {
-		struct vdec_v4l2_buffer *fb =
-			(struct vdec_v4l2_buffer *)
+		struct aml_buf *ambuf =
+			(struct aml_buf *)
 			hw->buffer_spec[i].v4l_ref_buf_addr;
 
-		fb->status = FB_ST_DECODER;
+		ambuf->state = FB_ST_DECODER;
+
+		aml_buf_get_ref(&ctx->bm, ambuf);
+
 		return 0;
 	}
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &fb, AML_FB_REQ_DEC);
-	if (ret < 0) {
-		mmjpeg_debug_print(DECODE_ID(hw), 0,
-			"[%d] get fb fail.\n",
-			((struct aml_vcodec_ctx *)
-			(hw->v4l2_ctx))->id);
-		return ret;
-	}
-
-	fb->task->attach(fb->task, &task_dec_ops, hw_to_vdec(hw));
-	fb->status = FB_ST_DECODER;
+	if (!ambuf)
+		return -1;
 
 	if (!hw->frame_width || !hw->frame_height) {
 			struct vdec_pic_info pic;
@@ -988,44 +947,44 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 				hw->frame_width, hw->frame_height);
 	}
 
-	hw->buffer_spec[i].v4l_ref_buf_addr = (ulong)fb;
-	if (fb->num_planes == 1) {
-		decbuf_start	= fb->m.mem[0].addr;
-		decbuf_y_size	= fb->m.mem[0].offset;
+	hw->buffer_spec[i].v4l_ref_buf_addr = (ulong)ambuf;
+	if (ambuf->num_planes == 1) {
+		decbuf_start	= ambuf->planes[0].addr;
+		decbuf_y_size	= ambuf->planes[0].offset;
 		decbuf_u_start	= decbuf_start + decbuf_y_size;
 		decbuf_u_size	= decbuf_y_size / 4;
 		decbuf_v_start	= decbuf_u_start + decbuf_u_size;
 		decbuf_v_size	= decbuf_u_size;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
-	} else if (fb->num_planes == 2) {
-		decbuf_start	= fb->m.mem[0].addr;
-		decbuf_y_size	= fb->m.mem[0].size;
-		decbuf_u_start	= fb->m.mem[1].addr;
-		decbuf_u_size	= fb->m.mem[1].size >> 1;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+	} else if (ambuf->num_planes == 2) {
+		decbuf_start	= ambuf->planes[0].addr;
+		decbuf_y_size	= ambuf->planes[0].length;
+		decbuf_u_start	= ambuf->planes[1].addr;
+		decbuf_u_size	= ambuf->planes[1].length >> 1;
 		decbuf_v_start	= decbuf_u_start + decbuf_u_size;
 		decbuf_v_size	= decbuf_u_size;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
-		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
-	} else if (fb->num_planes == 3) {
-		decbuf_start	= fb->m.mem[0].addr;
-		decbuf_y_size	= fb->m.mem[0].size;
-		decbuf_u_start	= fb->m.mem[1].addr;
-		decbuf_u_size	= fb->m.mem[1].size;
-		decbuf_v_start	= fb->m.mem[2].addr;
-		decbuf_v_size	= fb->m.mem[2].size;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+		ambuf->planes[1].bytes_used = ambuf->planes[1].length;
+	} else if (ambuf->num_planes == 3) {
+		decbuf_start	= ambuf->planes[0].addr;
+		decbuf_y_size	= ambuf->planes[0].length;
+		decbuf_u_start	= ambuf->planes[1].addr;
+		decbuf_u_size	= ambuf->planes[1].length;
+		decbuf_v_start	= ambuf->planes[2].addr;
+		decbuf_v_size	= ambuf->planes[2].length;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		fb->m.mem[0].bytes_used = fb->m.mem[0].size;
-		fb->m.mem[1].bytes_used = fb->m.mem[1].size;
-		fb->m.mem[2].bytes_used = fb->m.mem[2].size;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+		ambuf->planes[1].bytes_used = ambuf->planes[1].length;
+		ambuf->planes[2].bytes_used = ambuf->planes[2].length;
 	}
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-		"[%d] v4l ref buf addr: 0x%x\n", ctx->id, fb);
+		"[%d] v4l ref buf addr: 0x%x\n", ctx->id, ambuf);
 
 	if (vdec->parallel_dec == 1) {
 		if (hw->buffer_spec[i].y_canvas_index == -1)
@@ -1086,6 +1045,10 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
 			&hw->buffer_spec[i].canvas_config[2], VDEC_1);
 
+	aml_buf_get_ref(&ctx->bm, ambuf);
+
+	hw->ambuf = NULL;
+
 	return 0;
 }
 
@@ -1094,12 +1057,15 @@ static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->buf_num; i++) {
-		if (hw->vfbuf_use[i] == 0)
+		if (hw->vfbuf_use[i] == 0 &&
+			!hw->buffer_spec[i].v4l_ref_buf_addr)
 			break;
 	}
 
-	if ((i == hw->buf_num) &&
-		(hw->buf_num != 0)) {
+	if (i >= hw->buf_num) {
+		mmjpeg_debug_print(DECODE_ID(hw), 0,
+			"[ERR]not find free buffer slot! buf_num %d\n",
+			hw->buf_num);
 		return -1;
 	}
 
@@ -1165,9 +1131,9 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 	WRITE_VREG(ASSIST_MBOX1_MASK, 1);
 	/* set interrupt mapping for vld */
 	WRITE_VREG(ASSIST_AMR1_INT8, 8);
-#if 1/*MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6*/
+
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 17);
-#endif
+
 	return 0;
 }
 
@@ -1193,13 +1159,9 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 	fw->len = size;
 	hw->fw = fw;
 
-	if (hw->is_used_v4l) {
-		hw->frame_width = 0;
-		hw->frame_height = 0;
-	} else {
-		hw->frame_width = hw->vmjpeg_amstream_dec_info.width;
-		hw->frame_height = hw->vmjpeg_amstream_dec_info.height;
-	}
+	hw->frame_width = 0;
+	hw->frame_height = 0;
+
 	hw->frame_dur = ((hw->vmjpeg_amstream_dec_info.rate) ?
 	hw->vmjpeg_amstream_dec_info.rate : 3840);
 	hw->saved_resolution = 0;
@@ -1237,11 +1199,12 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 		MAX_BMMU_BUFFER_NUM,
 		4 + PAGE_SHIFT,
 		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER);
+		CODEC_MM_FLAGS_FOR_VDECODER,
+		BMMU_ALLOC_FLAGS_WAIT);
 
 	timer_setup(&hw->check_timer, check_timer_func, 0);
 	hw->check_timer.expires = jiffies + CHECK_INTERVAL;
-	/*add_timer(&hw->check_timer);*/
+
 	hw->stat |= STAT_TIMER_ARM;
 	hw->stat |= STAT_ISR_REG;
 
@@ -1257,23 +1220,114 @@ static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
 	int used_count = 0;
+	int free_slot = 0;
 
-	if ((hw->buf_num == 0) ||
-		(ctx->cap_pool.dec < hw->buf_num)) {
-		if (ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token)) {
-			free_count =
-				v4l2_m2m_num_dst_bufs_ready(ctx->m2m_ctx) + 1;
+	/* Ignore the buffer avaliable check until the head parse done. */
+	if (!hw->v4l_params_parsed) {
+		/*
+		 * If a resolution change and eos are detected, decoding will
+		 * wait until the first valid buffer queue in driver
+		 * before scheduling continues.
+		 */
+		if (ctx->v4l_resolution_change) {
+			if (hw->eos)
+				return false;
+
+			/* Wait for buffers ready. */
+			if (!ctx->dst_queue_streaming)
+				return false;
+		} else {
+			return true;
 		}
+	}
+
+	/* Wait for the buffer number negotiation to complete. */
+	if (hw->buf_num == 0) {
+		struct vdec_pic_info pic;
+
+		vdec_v4l_get_pic_info(ctx, &pic);
+		hw->buf_num = pic.dpb_frames + pic.dpb_margin;
+
+		if (hw->buf_num == 0)
+			return false;
+
+		if (hw->buf_num > DECODE_BUFFER_NUM_MAX)
+			hw->buf_num = DECODE_BUFFER_NUM_MAX;
+	}
+
+	for (i = 0; i < hw->buf_num; ++i) {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+		"%s idx %d vf_ref %d cma_alloc_addr = 0x%lx\n",
+		__func__, i,
+		hw->vfbuf_use[i],
+		hw->buffer_spec[i].v4l_ref_buf_addr);
+		if ((hw->vfbuf_use[i] == 0) &&
+			!hw->buffer_spec[i].v4l_ref_buf_addr) {
+			free_slot++;
+
+			break;
+		}
+	}
+
+	if (!free_slot) {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+			"%s not enough free_slot %d!\n",
+		__func__, free_slot);
+		for (i = 0; i < hw->buf_num; ++i) {
+			mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+			"%s idx %d vf_ref %d cma_alloc_addr = 0x%lx\n",
+			__func__, i,
+			hw->vfbuf_use[i],
+			hw->buffer_spec[i].v4l_ref_buf_addr);
+		}
+
+		return false;
 	}
 
 	for (i = 0; i < hw->buf_num; ++i) {
 		if ((hw->vfbuf_use[i] == 0) &&
+			!hw->buffer_spec[i].v4l_ref_buf_addr){
+			if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
+				hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+				if (!hw->ambuf) {
+					return false;
+				}
+				hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
+				hw->ambuf->state = FB_ST_DECODER;
+			}
+		} else if (hw->buffer_spec[i].v4l_ref_buf_addr) {
+			used_count++;
+		}
+	}
+
+	if (hw->ambuf) {
+		free_count++;
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+		"%s get fb: 0x%lx fb idx: %d\n",
+		__func__, hw->buffer_spec[i].v4l_ref_buf_addr, hw->ambuf->index);
+	}
+
+#if 0
+	for (i = 0; i < hw->buf_num; ++i) {
+		if ((hw->vfbuf_use[i] == 0) &&
 			hw->buffer_spec[i].v4l_ref_buf_addr) {
 			free_count++;
+		} else if (!hw->buffer_spec[i].v4l_ref_buf_addr){
+			if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
+				hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, true);
+				if (!hw->ambuf) {
+					return 0;
+				}
+				hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
+				hw->ambuf->state = FB_ST_DECODER;
+			}
 		} else if (hw->buffer_spec[i].v4l_ref_buf_addr)
 			used_count++;
 	}
 
+	if (hw->ambuf)
+		free_count++;
+#endif
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
 	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
@@ -1285,8 +1339,6 @@ static unsigned long run_ready(struct vdec_s *vdec,
 {
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)vdec->private;
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int ret = 0;
 
 	hw->not_run_ready++;
@@ -1309,16 +1361,16 @@ static unsigned long run_ready(struct vdec_s *vdec,
 			return 0;
 	}
 
-	if (hw->v4l_params_parsed) {
-		ret = is_avaliable_buffer(hw) ? 1 : 0;
+	ret = is_avaliable_buffer(hw) ? CORE_MASK_VDEC_1 : 0;
+	if (ret) {
+		hw->not_run_ready = 0;
+		hw->buffer_not_ready = 0;
 	} else {
-		ret = ctx->v4l_resolution_change ? 0 : 1;
+		hw->not_run_ready++;
+		hw->buffer_not_ready = 1;
 	}
 
-	hw->not_run_ready = 0;
-	hw->buffer_not_ready = 0;
-
-	return ret ? CORE_MASK_VDEC_1 : 0;
+	return ret;
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
@@ -1338,7 +1390,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (ret <= 0) {
 		hw->input_empty++;
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-		"%s: %d,r=%d,buftl=%x:%x:%x\n",
+			"%s: %d,r=%d,buftl=%x:%x:%x\n",
 			__func__, __LINE__, ret,
 			READ_VREG(VLD_MEM_VIFIFO_BUF_CNTL),
 			STBUF_READ(&vdec->vbuf, get_rp),
@@ -1370,10 +1422,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_MJPEG;
 	}
-/*	if (amvdec_vdec_loadmc_buf_ex(vdec, hw->fw->data, hw->fw->len) < 0) {
-		pr_err("%s: Error amvdec_loadmc fail\n", __func__);
-		return;
-	}*/
 
 	if (vmjpeg_hw_ctx_restore(hw) < 0) {
 		hw->dec_result = DEC_RESULT_ERROR;
@@ -1382,10 +1430,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_schedule_work(&hw->work);
 		return;
 	}
-#if 0
-	vdec_enable_input(vdec);
-	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
-#endif
+
 	hw->stat |= STAT_MC_LOAD;
 	start_process_time(hw);
 	hw->last_vld_level = 0;
@@ -1435,41 +1480,41 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = &hw->vframe_dummy;
-	struct vdec_v4l2_buffer *fb = NULL;
+	struct aml_buf *ambuf = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
 
-	if (hw->eos) {
-		expires = jiffies + msecs_to_jiffies(2000);
-		while (!is_avaliable_buffer(hw)) {
-			if (time_after(jiffies, expires)) {
-				pr_err("[%d] MJPEG isn't enough buff for notify eos.\n", ctx->id);
-				return 0;
-			}
-		}
-
-		index = find_free_buffer(hw);
-		if (INVALID_IDX == index) {
-			pr_err("[%d] MJPEG EOS get free buff fail.\n", ctx->id);
+	expires = jiffies + msecs_to_jiffies(2000);
+	while (!is_avaliable_buffer(hw)) {
+		if (time_after(jiffies, expires)) {
+			pr_err("[%d] MJPEG isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
 		}
-
-		fb = (struct vdec_v4l2_buffer *)
-			hw->buffer_spec[index].v4l_ref_buf_addr;
-
-		vf->type		|= VIDTYPE_V4L_EOS;
-		vf->timestamp		= ULONG_MAX;
-		vf->v4l_mem_handle	= (ulong)fb;
-		vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
-
-		vdec_vframe_ready(vdec, vf);
-		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
-
-		ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
-		fb->task->submit(fb->task, TASK_TYPE_DEC);
-
-		pr_info("[%d] mjpeg EOS notify.\n", ctx->id);
 	}
+
+	index = find_free_buffer(hw);
+	if (INVALID_IDX == index) {
+		pr_err("[%d] MJPEG EOS get free buff fail.\n", ctx->id);
+		return 0;
+	}
+
+	ambuf = (struct aml_buf *)
+		hw->buffer_spec[index].v4l_ref_buf_addr;
+
+	vf->type		|= VIDTYPE_V4L_EOS;
+	vf->timestamp		= ULONG_MAX;
+	vf->v4l_mem_handle	= (ulong)ambuf;
+	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
+
+	vdec_vframe_ready(vdec, vf);
+	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
+
+	ATRACE_COUNTER("VC_OUT_DEC-submit", ambuf->index);
+	aml_buf_done(&ctx->bm, ambuf, BUF_USER_DEC);
+
+	hw->eos = false;
+
+	pr_info("[%d] mjpeg EOS notify.\n", ctx->id);
 
 	return 0;
 }
@@ -1479,12 +1524,14 @@ static void vmjpeg_work(struct work_struct *work)
 	struct vdec_mjpeg_hw_s *hw = container_of(work,
 	struct vdec_mjpeg_hw_s, work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
-	"%s: result=%d,len=%d:%d\n",
-			__func__, hw->dec_result,
-			kfifo_len(&hw->newframe_q),
-			kfifo_len(&hw->display_q));
+		"%s: result=%d,len=%d:%d\n",
+		__func__, hw->dec_result,
+		kfifo_len(&hw->newframe_q),
+		kfifo_len(&hw->display_q));
 
 	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
 
@@ -1499,8 +1546,6 @@ static void vmjpeg_work(struct work_struct *work)
 		if (!vdec_has_more_input(hw_to_vdec(hw))) {
 			hw->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&hw->work);
-			/*pr_info("%s: return\n",
-			__func__);*/
 			return;
 		}
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -1516,12 +1561,10 @@ static void vmjpeg_work(struct work_struct *work)
 			amvdec_stop();
 			hw->stat &= ~STAT_VDEC_RUN;
 		}
-		hw->eos = 1;
-		if (hw->is_used_v4l) {
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
-			notify_v4l_eos(vdec);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
-		}
+
+		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		notify_v4l_eos(vdec);
+		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
@@ -1535,14 +1578,9 @@ static void vmjpeg_work(struct work_struct *work)
 	WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 	wait_vmjpeg_search_done(hw);
 
-	if (hw->is_used_v4l) {
-		struct aml_vcodec_ctx *ctx =
-			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
-		if (ctx->param_sets_from_ucode &&
-			!hw->v4l_params_parsed)
-			vdec_v4l_write_frame_sync(ctx);
-	}
+	if (ctx->param_sets_from_ucode &&
+		!hw->v4l_params_parsed)
+		vdec_v4l_write_frame_sync(ctx);
 
 	/* mark itself has all HW resource released and input released */
 	if (vdec->parallel_dec == 1)
@@ -1622,7 +1660,6 @@ static void reset(struct vdec_s *vdec)
 		hw->vfpool[i].index = -1;
 		kfifo_put(&hw->newframe_q, vf);
 	}
-	hw->eos = 0;
 
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++) {
 		vdec->free_canvas_ex(hw->buffer_spec[i].y_canvas_index, vdec->id);
@@ -1633,10 +1670,11 @@ static void reset(struct vdec_s *vdec)
 		hw->buffer_spec[i].v_canvas_index = -1;
 	}
 
-	hw->eos			= 0;
 	hw->buf_num		= 0;
 	hw->frame_width		= 0;
 	hw->frame_height	= 0;
+	hw->eos 		= false;
+	hw->ambuf		= NULL;
 
 	atomic_set(&hw->peek_num, 0);
 	atomic_set(&hw->get_num, 0);
@@ -1740,11 +1778,6 @@ static int ammvdec_mjpeg_probe(struct platform_device *pdev)
 			vdec_frame_rate_uevent(config_val);*/
 	} else {
 		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
-	}
-
-	if (!hw->is_used_v4l) {
-		vf_provider_init(&pdata->vframe_provider,
-			pdata->vf_provider_name, &vf_provider_ops, pdata);
 	}
 
 	platform_set_drvdata(pdev, pdata);

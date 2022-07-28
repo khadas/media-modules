@@ -28,6 +28,8 @@
 #include <media/v4l2-mem2mem.h>
 #include <media/videobuf2-dma-contig.h>
 #include <linux/kthread.h>
+#include <linux/compat.h>
+#include <media/v4l2-dev.h>
 
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
@@ -56,30 +58,30 @@ static int fops_vcodec_open(struct file *file)
 {
 	struct aml_vcodec_dev *dev = video_drvdata(file);
 	struct aml_vcodec_ctx *ctx = NULL;
-	struct aml_video_dec_buf *aml_buf = NULL;
-	int ret = 0;
+	struct aml_v4l2_buf *aml_vb = NULL;
 	struct vb2_queue *src_vq;
+	int ret = 0;
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 	kref_init(&ctx->ctx_ref);
 
-	aml_buf = kzalloc(sizeof(*aml_buf), GFP_KERNEL);
-	if (!aml_buf) {
+	aml_vb = kzalloc(sizeof(*aml_vb), GFP_KERNEL);
+	if (!aml_vb) {
 		kfree(ctx);
 		return -ENOMEM;
 	}
 
 	ctx->meta_infos.meta_bufs = vzalloc(sizeof(struct meta_data) * V4L_CAP_BUFF_MAX);
 	if (ctx->meta_infos.meta_bufs == NULL) {
-		kfree(aml_buf);
+		kfree(aml_vb);
 		kfree(ctx);
 		return -ENOMEM;
 	}
 
 	mutex_lock(&dev->dev_mutex);
-	ctx->empty_flush_buf = aml_buf;
+	ctx->empty_flush_buf = aml_vb;
 	ctx->id = dev->id_counter++;
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
 	file->private_data = &ctx->fh;
@@ -100,11 +102,14 @@ static int fops_vcodec_open(struct file *file)
 	init_completion(&ctx->comp);
 	init_waitqueue_head(&ctx->wq);
 	init_waitqueue_head(&ctx->cap_wq);
+	init_waitqueue_head(&ctx->post_done_wq);
 	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);
 	INIT_KFIFO(ctx->dmabuff_recycle);
 	INIT_KFIFO(ctx->capture_buffer);
 
+	ctx->post_to_upper_done = true;
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
+	ctx->cache_input_buffer_num = 60;
 
 	if (enable_drm_mode) {
 		ctx->is_drm_mode = true;
@@ -143,6 +148,13 @@ static int fops_vcodec_open(struct file *file)
 	ctx->aux_infos.bind_dv_buffer = aml_bind_dv_buffer;
 	ctx->aux_infos.free_one_sei_buffer = aml_free_one_sei_buffer;
 
+	ret = aml_buf_mgr_init(&ctx->bm, "v4ldec-m2m", ctx->id, ctx);
+	if (ret) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"Failed to init buffer manager.\n");
+		goto err_buffer_manager;
+	}
+
 	ret = aml_thread_start(ctx, aml_thread_capture_worker, AML_THREAD_CAPTURE, "cap");
 	if (ret) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -161,6 +173,8 @@ static int fops_vcodec_open(struct file *file)
 	/* Deinit when failure occurred */
 err_creat_thread:
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
+err_buffer_manager:
+	aml_buf_mgr_release(&ctx->bm);
 err_m2m_ctx_init:
 	v4l2_ctrl_handler_free(&ctx->ctrl_hdl);
 err_ctrls_setup:
@@ -195,6 +209,7 @@ static int fops_vcodec_release(struct file *file)
 	list_del_init(&ctx->list);
 
 	kfree(ctx->empty_flush_buf);
+	aml_buf_mgr_release(&ctx->bm);
 	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 	mutex_unlock(&dev->dev_mutex);
 	return 0;
@@ -573,7 +588,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	//dev_set_name(&vdev->dev, "%s%d", name_base, vdev->num);
 
-	ret = video_register_device(vfd_dec, VFL_TYPE_GRABBER, 26);
+	ret = video_register_device(vfd_dec, VFL_TYPE_VIDEO, 26);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register video device\n");
 		goto err_dec_reg;
@@ -589,18 +604,26 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 		goto err_reg_class;
 	}
 
+	ret = aml_canvas_cache_init(dev);
+	if (ret) {
+		dev_err(&pdev->dev, "v4l dec alloc canvas fail.\n");
+		goto err_alloc_canvas;
+	}
+
 	dev_info(&pdev->dev, "v4ldec registered as /dev/video%d\n", vfd_dec->num);
 
 	return 0;
 
-err_reg_class:
+err_alloc_canvas:
 	class_unregister(&dev->v4ldec_class);
+err_reg_class:
+	video_unregister_device(vfd_dec);
 err_dec_reg:
 	destroy_workqueue(dev->decode_workqueue);
 err_event_workq:
 	v4l2_m2m_release(dev->m2m_dev_dec);
 err_dec_mem_init:
-	video_unregister_device(vfd_dec);
+	video_device_release(vfd_dec);
 err_dec_alloc:
 	v4l2_device_unregister(&dev->v4l2_dev);
 err_res:
@@ -624,6 +647,8 @@ static int aml_vcodec_dec_remove(struct platform_device *pdev)
 		video_unregister_device(dev->vfd_dec);
 
 	v4l2_device_unregister(&dev->v4l2_dev);
+
+	aml_canvas_cache_put(dev);
 
 	dev_info(&pdev->dev, "v4ldec removed.\n");
 
@@ -671,6 +696,10 @@ module_exit(amvdec_ports_exit);
 u32 debug_mode;
 EXPORT_SYMBOL(debug_mode);
 module_param(debug_mode, uint, 0644);
+
+u32 disable_vpp_dw_mmu;
+EXPORT_SYMBOL(disable_vpp_dw_mmu);
+module_param(disable_vpp_dw_mmu, uint, 0644);
 
 bool aml_set_vfm_enable;
 EXPORT_SYMBOL(aml_set_vfm_enable);

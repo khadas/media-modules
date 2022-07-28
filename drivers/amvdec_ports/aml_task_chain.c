@@ -86,8 +86,8 @@ static void task_item_vframe_push(struct task_item_s *item, struct vframe_s *vfr
 	int i = 0;
 
 	for (i = 0 ; i < 3; i++) {
-		if (item->vframe[i] == NULL) {
-			item->vframe[i] = vframe;
+		if (item->vframe[i].index == -1) {
+			memcpy(&item->vframe[i], vframe, sizeof(struct vframe_s));
 			break;
 		}
 	}
@@ -95,18 +95,32 @@ static void task_item_vframe_push(struct task_item_s *item, struct vframe_s *vfr
 
 static struct vframe_s *task_item_vframe_pop(struct task_item_s *item)
 {
-	struct vframe_s *vframe = NULL;
 	int i = 0;
 
 	for (i = 0 ; i < 3; i++) {
-		if (item->vframe[i] != NULL) {
-			vframe = item->vframe[i];
-			item->vframe[i] = NULL;
+		if (item->vframe[i].index != -1) {
 			break;
 		}
 	}
 
-	return vframe;
+	if (i >= 3) {
+		pr_info("[ERR] vframe pop fail!\n");
+	}
+
+	return &item->vframe[i];
+}
+
+static void task_item_vframe_reset(struct task_item_s *item,
+							struct vframe_s * vf)
+{
+	int i = 0;
+
+	for (i = 0 ; i < 3; i++) {
+		if (vf == &item->vframe[i]) {
+			item->vframe[i].index = -1;
+			break;
+		}
+	}
 }
 
 static struct task_item_s *task_item_get(struct task_chain_s *task,
@@ -131,30 +145,32 @@ static int task_item_put(struct task_item_s *item)
 static void task_buffer_submit(struct task_chain_s *task,
 			       enum task_type_e type)
 {
-	struct vdec_v4l2_buffer *fb =
-		(struct vdec_v4l2_buffer *)task->obj;
+	struct aml_buf *ambuf =
+		(struct aml_buf *)task->obj;
 	struct task_item_s *item = NULL;
 	struct task_item_s *item2 = NULL;
-	struct vframe_s *vf = NULL;
+	struct vframe_s vf;
 
 	item = task_item_get(task, type);
 	if (item) {
 		item->ops->get_vframe(item->caller, &vf);
-		fb->vframe = (void *)vf;
-		task_item_vframe_push(item, vf);
+		memcpy(&ambuf->vframe, &vf, sizeof(struct vframe_s));
+		task_item_vframe_push(item, &ambuf->vframe);
 		item->is_active = false;
 
 		item2 = task_item_get(task, task->map[0][type]);
 		if (item2) {
 			item2->is_active = true;
-			item2->ops->fill_buffer(task->ctx, fb);
+
+			item2->ops->fill_buffer(task->ctx, ambuf);
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-				"TSK(%px):%d, vf:%px, phy:%lx, submit %d => %d.\n",
-				task, task->id, vf, fb->m.mem[0].addr,
+				"TSK(%px):%d, vf idx:0x%x, phy:%lx, submit %d => %d.\n",
+				task, task->id, vf.index, ambuf->planes[0].addr,
 				type, task->map[0][type]);
 
 			task->direction = TASK_DIR_SUBMIT;
+
 			task_item_put(item2);
 		}
 		task_item_put(item);
@@ -164,8 +180,8 @@ static void task_buffer_submit(struct task_chain_s *task,
 static void task_buffer_recycle(struct task_chain_s *task,
 			       enum task_type_e type)
 {
-	struct vdec_v4l2_buffer *fb =
-		(struct vdec_v4l2_buffer *)task->obj;
+	struct aml_buf *ambuf =
+		(struct aml_buf *)task->obj;
 	struct task_item_s *item = NULL;
 	struct task_item_s *item2 = NULL;
 
@@ -180,13 +196,15 @@ static void task_buffer_recycle(struct task_chain_s *task,
 			item2->is_active = true;
 
 			vf = task_item_vframe_pop(item2);
+			memcpy(vf, &ambuf->vframe, sizeof(struct vframe_s));
 			item2->ops->put_vframe(item2->caller, vf);
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
-				"TSK(%px):%d, vf:%px, phy:%lx, recycle %d => %d.\n",
-				task, task->id, vf, fb->m.mem[0].addr,
+				"TSK(%px):%d, vf idx:%d, phy:%lx, recycle %d => %d.\n",
+				task, task->id, vf->index, ambuf->planes[0].addr,
 				type, task->map[1][type]);
 
+			task_item_vframe_reset(item2, vf);
 			task->direction = TASK_DIR_RECYCLE;
 			task_item_put(item2);
 		}
@@ -207,8 +225,8 @@ void task_chain_show(struct task_chain_s *task)
 	spin_lock_irqsave(&task->slock, flags);
 
 	if (!list_empty(&task->list_item)) {
-		struct vdec_v4l2_buffer *fb =
-			(struct vdec_v4l2_buffer *)task->obj;
+		struct aml_buf *ambuf =
+			(struct aml_buf *)task->obj;
 
 		list_for_each_entry(item, &task->list_item, node) {
 			pbuf += sprintf(pbuf, "%s(%d)",
@@ -222,7 +240,7 @@ void task_chain_show(struct task_chain_s *task)
 		}
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_PRINFO,
 			"vb:%2d, phy:%lx  %s\n",
-			task->id, fb->m.mem[0].addr, buf);
+			task->id, ambuf->planes[0].addr, buf);
 	}
 
 	spin_unlock_irqrestore(&task->slock, flags);
@@ -260,6 +278,12 @@ static void task_item_release(struct kref *kref)
 	kfree(item);
 }
 
+bool task_chain_empty(struct task_chain_s *task)
+{
+	return task->cur_type == TASK_TYPE_MAX ? true : false;
+}
+EXPORT_SYMBOL(task_chain_empty);
+
 void task_chain_clean(struct task_chain_s *task)
 {
 	struct task_item_s *item, *tmp;
@@ -288,6 +312,7 @@ void task_order_attach(struct task_chain_s *task,
 			 void *caller)
 {
 	struct task_item_s *item;
+	int i;
 
 	item = kzalloc(sizeof(struct task_item_s), GFP_ATOMIC);
 	if (!item) {
@@ -301,6 +326,9 @@ void task_order_attach(struct task_chain_s *task,
 	item->caller	= caller;
 	item->name	= type_to_name(ops->type);
 	kref_init(&item->ref);
+	for (i = 0 ; i < 3; i++) {
+		item->vframe[i].index = -1;
+	}
 
 	task->map[0][ops->type] = task->cur_type;
 	task->map[1][task->cur_type] = ops->type;
@@ -346,6 +374,7 @@ int task_chain_init(struct task_chain_s **task_out,
 	task->id	= vb_idx;
 	task->obj	= obj;
 	task->ctx	= v4l_ctx;
+	task->cur_type	= TASK_TYPE_MAX;
 	kref_init(&task->ref);
 	spin_lock_init(&task->slock);
 	INIT_LIST_HEAD(&task->list_item);

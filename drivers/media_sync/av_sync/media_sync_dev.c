@@ -145,7 +145,6 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv != NULL) {
 				priv->mSyncInsId = SyncInsId;
 				priv->mSyncIns = SyncIns;
-				priv->mSyncIns->mRef++;
 			}
 
 		break;
@@ -1037,6 +1036,111 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 					return -EFAULT;
 			}
 		break;
+		case MEDIASYNC_IOC_SET_QUEUE_AUDIO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_queueaudioinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_QUEUE_AUDIO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_queueaudioinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+		case MEDIASYNC_IOC_SET_QUEUE_VIDEO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_queuevideoinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_QUEUE_VIDEO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_queuevideoinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_FIRST_QUEUE_AUDIO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_firstqueueaudioinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_FIRST_QUEUE_AUDIO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_firstqueueaudioinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+		case MEDIASYNC_IOC_SET_FIRST_QUEUE_VIDEO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_firstqueuevideoinfo(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_FIRST_QUEUE_VIDEO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_firstqueuevideoinfo(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
 
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
@@ -1117,6 +1221,14 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_PCRSLOPE:
 		case MEDIASYNC_IOC_UPDATE_AVREF:
 		case MEDIASYNC_IOC_GET_AVREF:
+		case MEDIASYNC_IOC_SET_QUEUE_AUDIO_INFO:
+		case MEDIASYNC_IOC_GET_QUEUE_AUDIO_INFO:
+		case MEDIASYNC_IOC_SET_QUEUE_VIDEO_INFO:
+		case MEDIASYNC_IOC_GET_QUEUE_VIDEO_INFO:
+		case MEDIASYNC_IOC_SET_FIRST_QUEUE_AUDIO_INFO:
+		case MEDIASYNC_IOC_GET_FIRST_QUEUE_AUDIO_INFO:
+		case MEDIASYNC_IOC_SET_FIRST_QUEUE_VIDEO_INFO:
+		case MEDIASYNC_IOC_GET_FIRST_QUEUE_VIDEO_INFO:
 
 			return mediasync_ioctl(file, cmd, arg);
 		default:
@@ -1172,6 +1284,7 @@ static int __init mediasync_module_init(void)
 		pr_err("Can't create mediasync_dev device\n");
 		goto err1;
 	}
+	mediasync_init();
 	return 0;
 
 err1:

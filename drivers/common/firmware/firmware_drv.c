@@ -29,16 +29,20 @@
 
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
-//#include "../../stream_input/amports/amports_priv.h"
-//#include "../../frame_provider/decoder/utils/vdec.h"
+#include "../../stream_input/amports/amports_priv.h"
+#include "../../frame_provider/decoder/utils/vdec.h"
 #include "firmware_priv.h"
 #include "../chips/chips.h"
 #include <linux/string.h>
 #include <linux/amlogic/media/utils/log.h>
 #include <linux/firmware.h>
 #include <linux/amlogic/tee.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE == KERNEL_VERSION(5, 4, 0)
+#include <uapi/linux/major.h>
+#else
 #include <linux/amlogic/major.h> //if kernel is 4.9 then use this one
-//#include <uapi/linux/major.h>
+#endif
 #include <linux/cdev.h>
 #include <linux/crc32.h>
 #include "../chips/decoder_cpu_ver_info.h"
@@ -388,7 +392,6 @@ static ssize_t info_show(struct class *class,
 		memset(history_change_id, 0, sizeof(history_change_id));
 		strncpy(history_change_id, &(package_head.history_change_id[i * 6]), 6);
 		pr_info("\t%s\n", history_change_id);
-
 	}
 
 	list_for_each_entry(info, &mgr->fw_head, node) {

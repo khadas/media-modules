@@ -25,8 +25,10 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
+//#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 #include "aml_task_chain.h"
+#include "aml_buf_mgr.h"
 
 #ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
@@ -77,7 +79,7 @@ struct file_private_data {
 
 
 /*
- * struct vdec_v4l2_buffer - decoder frame buffer
+ * struct aml_buf - decoder frame buffer
  * @mem_type	: gather or scatter memory.
  * @num_planes	: used number of the plane
  * @mem[4]	: array mem for used planes,
@@ -88,8 +90,8 @@ struct file_private_data {
  * @vframe	: store the vframe that get from caller.
  * @task	: the context of task chain manager.
  */
-
-struct vdec_v4l2_buffer {
+/*
+struct aml_buf {
 	int	mem_type;
 	int	num_planes;
 	union {
@@ -101,38 +103,35 @@ struct vdec_v4l2_buffer {
 	void	*vframe;
 
 	struct task_chain_s *task;
-};
+};*///todo
 
 /**
- * struct aml_video_dec_buf - Private data related to each VB2 buffer.
+ * struct aml_v4l2_buf - Private data related to each VB2 buffer.
  * @b:		VB2 buffer
  * @list:	link list
  * @used:	Capture buffer contain decoded frame data and keep in
  *			codec data structure
  * @lastframe:		Intput buffer is last buffer - EOS
  * @error:		An unrecoverable error occurs on this buffer.
- * @frame_buffer:	Decode status, and buffer information of Capture buffer
+ * @ambuf:	Decode status, and buffer information of Capture buffer
  *
  * Note : These status information help us track and debug buffer state
  */
-struct aml_video_dec_buf {
+struct aml_v4l2_buf {
 	struct vb2_v4l2_buffer vb;
 	struct list_head list;
 
-	struct vdec_v4l2_buffer frame_buffer;
+	struct aml_buf *ambuf;
 	struct file_private_data privdata;
 	struct codec_mm_s *mem[2];
 	char mem_onwer[32];
 	bool used;
-	bool que_in_m2m;
+	bool attached;
 	bool lastframe;
 	bool error;
 
 	/* internal compressed buffer */
 	unsigned int internal_index;
-
-	ulong vpp_buf_handle;
-	ulong ge2d_buf_handle;
 
 	/*4 bytes data for data len*/
 	char meta_data[META_DATA_SIZE + 4];
@@ -165,11 +164,19 @@ void aml_v4l_ctx_release(struct kref *kref);
 void dmabuff_recycle_worker(struct work_struct *work);
 void aml_buffer_status(struct aml_vcodec_ctx *ctx);
 void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx);
+void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
+		       struct aml_buf *ambuf,
+		       u32 requester);
 
 void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag);
 void aml_free_buffer(struct aml_vcodec_ctx *ctx, int flag);
 void aml_free_one_sei_buffer(struct aml_vcodec_ctx *ctx, char **addr, int *size, int idx);
 void aml_bind_sei_buffer(struct aml_vcodec_ctx *v4l, char **addr, int *size, int *idx);
 void aml_bind_dv_buffer(struct aml_vcodec_ctx *v4l, char **comp_buf, char **md_buf);
+
+int aml_canvas_cache_init(struct aml_vcodec_dev *dev);
+void aml_canvas_cache_put(struct aml_vcodec_dev *dev);
+int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr);
+int aml_uvm_buff_attach(struct vb2_buffer * vb);
 
 #endif /* _AML_VCODEC_DEC_H_ */

@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-decoder-common
+MODULE_NAME = decoder_common
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-decoder-common
+endif
+endif
 obj-m	+=	${MODULE_NAME}.o
 ${MODULE_NAME}-objs	+=	utils.o vdec.o vdec_input.o amvdec.o
 ${MODULE_NAME}-objs	+=	decoder_mmu_box.o decoder_bmmu_box.o

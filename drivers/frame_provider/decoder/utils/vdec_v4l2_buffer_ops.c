@@ -21,52 +21,7 @@
 #include "vdec_v4l2_buffer_ops.h"
 #include <media/v4l2-mem2mem.h>
 #include <linux/printk.h>
-#include <media/v4l2-mem2mem.h>
-
-/**
- * struct v4l2_m2m_dev - per-device context
- * @source:		&struct media_entity pointer with the source entity
- *			Used only when the M2M device is registered via
- *			v4l2_m2m_unregister_media_controller().
- * @source_pad:		&struct media_pad with the source pad.
- *			Used only when the M2M device is registered via
- *			v4l2_m2m_unregister_media_controller().
- * @sink:		&struct media_entity pointer with the sink entity
- *			Used only when the M2M device is registered via
- *			v4l2_m2m_unregister_media_controller().
- * @sink_pad:		&struct media_pad with the sink pad.
- *			Used only when the M2M device is registered via
- *			v4l2_m2m_unregister_media_controller().
- * @proc:		&struct media_entity pointer with the M2M device itself.
- * @proc_pads:		&struct media_pad with the @proc pads.
- *			Used only when the M2M device is registered via
- *			v4l2_m2m_unregister_media_controller().
- * @intf_devnode:	&struct media_intf devnode pointer with the interface
- *			with controls the M2M device.
- * @curr_ctx:		currently running instance
- * @job_queue:		instances queued to run
- * @job_spinlock:	protects job_queue
- * @job_work:		worker to run queued jobs.
- * @m2m_ops:		driver callbacks
- */
-struct v4l2_m2m_dev {
-	struct v4l2_m2m_ctx	*curr_ctx;
-#ifdef CONFIG_MEDIA_CONTROLLER
-	struct media_entity	*source;
-	struct media_pad	source_pad;
-	struct media_entity	sink;
-	struct media_pad	sink_pad;
-	struct media_entity	proc;
-	struct media_pad	proc_pads[2];
-	struct media_intf_devnode *intf_devnode;
-#endif
-
-	struct list_head	job_queue;
-	spinlock_t		job_spinlock;
-	struct work_struct	job_work;
-
-	const struct v4l2_m2m_ops *m2m_ops;
-};
+#include <linux/version.h>
 
 
 int vdec_v4l_get_pic_info(struct aml_vcodec_ctx *ctx,
@@ -222,9 +177,11 @@ int vdec_v4l_get_dw_mode(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_get_dw_mode);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
 			struct v4l2_m2m_ctx *m2m_ctx)
 {
+#if 0
 	unsigned long flags;
 
 	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
@@ -239,8 +196,25 @@ void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
 	m2m_dev->curr_ctx->job_flags |= TRANS_ABORT;
 	wake_up(&m2m_dev->curr_ctx->finished);
 	m2m_dev->curr_ctx = NULL;
-
 	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+
+#endif
 }
 EXPORT_SYMBOL(v4l2_m2m_job_pause);
 
+void v4l2_m2m_job_resume(struct v4l2_m2m_dev *m2m_dev,
+			 struct v4l2_m2m_ctx *m2m_ctx)
+{
+#if 0
+	unsigned long flags;
+
+	spin_lock_irqsave(&m2m_dev->job_spinlock, flags);
+	m2m_ctx->job_flags &= ~TRANS_ABORT;
+	spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags);
+
+	v4l2_m2m_try_schedule(m2m_ctx);
+	v4l2_m2m_try_run(m2m_dev);
+#endif
+}
+EXPORT_SYMBOL(v4l2_m2m_job_resume);
+#endif

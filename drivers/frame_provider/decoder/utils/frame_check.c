@@ -33,7 +33,12 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/dma-mapping.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 #include <linux/dma-map-ops.h>
+#else
+#include <linux/dma-contiguous.h>
+#endif
 #include <asm-generic/checksum.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include <linux/crc32.h>
@@ -46,6 +51,7 @@
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <asm/cacheflush.h>
 #include <linux/fs.h>
+#include "../../../common/media_utils/media_utils.h"
 
 #define FC_ERROR	0x0
 
@@ -124,7 +130,6 @@ static const char *get_format_name(int format)
 	else
 		return "Unknow";
 }
-
 
 static inline void set_enable(struct pic_check_mgr_t *p, int mask)
 {
@@ -300,7 +305,7 @@ static char *fget_crc_str(char *buf,
 	do {
 		cs = buf;
 		sz = size;
-		while (--sz && (c = __kernel_write(fc->compare_fp,
+		while (--sz && (c = media_read(fc->compare_fp,
 			cs, 1, &fc->compare_pos) != 0)) {
 			if (*cs++ == '\n')
 				break;
@@ -331,8 +336,8 @@ static char *fget_aux_data_crc_str(char *buf,
 	do {
 		cs = buf;
 		sz = size;
-		while (--sz && (c = __kernel_write(fc->compare_fp,
-			cs, 1, &fc->compare_pos) != 0)) {
+		while (--sz && (c = media_read(fc->compare_fp,
+				cs, 1, &fc->compare_pos) != 0)) {
 			if (*cs++ == '\n')
 				break;
 		}
@@ -361,7 +366,7 @@ static struct file* file_open(int mode, const char *str, ...)
 	va_start(args, str);
 	vsnprintf(file, sizeof(file), str, args);
 
-	fp = filp_open(file, mode, (mode&O_CREAT)?0666:0);
+	fp = media_open(file, mode, (mode&O_CREAT)?0666:0);
 	if (IS_ERR(fp)) {
 		fp = NULL;
 		dbg_print(FC_ERROR, "open %s failed\n", file);
@@ -393,7 +398,7 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 			i = 0;
 			pic_num = dump->dump_cnt;
 			while (pic_num > 0) {
-				wr_size = __kernel_write(dump->yuv_fp,
+				wr_size = media_write(dump->yuv_fp,
 					(dump->buf_addr + i * mgr->size_pic),
 					mgr->size_pic, &dump->yuv_pos);
 				if (mgr->size_pic != wr_size) {
@@ -403,9 +408,8 @@ static int write_yuv_work(struct pic_check_mgr_t *mgr)
 				pic_num--;
 				i++;
 			}
-			vfs_fsync(dump->yuv_fp, 0);
 
-			filp_close(dump->yuv_fp, current->files);
+			media_close(dump->yuv_fp, current->files);
 			dump->yuv_pos = 0;
 			dump->yuv_fp = NULL;
 			set_disable(mgr, YUV_MASK);
@@ -440,14 +444,14 @@ static int write_crc_work(struct pic_check_mgr_t *mgr)
 			if (check->compare_fp != NULL) {
 				if (!fget_crc_str(crc_buf, SIZE_CRC, check)) {
 					dbg_print(0, "%s, can't get more compare crc\n", __func__);
-					filp_close(check->compare_fp, current->files);
+					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
 				}
 			}
 			kfifo_put(&check->new_chk_q, crc_buf);
 		}
 		if (check->check_fp && (wr_size != 0)) {
-			if (wr_size != __kernel_write(check->check_fp,
+			if (wr_size != media_write(check->check_fp,
 				crc_tmp, wr_size, &check->check_pos)) {
 				dbg_print(FC_ERROR, "failed to check_dump_filp\n");
 			}
@@ -473,14 +477,14 @@ static int write_aux_data_crc_work(struct aux_data_check_mgr_t *mgr)
 			if (check->compare_fp != NULL) {
 				if (!fget_aux_data_crc_str(crc_buf, SIZE_CRC, check)) {
 					dbg_print(0, "%s, can't get more compare crc\n", __func__);
-					filp_close(check->compare_fp, current->files);
+					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
 				}
 			}
 			kfifo_put(&check->new_chk_q, crc_buf);
 		}
 		if (check->check_fp && (wr_size != 0)) {
-			if (wr_size != __kernel_write(check->check_fp,
+			if (wr_size != media_write(check->check_fp,
 				crc_tmp, wr_size, &check->check_pos)) {
 				dbg_print(FC_ERROR, "failed to check_dump_filp\n");
 			}
@@ -508,7 +512,6 @@ static void do_aux_data_check_work(struct work_struct *work)
 
 	write_aux_data_crc_work(mgr);
 }
-
 
 static int memcpy_phy_to_virt(char *to_virt,
 	ulong phy_from, unsigned int size)
@@ -573,7 +576,6 @@ static int memcpy_phy_to_virt(char *to_virt,
 	}
 	return 0;
 }
-
 
 static int do_yuv_unit_cp(void **addr, ulong phy, void *virt,
 	int h, int w, int stride)
@@ -691,12 +693,11 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 				return -1;
 			mgr->file_cnt++;
 		}
-		wr_size = __kernel_write(dump->yuv_fp, dump->buf_addr,
+		wr_size = media_write(dump->yuv_fp, dump->buf_addr,
 			mgr->size_pic, &dump->yuv_pos);
 		if (mgr->size_pic != wr_size) {
 			dbg_print(FC_ERROR, "buf failed to write yuv file\n");
 		}
-		vfs_fsync(dump->yuv_fp, 0);
 	}
 
 	return 0;
@@ -1314,7 +1315,7 @@ int frame_check_init(struct pic_check_mgr_t *mgr, int id)
 				if (i < 3)
 					dbg_print(0, "can't get compare crc string\n");
 				if (check->compare_fp) {
-					filp_close(check->compare_fp, current->files);
+					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
 				}
 			}
@@ -1370,7 +1371,7 @@ int aux_data_check_init(struct aux_data_check_mgr_t *mgr, int id)
 				if (i < 3)
 					dbg_print(0, "can't get compare crc string\n");
 				if (check->compare_fp) {
-					filp_close(check->compare_fp, current->files);
+					media_close(check->compare_fp, current->files);
 					check->compare_fp = NULL;
 				}
 			}
@@ -1422,15 +1423,15 @@ void frame_check_exit(struct pic_check_mgr_t *mgr)
 		}
 
 		if (check->check_fp) {
-			filp_close(check->check_fp, current->files);
+			media_close(check->check_fp, current->files);
 			check->check_fp = NULL;
 		}
 		if (check->compare_fp) {
-			filp_close(check->compare_fp, current->files);
+			media_close(check->compare_fp, current->files);
 			check->compare_fp = NULL;
 		}
 		if (dump->yuv_fp) {
-			filp_close(dump->yuv_fp, current->files);
+			media_close(dump->yuv_fp, current->files);
 			dump->yuv_fp = NULL;
 		}
 		if (dump->buf_addr) {
@@ -1462,11 +1463,11 @@ void aux_data_check_exit(struct aux_data_check_mgr_t *mgr)
 		}
 
 		if (check->check_fp) {
-			filp_close(check->check_fp, current->files);
+			media_close(check->check_fp, current->files);
 			check->check_fp = NULL;
 		}
 		if (check->compare_fp) {
-			filp_close(check->compare_fp, current->files);
+			media_close(check->compare_fp, current->files);
 			check->compare_fp = NULL;
 		}
 
@@ -1566,10 +1567,10 @@ int print_decoder_info(struct vdec_s *vdec)
 				num,format_name, vdec->vfc.width, vdec->vfc.height,
 				vdec->vfc.frame_cnt, vdec->vfc.yuvsum);
 
-			__kernel_write(checksum_fp, checksum_buf,
+			media_write(checksum_fp, checksum_buf,
 				strlen(checksum_buf), &checksum_pos);
 
-			filp_close(checksum_fp, current->files);
+			media_close(checksum_fp, current->files);
 			checksum_fp = NULL;
 			num++;
 		}

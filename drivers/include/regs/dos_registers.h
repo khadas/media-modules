@@ -1086,10 +1086,6 @@
 #define AV1D_IPP_DIR_CFG                    0x3490
 /* add from s5 */
 #define HEVCD_IPP_AXIADDR_PREFIX                   (0x3418 | MASK_S5_NEW_REGS)
-#define VP9D_MPP_REF_SCALE_ENBL                    (0x3441 | MASK_S5_NEW_REGS)
-#define VP9D_MPP_REFINFO_TBL_ACCCONFIG             (0x3442 | MASK_S5_NEW_REGS)
-#define VP9D_MPP_REFINFO_DATA                      (0x3443 | MASK_S5_NEW_REGS)
-
 
 #define HEVCD_IPP_MULTICORE_CFG                    (0x34a0 | MASK_S5_NEW_REGS)
 #define HEVCD_IPP_MULTICORE_LINE_CTL               (0x34a1 | MASK_S5_NEW_REGS)
@@ -1100,7 +1096,7 @@
 #define HEVCD_IPP_CTRL2                            (0x34a6 | MASK_S5_NEW_REGS)
 #define HEVCD_IPP_CTRL3                            (0x34a7 | MASK_S5_NEW_REGS)
 
-#define HEVCD_MPP_DECOMP_AXIURG_CTL                (0x34c7 | MASK_S5_NEW_REGS)
+//#define HEVCD_MPP_DECOMP_AXIURG_CTL                (0x34c7 | MASK_S5_NEW_REGS)
 
 #define HEVC_DBLK_MCP                              (0x3529 | MASK_S5_NEW_REGS)
 #define HEVC_DBLK_SLICNT                           (0x352a | MASK_S5_NEW_REGS)
@@ -1190,7 +1186,7 @@
 #define HEVCD_MPP_DECOMP_CTL3_DBE1                 (0x39c4 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_DECOMP_PERFMON_CTL_DBE1          (0x39c5 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_DECOMP_PERFMON_DATA_DBE1         (0x39c6 | MASK_S5_NEW_REGS)
-#define HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1           (0x39c7 | MASK_S5_NEW_REGS)
+//#define HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1           (0x39c7 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_VDEC_MCR_CTL_DBE1                (0x39c8 | MASK_S5_NEW_REGS)
 #define HEVCD_MCRCC_CTL1_DBE1                      (0x39f0 | MASK_S5_NEW_REGS)
 #define HEVCD_MCRCC_CTL2_DBE1                      (0x39f1 | MASK_S5_NEW_REGS)

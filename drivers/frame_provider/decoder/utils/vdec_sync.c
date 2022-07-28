@@ -275,8 +275,7 @@ static int timeline_create_fence(struct vdec_sync *sync, int usage,
 			goto err;
 		}
 
-		//sync_file = sync_file_create(&pt->fence);
-		sync_file = NULL;
+		sync_file = sync_file_create(&pt->fence);
 		if (!sync_file) {
 			ret = -ENOMEM;
 			goto err;
@@ -304,13 +303,11 @@ err:
 	return ret;
 }
 
-#if 0
 struct dma_fence *vdec_fence_get(int fd)
 {
 	return sync_file_get_fence(fd);
 }
 EXPORT_SYMBOL(vdec_fence_get);
-#endif
 
 void vdec_fence_put(struct dma_fence *fence)
 {

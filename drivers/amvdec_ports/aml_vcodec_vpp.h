@@ -36,6 +36,7 @@ enum vpp_work_mode {
 	VPP_MODE_DI_LOCAL = 0x81,
 	VPP_MODE_COLOR_CONV_LOCAL = 0x82,
 	VPP_MODE_NOISE_REDUC_LOCAL = 0x83,
+	VPP_MODE_S4_DW_MMU = 0x91,
 	VPP_MODE_MAX = 0xff
 };
 
@@ -46,7 +47,7 @@ struct aml_v4l2_vpp_buf {
 	struct di_buffer di_buf;
 	struct di_buffer *di_local_buf;
 #endif
-	struct aml_video_dec_buf *aml_buf;
+	struct aml_v4l2_buf *aml_vb;
 	struct aml_v4l2_vpp_buf *inbuf;
 };
 
@@ -59,6 +60,7 @@ struct aml_v4l2_vpp {
 
 	DECLARE_KFIFO_PTR(input, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(output, typeof(struct aml_v4l2_vpp_buf*));
+	DECLARE_KFIFO_PTR(pre_output, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(processing, typeof(struct aml_v4l2_vpp_buf*));
 	DECLARE_KFIFO_PTR(frame, typeof(struct vframe_s *));
 	DECLARE_KFIFO(out_done_q, struct aml_v4l2_vpp_buf *, VPP_FRAME_SIZE);
@@ -70,6 +72,7 @@ struct aml_v4l2_vpp {
 	struct task_struct *task;
 	bool running;
 	struct semaphore sem_in, sem_out;
+	struct work_struct worker;
 
 	/* In p to i transition, output/frame can be multi writer */
 	struct mutex output_lock;
@@ -100,6 +103,7 @@ int aml_v4l2_vpp_init(
 		struct aml_v4l2_vpp** vpp_handle);
 int aml_v4l2_vpp_destroy(struct aml_v4l2_vpp* vpp);
 int aml_v4l2_vpp_reset(struct aml_v4l2_vpp *vpp);
+void aml_v4l2_vpp_recycle(struct aml_v4l2_vpp *vpp, struct aml_v4l2_buf *aml_vb);
 #else
 static inline int aml_v4l2_vpp_get_buf_num(u32 mode) { return -1; }
 static inline int aml_v4l2_vpp_init(

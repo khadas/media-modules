@@ -47,7 +47,7 @@ struct task_chain_s;
  */
 struct task_ops_s {
 	enum task_type_e type;
-	void	(*get_vframe) (void *caller, struct vframe_s **vf);
+	void	(*get_vframe) (void *caller, struct vframe_s *vf);
 	void	(*put_vframe) (void *caller, struct vframe_s *vf);
 	void	(*fill_buffer) (void *v4l_ctx, void *fb_ctx);
 };
@@ -68,7 +68,7 @@ struct task_item_s {
 	struct kref		ref;
 	const u8		*name;
 	bool			is_active;
-	void			*vframe[3];
+	struct vframe_s		vframe[3];
 	struct task_chain_s	*task;
 	void			*caller;
 	struct task_ops_s	*ops;
@@ -119,6 +119,7 @@ void task_chain_clean(struct task_chain_s *task);
 void task_chain_release(struct task_chain_s *task);
 void task_chain_show(struct task_chain_s *task);
 void task_chain_update_object(struct task_chain_s *task, void *obj);
+bool task_chain_empty(struct task_chain_s *task);
 
 #endif //AML_TASK_CHAIN_H
 

@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-amvdec-vp9
+MODULE_NAME = amvdec_vp9
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-amvdec-vp9
+endif
+endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_VP9) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vvp9.o
 

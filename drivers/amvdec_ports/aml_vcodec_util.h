@@ -21,8 +21,10 @@
 #define _AML_VCODEC_UTIL_H_
 
 #include <linux/types.h>
-#include <linux/dma-direction.h>
-#include <linux/amlogic/media/codec_mm/codec_mm.h>
+
+#include "aml_buf_core.h"
+#include "aml_task_chain.h"
+
 /*
 typedef unsigned long long	u64;
 typedef signed long long	s64;
@@ -54,6 +56,7 @@ struct aml_vcodec_ctx;
 struct aml_vcodec_dev;
 
 extern u32 debug_mode;
+extern u32 disable_vpp_dw_mmu;
 
 #ifdef v4l_dbg
 #undef v4l_dbg
@@ -98,8 +101,31 @@ extern u32 debug_mode;
 		}								\
 	} while (0)
 
+#define v4l_dbg_ext(id, flags, fmt, args...)						\
+	do {									\
+		if ((flags == V4L_DEBUG_CODEC_ERROR) ||				\
+			(flags == V4L_DEBUG_CODEC_PRINFO) ||			\
+			(debug_mode & flags)) {					\
+			if (flags == V4L_DEBUG_CODEC_ERROR) {			\
+				__v4l_dbg(1, id, "[ERR]: " fmt, ##args);	\
+			} else	{						\
+				__v4l_dbg(1, id, fmt, ##args);			\
+			}							\
+		}								\
+	} while (0)
+
 void aml_vcodec_set_curr_ctx(struct aml_vcodec_dev *dev,
 	struct aml_vcodec_ctx *ctx);
 struct aml_vcodec_ctx *aml_vcodec_get_curr_ctx(struct aml_vcodec_dev *dev);
+
+/*
+ * todo
+ */
+int user_to_task(enum buf_core_user user);
+
+/*
+ * todo
+ */
+int task_to_user(enum task_type_e task);
 
 #endif /* _AML_VCODEC_UTIL_H_ */

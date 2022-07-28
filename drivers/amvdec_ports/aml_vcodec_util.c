@@ -44,3 +44,56 @@ struct aml_vcodec_ctx *aml_vcodec_get_curr_ctx(struct aml_vcodec_dev *dev)
 	return ctx;
 }
 EXPORT_SYMBOL(aml_vcodec_get_curr_ctx);
+
+int user_to_task(enum buf_core_user user)
+{
+	enum task_type_e t;
+
+	switch (user) {
+	case BUF_USER_DEC:
+		t = TASK_TYPE_DEC;
+		break;
+	case BUF_USER_VPP:
+		t = TASK_TYPE_VPP;
+		break;
+	case BUF_USER_GE2D:
+		t = TASK_TYPE_GE2D;
+		break;
+	case BUF_USER_VSINK:
+		t = TASK_TYPE_V4L_SINK;
+		break;
+	default:
+		t = TASK_TYPE_MAX;
+		pr_err("user:%d type invalid.\n", user);
+	}
+
+	return t;
+}
+EXPORT_SYMBOL(user_to_task);
+
+int task_to_user(enum task_type_e task)
+{
+	enum buf_core_user t;
+
+	switch (task) {
+	case TASK_TYPE_DEC:
+		t = BUF_USER_DEC;
+		break;
+	case TASK_TYPE_VPP:
+		t = BUF_USER_VPP;
+		break;
+	case TASK_TYPE_GE2D:
+		t = BUF_USER_GE2D;
+		break;
+	case TASK_TYPE_V4L_SINK:
+		t = BUF_USER_VSINK;
+		break;
+	default:
+		t = BUF_USER_MAX;
+		pr_err("task:%d type invalid.\n", task);
+	}
+
+	return t;
+}
+EXPORT_SYMBOL(task_to_user);
+

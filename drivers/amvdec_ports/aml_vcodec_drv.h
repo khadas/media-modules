@@ -30,6 +30,7 @@
 #include <media/videobuf2-core.h>
 #include <media/videobuf2-v4l2.h>
 #include <linux/amlogic/media/vfm/vframe.h>
+#include <media/v4l2-mem2mem.h>
 //#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
@@ -299,7 +300,8 @@ struct aml_vdec_cfg_infos {
 	 * bit 14	: enable di local buff.
 	 * bit 13	: report downscale yuv buffer size flag.
 	 * bit 12	: for second field pts mode.
-	 * bit 11	: disable error policy
+	 * bit 11	: disable error policy.
+	 * bit 9	: disable ge2d wrapper.
 	 * bit 1	: Non-standard dv flag.
 	 * bit 0	: dv two layer flag.
 	 */
@@ -424,6 +426,9 @@ struct internal_comp_buf {
 	u32		header_size;
 	u32		frame_buffer_size;
 	struct file_private_data priv_data;
+	ulong	header_dw_addr;
+	void	*mmu_box_dw;
+	void	*bmmu_box_dw;
 };
 
 /*
@@ -441,7 +446,7 @@ struct aml_uvm_buff_ref {
 };
 
 /*
- * enum aml_fb_requester - indicate which module request fb buffers.
+ * enum aml_fb_requester - indicate which module request ambuf buffers.
  */
 enum aml_fb_requester {
 	AML_FB_REQ_DEC,
@@ -451,12 +456,12 @@ enum aml_fb_requester {
 };
 
 /*
- * @query: try to achieved fb token.
- * @alloc: used for allocte fb buffer.
+ * @query: try to achieved ambuf token.
+ * @alloc: used for allocte ambuf buffer.
  */
 struct aml_fb_ops {
 	bool		(*query)(struct aml_fb_ops *, ulong *);
-	int		(*alloc)(struct aml_fb_ops *, ulong, struct vdec_v4l2_buffer **, u32);
+	int		(*alloc)(struct aml_fb_ops *, ulong, struct aml_buf **, u32);
 };
 
 /*
@@ -563,6 +568,18 @@ struct aml_ge2d_cfg_infos {
 	u32	mode;
 	u32	buf_size;
 	bool	is_drm;
+	bool	bypass;
+};
+
+struct canvas_res {
+	int			cid;
+	u8			name[32];
+};
+
+struct canvas_cache {
+	int			ref;
+	struct canvas_res	res[8];
+	struct mutex		lock;
 };
 
 /*
@@ -595,7 +612,8 @@ struct aml_ge2d_cfg_infos {
  * @param_change: indicate encode parameter type
  * @param_sets_from_ucode: if true indicate ps from ucode.
  * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
- # @v4l_resolution_change: indicate resolution change happend.
+ * @dst_queue_streaming: the state of the destination queue.
+ * @v4l_resolution_change: indicate resolution change happend.
  * @comp: comp be used for sync picture information with decoder.
  * @config: used to set or get parms for application.
  * @picinfo: store picture info after header parsing.
@@ -633,6 +651,7 @@ struct aml_ge2d_cfg_infos {
  * @vpp_is_need: the instance is need vpp.
  * @task_chain_pool: used to store task chain inst.
  * @index_disp: the number of frames output.
+ * @buffer manager context.
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -648,7 +667,7 @@ struct aml_vcodec_ctx {
 	struct v4l2_ctrl_handler	ctrl_hdl;
 	spinlock_t			slock;
 	spinlock_t			tsplock;
-	struct aml_video_dec_buf	*empty_flush_buf;
+	struct aml_v4l2_buf		*empty_flush_buf;
 	struct list_head		list;
 
 	struct aml_q_data		q_data[2];
@@ -665,6 +684,7 @@ struct aml_vcodec_ctx {
 	int				ge2d_size;
 	bool				param_sets_from_ucode;
 	bool				v4l_codec_dpb_ready;
+	bool				dst_queue_streaming;
 	bool				v4l_resolution_change;
 	struct completion		comp;
 	struct v4l2_config_parm		config;
@@ -686,7 +706,7 @@ struct aml_vcodec_ctx {
 	int				reset_flag;
 	int				decoded_frame_cnt;
 	int				buf_used_count;
-	wait_queue_head_t		wq, cap_wq;
+	wait_queue_head_t		wq, cap_wq, post_done_wq;
 	struct mutex			capture_buffer_lock;
 	spinlock_t			dmabuff_recycle_lock;
 	struct mutex			buff_done_lock;
@@ -726,6 +746,14 @@ struct aml_vcodec_ctx {
 	u32				height_aspect_ratio;
 	u32				width_aspect_ratio;
 	u32				index_disp;
+	bool				post_to_upper_done;
+	bool			film_grain_present;
+	void			*bmmu_box_dw;
+	void			*mmu_box_dw;
+	struct aml_buf_mgr_s		bm;
+	void (*vdec_recycle_dec_resource)(void *, struct aml_buf *);
+	int			vpp_cache_num;
+	int 			cache_input_buffer_num;
 };
 
 /**
@@ -745,6 +773,7 @@ struct aml_vcodec_ctx {
  * @queue		: waitqueue for waiting for completion of device commands.
  * @vpp_count		: count the number of open vpp.
  * @v4ldec_class	: creat class sysfs uesd to show some information.
+ * @canche		: canvas pool specific used for v4ldec context.
  */
 struct aml_vcodec_dev {
 	struct v4l2_device		v4l2_dev;
@@ -763,6 +792,7 @@ struct aml_vcodec_dev {
 	wait_queue_head_t		queue;
 	atomic_t			vpp_count;
 	struct class			v4ldec_class;
+	struct canvas_cache		canche;
 };
 
 static inline struct aml_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)
@@ -780,5 +810,30 @@ void aml_thread_post_task(struct aml_vcodec_ctx *ctx, enum aml_thread_type type)
 int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 	enum aml_thread_type type, const char *thread_name);
 void aml_thread_stop(struct aml_vcodec_ctx *ctx);
+void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
+					struct aml_buf *ambuf);
+
+
+/*
+ * v4l2_m2m_job_pause() - paused the schedule of data which from the job queue.
+ *
+ * @m2m_dev: opaque pointer to the internal data to handle M2M context
+ * @m2m_ctx: m2m context assigned to the instance given by struct &v4l2_m2m_ctx
+ */
+void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
+			struct v4l2_m2m_ctx *m2m_ctx);
+
+ /*
+  * v4l2_m2m_job_resume() - resumed the schedule of data which from the job que.
+  *
+  * @m2m_dev: opaque pointer to the internal data to handle M2M context
+  * @m2m_ctx: m2m context assigned to the instance given by struct &v4l2_m2m_ctx
+  */
+void v4l2_m2m_job_resume(struct v4l2_m2m_dev *m2m_dev,
+			 struct v4l2_m2m_ctx *m2m_ctx);
+
+#define V4L2_PIX_FMT_AV1      v4l2_fourcc('A', 'V', '1', '0') /* av1 */
+#define V4L2_PIX_FMT_AVS      v4l2_fourcc('A', 'V', 'S', '0') /* avs */
+#define V4L2_PIX_FMT_AVS2     v4l2_fourcc('A', 'V', 'S', '2') /* avs2 */
 
 #endif /* _AML_VCODEC_DRV_H_ */

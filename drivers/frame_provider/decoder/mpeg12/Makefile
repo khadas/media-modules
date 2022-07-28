@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-amvdec-mmpeg12
+MODULE_NAME = amvdec_mmpeg12
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-amvdec-mmpeg12
+endif
+endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_MPEG2_MULTI) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vmpeg12_multi.o
 

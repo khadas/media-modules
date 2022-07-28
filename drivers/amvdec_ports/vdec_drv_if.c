@@ -24,6 +24,7 @@
 #include "vdec_drv_if.h"
 #include "aml_vcodec_dec.h"
 #include "vdec_drv_base.h"
+#include "../frame_provider/decoder/utils/vdec_v4l2_buffer_ops.h"
 
 const struct vdec_common_if *get_h264_dec_comm_if(void);
 const struct vdec_common_if *get_hevc_dec_comm_if(void);
@@ -32,6 +33,7 @@ const struct vdec_common_if *get_mpeg12_dec_comm_if(void);
 const struct vdec_common_if *get_mpeg4_dec_comm_if(void);
 const struct vdec_common_if *get_mjpeg_dec_comm_if(void);
 const struct vdec_common_if *get_av1_dec_comm_if(void);
+const struct vdec_common_if *get_avs_dec_comm_if(void);
 const struct vdec_common_if *get_avs2_dec_comm_if(void);
 
 int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
@@ -61,6 +63,9 @@ int vdec_if_init(struct aml_vcodec_ctx *ctx, unsigned int fourcc)
 		break;
 	case V4L2_PIX_FMT_AV1:
 		ctx->dec_if = get_av1_dec_comm_if();
+		break;
+	case V4L2_PIX_FMT_AVS:
+		ctx->dec_if = get_avs_dec_comm_if();
 		break;
 	case V4L2_PIX_FMT_AVS2:
 		ctx->dec_if = get_avs2_dec_comm_if();

@@ -35,7 +35,7 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 
 #undef pr_info
-#define pr_info printk
+#define pr_info pr_cont
 
 #define __COMPARE(context, p1, p2) comp(p1, p2)
 #define __SHORTSORT(lo, hi, width, comp, context) \
@@ -559,9 +559,9 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 	pbi->common->buffer_pool	= pool;
 }
 
-int release_fb_cb(void *cb_priv, aom_codec_frame_buffer_t *fb) {
+int release_fb_cb(void *cb_priv, aom_codec_frame_buffer_t *ambuf) {
 #if 0
-  InternalFrameBuffer *const int_fb = (InternalFrameBuffer *)fb->priv;
+  InternalFrameBuffer *const int_fb = (InternalFrameBuffer *)ambuf->priv;
   (void)cb_priv;
   if (int_fb) int_fb->in_use = 0;
 #endif

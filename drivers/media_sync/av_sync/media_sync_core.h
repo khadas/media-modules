@@ -79,6 +79,10 @@ typedef struct syncinfo {
 	mediasync_frameinfo curAudioInfo;
 	mediasync_frameinfo curVideoInfo;
 	mediasync_frameinfo curDmxPcrInfo;
+	mediasync_frameinfo queueAudioInfo;
+	mediasync_frameinfo queueVideoInfo;
+	mediasync_frameinfo firstQAudioInfo;
+	mediasync_frameinfo firstQVideoInfo;
 }mediasync_syncinfo;
 
 typedef struct audioinfo{
@@ -152,6 +156,12 @@ typedef struct instance{
 	char atrace_pcrscr[32];
 }mediasync_ins;
 
+typedef struct Media_Sync_Manage {
+	mediasync_ins* pInstance;
+	struct mutex m_lock;
+} MediaSyncManage;
+
+long mediasync_init(void);
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
 			s32 *sSyncInsId,
@@ -234,5 +244,13 @@ long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope);
 long mediasync_ins_reset(s32 sSyncInsId);
 long mediasync_ins_update_avref(s32 sSyncInsId, int flag);
 long mediasync_ins_get_avref(s32 sSyncInsId, int *ref);
+long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info);
 
 #endif

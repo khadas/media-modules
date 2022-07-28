@@ -1,4 +1,9 @@
-MODULE_NAME = amlogic-stream-input
+MODULE_NAME = stream_input
+ifeq (${VERSION},5)
+ifeq (${PATCHLEVEL},15)
+	MODULE_NAME = amlogic-stream-input
+endif
+endif
 obj-m	+=	 ${MODULE_NAME}.o
 
 ${MODULE_NAME}-objs	+=	amports/amstream.o
@@ -10,8 +15,6 @@ ${MODULE_NAME}-objs	+=	amports/stream_buffer_interface.o
 
 ${MODULE_NAME}-objs	+=	parser/esparser.o
 ${MODULE_NAME}-objs	+=	parser/tsdemux.o
-${MODULE_NAME}-objs	+=	parser/psparser.o
-${MODULE_NAME}-objs	+=	parser/rmparser.o
 ${MODULE_NAME}-objs	+=	subtitle/subtitle.o
 
 ${MODULE_NAME}-objs	+=	parser/dvb_common.o
