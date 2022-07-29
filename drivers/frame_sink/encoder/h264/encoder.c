@@ -17,7 +17,6 @@
  *
  * Description:
  */
-#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -33,40 +32,41 @@
 #include <linux/spinlock.h>
 #include <linux/ctype.h>
 #include <linux/fs.h>
+#include <linux/compat.h>
 //#include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <linux/buffer_head.h>
-//#include <linux/amlogic/media/frame_sync/ptsserv.h>
-//#include <linux/amlogic/media/utils/amstream.h>
+#include <linux/amlogic/media/frame_sync/ptsserv.h>
+#include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-//#include "../../../frame_provider/decoder/utils/vdec_canvas_utils.h"
-//#include "../../../frame_provider/decoder/utils/vdec.h"
+#include "../../../frame_provider/decoder/utils/vdec_canvas_utils.h"
+#include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../../../frame_provider/decoder/utils/vdec.h"
 #include <linux/delay.h>
 #include <linux/poll.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
-//#include <linux/dma-contiguous.h>
 #include <linux/kthread.h>
 #include <linux/sched/rt.h>
-//#include <linux/amlogic/media/utils/amports_config.h>
+#include <linux/amlogic/media/utils/amports_config.h>
 #include "encoder.h"
-//#include "../../../frame_provider/decoder/utils/amvdec.h"
+#include "../../../frame_provider/decoder/utils/amvdec.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
-#include "../../../common/media_clock/switch/amports_gate.h"
-//#include "../../../frame_provider/decoder/utils/vdec.h"
-//#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+#include "../../../frame_provider/decoder/utils/vdec.h"
+#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
 
+#include <linux/amlogic/media/utils/vdec_reg.h>
 //#include <linux/amlogic/power_ctrl.h>
 #include <dt-bindings/power/sc2-pd.h>
 #include <dt-bindings/power/t3-pd.h>
 #include <linux/amlogic/power_domain.h>
 //#include <linux/amlogic/power_ctrl.h>
 
-//#include <linux/amlogic/media/utils/amlog.h>
-//#include "../../../stream_input/amports/amports_priv.h"
-//#include "../../../frame_provider/decoder/utils/firmware.h"
+#include <linux/amlogic/media/utils/amlog.h>
+#include "../../../stream_input/amports/amports_priv.h"
+#include "../../../frame_provider/decoder/utils/firmware.h"
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/version.h>
@@ -504,61 +504,87 @@ static void cav_lut_info_store(u32 index, ulong addr, u32 width,
 }
 
 */
-#if 0
+
 static struct file *file_open(const char *path, int flags, int rights)
 {
-    struct file *filp = NULL;
-    mm_segment_t oldfs;
-    int err = 0;
-
-    oldfs = get_fs();
-    //set_fs(get_ds());
-    set_fs(KERNEL_DS);
-    filp = filp_open(path, flags, rights);
-    set_fs(oldfs);
-    if (IS_ERR(filp)) {
-        err = PTR_ERR(filp);
-        return NULL;
-    }
-    return filp;
+	//return filp_open(path, flags, rights);
+	return NULL;
 }
-static void file_close(struct file *file)
+
+static int file_close(struct file *file)
 {
-    filp_close(file, NULL);
+	//return filp_close(file, NULL);
+	return 0;
 }
-/*
-static int file_read(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
-{
-    mm_segment_t oldfs;
-    int ret;
 
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-
-    ret = vfs_read(file, data, size, &offset);
-
-    set_fs(oldfs);
-    return ret;
-}*/
 static int file_write(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
 {
-    mm_segment_t oldfs;
-    int ret;
-
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-
-    ret = vfs_write(file, data, size, &offset);
-
-    set_fs(oldfs);
-    return ret;
+	//return kernel_write(file, data, size, &offset);
+	return 0;
 }
-static int file_sync(struct file *file)
-{
-    vfs_fsync(file, 0);
-    return 0;
-}
+
+static void canvas_config_proxy(u32 index, ulong addr, u32 width, u32 height,
+		   u32 wrap, u32 blkmode) {
+	unsigned long datah_temp, datal_temp;
+
+	if (!is_support_vdec_canvas()) {
+		canvas_config(index, addr, width, height, wrap, blkmode);
+	} else {
+#if 1
+		ulong start_addr = addr >> 3;
+		u32 cav_width = (((width + 31)>>5)<<2);
+		u32 cav_height = height;
+		u32 x_wrap_en = 0;
+		u32 y_wrap_en = 0;
+		u32 blk_mode = 0;//blkmode;
+		u32 cav_endian = 0;
+
+		datal_temp = (start_addr & 0x1fffffff) |
+					((cav_width & 0x7 ) << 29 );
+
+		datah_temp = ((cav_width  >> 3) & 0x1ff) |
+					((cav_height & 0x1fff) <<9 ) |
+					((x_wrap_en & 1) << 22 ) |
+					((y_wrap_en & 1) << 23) |
+					((blk_mode & 0x3) << 24) |
+					( cav_endian << 26);
+
+#else
+		u32 endian = 0;
+		u32 addr_bits_l = ((((addr + 7) >> 3) & CANVAS_ADDR_LMASK) << CAV_WADDR_LBIT);
+		u32 width_l     = ((((width    + 7) >> 3) & CANVAS_WIDTH_LMASK) << CAV_WIDTH_LBIT);
+		u32 width_h     = ((((width    + 7) >> 3) >> CANVAS_WIDTH_LWID) << CAV_WIDTH_HBIT);
+		u32 height_h    = (height & CANVAS_HEIGHT_MASK) << CAV_HEIGHT_HBIT;
+		u32 blkmod_h    = (blkmode & CANVAS_BLKMODE_MASK) << CAV_BLKMODE_HBIT;
+		u32 switch_bits_ctl = (endian & 0xf) << CAV_ENDIAN_HBIT;
+		u32 wrap_h      = (0 << 23);
+		datal_temp = addr_bits_l | width_l;
+		datah_temp = width_h | height_h | wrap_h | blkmod_h | switch_bits_ctl;
 #endif
+		/*
+		if (core == VDEC_1) {
+			WRITE_VREG(MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_VREG(MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_VREG(MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_VREG(MDEC_CAV_LUT_ADDR,  index);
+		} else if (core == VDEC_HCODEC) */ {
+			WRITE_HREG(HCODEC_MDEC_CAV_CFG0, 0);	//[0]canv_mode, by default is non-canv-mode
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_DATAL, datal_temp);
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_DATAH, datah_temp);
+			WRITE_HREG(HCODEC_MDEC_CAV_LUT_ADDR,  index);
+		}
+
+		/*
+		cav_lut_info_store(index, addr, width, height, wrap, blkmode, 0);
+
+		if (vdec_get_debug() & 0x40000000) {
+			pr_info("(%s %2d) addr: %lx, width: %d, height: %d, blkm: %d, endian: %d\n",
+				__func__, index, addr, width, height, blkmode, 0);
+			pr_info("data(h,l): 0x%8lx, 0x%8lx\n", datah_temp, datal_temp);
+	    }
+	    */
+	}
+}
 
 s32 hcodec_hw_reset(void)
 {
@@ -870,30 +896,30 @@ static void avc_canvas_init(struct encode_wq_s *wq)
 	canvas_width = ((wq->pic.encoder_width + 31) >> 5) << 5;
 	canvas_height = ((wq->pic.encoder_height + 15) >> 4) << 4;
 
-	canvas_config(ENC_CANVAS_OFFSET,
+	canvas_config_proxy(ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec0_y.buf_start,
 	      canvas_width, canvas_height,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config(1 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(1 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec0_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 	/*here the third plane use the same address as the second plane*/
-	canvas_config(2 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(2 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec0_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 
-	canvas_config(3 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(3 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec1_y.buf_start,
 	      canvas_width, canvas_height,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config(4 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(4 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec1_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 	/*here the third plane use the same address as the second plane*/
-	canvas_config(5 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(5 + ENC_CANVAS_OFFSET,
 	      start_addr + wq->mem.bufspec.dec1_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
@@ -1429,7 +1455,7 @@ static int scale_frame(struct encode_wq_s *wq,
 	return dst_canvas_w*dst_h * 3 / 2;
 }
 #endif
-#if 0
+
 static s32 dump_raw_input(struct encode_wq_s *wq, struct encode_request_s *request) {
 	u8 *data;
 	struct canvas_s cs0, cs1;//, cs2
@@ -1453,7 +1479,6 @@ static s32 dump_raw_input(struct encode_wq_s *wq, struct encode_request_s *reque
 			filp = file_open("/data/encoder.yuv", O_APPEND | O_RDWR, 0644);
 			if (filp) {
 				file_write(filp, 0, data, canvas_w * picsize_y);
-				file_sync(filp);
 				file_close(filp);
 			} else
 				pr_err("open encoder.yuv failed\n");
@@ -1462,7 +1487,7 @@ static s32 dump_raw_input(struct encode_wq_s *wq, struct encode_request_s *reque
 	}
 	return 0;
 }
-#endif
+
 static s32 set_input_format(struct encode_wq_s *wq,
 			    struct encode_request_s *request)
 {
@@ -1475,15 +1500,16 @@ static s32 set_input_format(struct encode_wq_s *wq,
 	u32 input_u = 0;
 	u32 input_v = 0;
 	u8 ifmt_extra = 0;
+	u32 pitch = 0;
 
 	if ((request->fmt == FMT_RGB565) || (request->fmt >= MAX_FRAME_FMT))
 		return -1;
 
-	//if (dump_input)
-		//dump_raw_input(wq, request);
+	if (dump_input)
+		dump_raw_input(wq, request);
 
 	picsize_x = ((wq->pic.encoder_width + 15) >> 4) << 4;
-	picsize_y = ((wq->pic.encoder_height + 15) >> 4) << 4;
+	picsize_y = wq->pic.encoder_height;
 	oformat = 0;
 
 	if ((request->type == LOCAL_BUFF)
@@ -1510,7 +1536,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				input_y = (unsigned long)request->dma_cfg[0].paddr;
 				if (request->fmt == FMT_NV21
 					|| request->fmt == FMT_NV12) {
-					input_u = input_y + picsize_x * picsize_y;
+					pitch = ((wq->pic.encoder_width + 31) >> 5) << 5;
+					input_u = input_y + pitch * picsize_y;
 					input_v = input_u;
 				}
 				if (request->fmt == FMT_YUV420) {
@@ -1519,7 +1546,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				}
 			}
 			src_addr = input_y;
-			picsize_y = wq->pic.encoder_height;
+			//picsize_y = wq->pic.encoder_height;
 			enc_pr(LOG_INFO, "dma addr[0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx]\n",
 				(unsigned long)request->dma_cfg[0].vaddr,
 				(unsigned long)request->dma_cfg[0].paddr,
@@ -1556,12 +1583,12 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
 				iformat = 2;
 
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					wq->mem.scaler_buff_start_addr,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					wq->mem.scaler_buff_start_addr + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
@@ -1594,7 +1621,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			else
 				canvas_w = (picsize_x * 20 + 7) / 8;
 			canvas_w = ((canvas_w + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
@@ -1610,7 +1637,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				r2y_en = 1;
 			canvas_w =  picsize_x * 3;
 			canvas_w = ((canvas_w + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
@@ -1621,23 +1648,23 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
 			iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 			if (request->type == DMA_BUFF) {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input_y,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input_u,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
@@ -1649,33 +1676,33 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			iformat = 4;
 			canvas_w = ((wq->pic.encoder_width + 63) >> 6) << 6;
 			if (request->type == DMA_BUFF) {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input_y,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input_u,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 8,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
 					input_v,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input + canvas_w * picsize_y,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 8,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
 					input + canvas_w * picsize_y * 5 / 4,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
@@ -1691,17 +1718,17 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				r2y_en = 1;
 			iformat = 5;
 			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 7,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 				input + canvas_w * picsize_y,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 8,
+			canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
 				input + canvas_w * picsize_y * 2,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
@@ -1738,12 +1765,12 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
 				iformat = 2;
 
-				canvas_config(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					wq->mem.scaler_buff_start_addr,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					wq->mem.scaler_buff_start_addr + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
@@ -1787,7 +1814,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				picsize_y = wq->pic.encoder_height;
 				iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 
-				canvas_config(
+				canvas_config_proxy(
 					ENC_CANVAS_OFFSET + 6,
 					y_addr,
 					canvas_w,
@@ -1795,7 +1822,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 
-				canvas_config(
+				canvas_config_proxy(
 					ENC_CANVAS_OFFSET + 7,
 					uv_addr,
 					canvas_w,
@@ -2717,7 +2744,7 @@ void amvenc_stop(void)
 	}
 
 }
-extern int get_data_from_name(const char *name, char *buf);
+
 static void __iomem *mc_addr;
 static u32 mc_addr_map;
 #define MC_SIZE (4096 * 8)
@@ -2726,7 +2753,6 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
 	ulong timeout;
 	s32 ret = 0;
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
-#if 0
         char *buf = vmalloc(0x1000 * 16);
         int ret = -1;
         pr_err("load firmware for t3 avc encoder\n");
@@ -2750,7 +2776,6 @@ s32 amvenc_loadmc(const char *p, struct encode_wq_s *wq)
         }
         vfree(buf);
         return 0;
-#endif
     }
 
 	/* use static mempry*/
@@ -2881,11 +2906,11 @@ static s32 avc_poweron(u32 clock)
 		hcodec_clk_config(1);
 		udelay(20);
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
-			//vdec_poweron(VDEC_HCODEC);
-			pr_err("no vdec_poweron VDEC_HCODEC\n");
+			vdec_poweron(VDEC_HCODEC);
+			pr_err("vdec_poweron VDEC_HCODEC\n");
 		} else {
 			pwr_ctrl_psci_smc(PDID_T3_DOS_HCODEC, PWR_ON);
-			pr_err("pwr_ctrl_psci_smc PDID_T3_DOS_HCODEC off\n");
+			pr_info("pwr_ctrl_psci_smc PDID_T3_DOS_HCODEC on\n");
 		}
 		udelay(20);
         /*
@@ -2952,11 +2977,11 @@ static s32 avc_poweroff(void)
 		udelay(20);
 
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) {
-			//vdec_poweroff(VDEC_HCODEC);
+			vdec_poweroff(VDEC_HCODEC);
 			pr_err("vdec_poweroff VDEC_HCODEC\n");
 		} else {
 			pwr_ctrl_psci_smc(PDID_T3_DOS_HCODEC, PWR_OFF);
-			pr_err("pwr_ctrl_psci_smc PDID_T3_DOS_HCODEC on\n");
+			pr_info("pwr_ctrl_psci_smc PDID_T3_DOS_HCODEC off\n");
 		}
 		udelay(20);
 	} else {
@@ -3237,7 +3262,8 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 				wq->request.plane_num);
 			if (wq->request.fmt == FMT_NV12 ||
 				wq->request.fmt == FMT_NV21 ||
-				wq->request.fmt == FMT_YUV420) {
+				wq->request.fmt == FMT_YUV420 ||
+				wq->request.fmt == FMT_RGBA8888) {
 				if (wq->request.plane_num > 3) {
 					enc_pr(LOG_ERROR, "wq->request.plane_num is invalid %d.\n",
 							wq->request.plane_num);
@@ -4947,7 +4973,7 @@ static int enc_dma_buf_map(struct enc_dma_cfg *cfg)
 	struct dma_buf *dbuf = NULL;
 	struct dma_buf_attachment *d_att = NULL;
 	struct sg_table *sg = NULL;
-//	void *vaddr = NULL;
+	void *vaddr = NULL;
 	struct device *dev = NULL;
 	enum dma_data_direction dir;
 
@@ -4980,30 +5006,12 @@ static int enc_dma_buf_map(struct enc_dma_cfg *cfg)
 		goto map_attach_err;
 	}
 
-	ret = dma_buf_begin_cpu_access(dbuf, dir);
-	if (ret != 0) {
-		enc_pr(LOG_ERROR, "failed to access dma buff\n");
-		goto access_err;
-	}
-/*
-	vaddr = dma_buf_vmap(dbuf);
-	if (vaddr == NULL) {
-		enc_pr(LOG_ERROR, "failed to vmap dma buf\n");
-		goto vmap_err;
-	}
-*/
 	cfg->dbuf = dbuf;
 	cfg->attach = d_att;
-//	cfg->vaddr = vaddr;
+	cfg->vaddr = vaddr;
 	cfg->sg = sg;
 
-	return ret;
-
-//vmap_err:
-//	dma_buf_end_cpu_access(dbuf, dir);
-
-access_err:
-	dma_buf_unmap_attachment(d_att, sg, dir);
+	return 0;
 
 map_attach_err:
 	dma_buf_detach(dbuf, d_att);
@@ -5042,12 +5050,12 @@ static void enc_dma_buf_unmap(struct enc_dma_cfg *cfg)
 	struct dma_buf *dbuf = NULL;
 	struct dma_buf_attachment *d_att = NULL;
 	struct sg_table *sg = NULL;
-//	void *vaddr = NULL;
+	//void *vaddr = NULL;
 	struct device *dev = NULL;
 	enum dma_data_direction dir;
 
 	if (cfg == NULL || (cfg->fd < 0) || cfg->dev == NULL
-			|| cfg->dbuf == NULL/* || cfg->vaddr == NULL*/
+			|| cfg->dbuf == NULL /*|| cfg->vaddr == NULL*/
 			|| cfg->attach == NULL || cfg->sg == NULL) {
 		enc_pr(LOG_ERROR, "Error input param\n");
 		return;
@@ -5057,20 +5065,15 @@ static void enc_dma_buf_unmap(struct enc_dma_cfg *cfg)
 	dev = cfg->dev;
 	dir = cfg->dir;
 	dbuf = cfg->dbuf;
-//	vaddr = cfg->vaddr;
 	d_att = cfg->attach;
 	sg = cfg->sg;
-
-//	dma_buf_vunmap(dbuf, vaddr);
-
-	dma_buf_end_cpu_access(dbuf, dir);
 
 	dma_buf_unmap_attachment(d_att, sg, dir);
 
 	dma_buf_detach(dbuf, d_att);
 
 	dma_buf_put(dbuf);
-//	enc_pr(LOG_DEBUG, "enc_dma_buffer_unmap vaddr %p\n",(unsigned *)vaddr);
+	enc_pr(LOG_DEBUG, "enc_dma_buffer_unmap fd %d\n",fd);
 }
 
 

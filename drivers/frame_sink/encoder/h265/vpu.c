@@ -40,12 +40,13 @@
 #include <linux/compat.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/of_address.h>
+#include <linux/compat.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 
 #include <linux/amlogic/media/registers/cpu_version.h>
 #include <linux/version.h>
-//#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
-//#include <linux/amlogic/media/utils/vdec_reg.h>
+#include "../../../frame_provider/decoder/utils/vdec_power_ctrl.h"
+#include <linux/amlogic/media/utils/vdec_reg.h>
 //#include <linux/amlogic/power_ctrl.h>
 #include <dt-bindings/power/sc2-pd.h>
 #include <linux/amlogic/power_domain.h>
@@ -54,6 +55,7 @@
 #include <linux/sched/signal.h>
 #endif
 
+#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "../../../common/media_clock/switch/amports_gate.h"
 
 #include "vpu.h"
@@ -2112,10 +2114,6 @@ static s32 vpu_probe(struct platform_device *pdev)
 		}
 	}
 
-#ifndef VPU_SUPPORT_CLOCK_CONTROL
-	vpu_clk_config(1);
-#endif
-
 	np = pdev->dev.of_node;
 	reg_count = 0;
 	for_each_child_of_node(np, child) {
@@ -2201,10 +2199,6 @@ ERROR_PROVE_DEVICE:
 		memset(&s_vmem, 0, sizeof(struct video_mm_t));
 	}
 
-#ifndef VPU_SUPPORT_CLOCK_CONTROL
-	vpu_clk_config(0);
-#endif
-
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
 		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
 
@@ -2260,9 +2254,6 @@ static s32 vpu_remove(struct platform_device *pdev)
 			0, sizeof(struct vpudrv_buffer_t));
 	}
 	hevc_pdev = NULL;
-#ifndef VPU_SUPPORT_CLOCK_CONTROL
-	vpu_clk_config(0);
-#endif
 
 	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_SC2)
 		vpu_clk_unprepare(&pdev->dev, &s_vpu_clks);
@@ -2452,7 +2443,6 @@ static s32 __init vpu_init(void)
 
 	enc_pr(LOG_DEBUG, "vpu_init\n");
 
-#if 0
 	if ((get_cpu_type() != MESON_CPU_MAJOR_ID_GXM)
 		&& (get_cpu_type() != MESON_CPU_MAJOR_ID_G12A)
 			&& (get_cpu_type() != MESON_CPU_MAJOR_ID_GXLX)
@@ -2463,7 +2453,6 @@ static s32 __init vpu_init(void)
 			"The chip is not support hevc encoder\n");
 		return -1;
 	}
-#endif
 	if (get_cpu_type() == MESON_CPU_MAJOR_ID_G12A) {
 		if ((READ_EFUSE_REG(EFUSE_LIC2)  >> 12) & 1) {
 			enc_pr(LOG_DEBUG,
@@ -2481,7 +2470,6 @@ static s32 __init vpu_init(void)
 static void __exit vpu_exit(void)
 {
 	enc_pr(LOG_DEBUG, "vpu_exit\n");
-#if 0
 	if ((get_cpu_type() != MESON_CPU_MAJOR_ID_GXM) &&
 		(get_cpu_type() != MESON_CPU_MAJOR_ID_G12A) &&
 		(get_cpu_type() != MESON_CPU_MAJOR_ID_GXLX) &&
@@ -2492,7 +2480,6 @@ static void __exit vpu_exit(void)
 			"The chip is not support hevc encoder\n");
 		return;
 	}
-#endif
 	platform_driver_unregister(&vpu_driver);
 }
 
