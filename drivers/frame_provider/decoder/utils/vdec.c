@@ -98,7 +98,7 @@
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
 #endif
 
-//#if defined(CONFIG_AMLOGIC_TEE) || defined(CONFIG_AMLOGIC_TEE_MODULE)
+//#if IS_ENABLED(CONFIG_AMLOGIC_TEE) || IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
 #include <linux/amlogic/tee.h>
 //#endif
 

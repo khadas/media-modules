@@ -48,7 +48,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 
-#if defined(CONFIG_AMLOGIC_TEE) || defined(CONFIG_AMLOGIC_TEE_MODULE)
+#if IS_ENABLED(CONFIG_AMLOGIC_TEE) || IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
 #include <linux/amlogic/tee.h>
 #endif
 #include "../../../stream_input/amports/amports_priv.h"

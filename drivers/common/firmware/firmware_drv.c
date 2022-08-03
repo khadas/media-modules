@@ -47,7 +47,7 @@
 #include <linux/crc32.h>
 #include "../chips/decoder_cpu_ver_info.h"
 
-#if !defined(CONFIG_AMLOGIC_TEE) && !defined(CONFIG_AMLOGIC_TEE_MODULE)
+#if !IS_ENABLED(CONFIG_AMLOGIC_TEE) && !IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
 static  inline bool tee_enabled(void) { return false; }
 static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
 {
