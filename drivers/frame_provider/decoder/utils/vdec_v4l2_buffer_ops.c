@@ -124,7 +124,7 @@ EXPORT_SYMBOL(vdec_v4l_post_evet);
 int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 {
 	int ret = 0;
-	struct aml_vcodec_dev *dev = ctx->dev;
+	//struct aml_vcodec_dev *dev = ctx->dev;
 
 	if (ctx->drv_handle == 0)
 		return -EIO;
@@ -138,11 +138,11 @@ int vdec_v4l_res_ch_event(struct aml_vcodec_ctx *ctx)
 	pr_info("[%d]: vcodec state (AML_STATE_FLUSHING-RESCHG)\n", ctx->id);
 
 	mutex_unlock(&ctx->state_lock);
-
+#if 0
 	while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
 		v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
 	}
-
+#endif
 	return ret;
 }
 EXPORT_SYMBOL(vdec_v4l_res_ch_event);

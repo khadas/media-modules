@@ -10071,8 +10071,11 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 				frame_bufs[i].buf.vf_ref);
 
 			aml_buf_put_ref(&ctx->bm, ambuf);
-			if (!frame_bufs[i].buf.vf_ref)
+			if (!frame_bufs[i].buf.vf_ref) {
 				aml_buf_put_ref(&ctx->bm, ambuf);
+				pbi->afbc_buf_table[ambuf->fbc->index].fb = 0;
+				pbi->afbc_buf_table[ambuf->fbc->index].used = 0;
+			}
 
 			lock_buffer_pool(cm->buffer_pool, flags);
 

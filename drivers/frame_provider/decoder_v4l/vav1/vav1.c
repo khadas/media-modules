@@ -9487,8 +9487,11 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 				frame_bufs[i].buf.vf_ref);
 
 			aml_buf_put_ref(&ctx->bm, ambuf);
-			if (!frame_bufs[i].buf.vf_ref)
+			if (!frame_bufs[i].buf.vf_ref) {
 				aml_buf_put_ref(&ctx->bm, ambuf);
+				hw->afbc_buf_table[ambuf->fbc->index].fb = 0;
+				hw->afbc_buf_table[ambuf->fbc->index].used = 0;
+			}
 
 			lock_buffer_pool(hw->common.buffer_pool, flags);
 

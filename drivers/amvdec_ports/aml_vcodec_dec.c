@@ -3427,7 +3427,7 @@ static int vb2ops_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	ctx->v4l_resolution_change = false;
 
 	/* vdec has ready to decode subsequence data of new resolution. */
-	v4l2_m2m_job_resume(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
+	//v4l2_m2m_job_resume(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
 
 	v4l2_m2m_set_dst_buffered(ctx->fh.m2m_ctx, true);
 
