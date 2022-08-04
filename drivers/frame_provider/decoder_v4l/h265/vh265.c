@@ -10079,7 +10079,7 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 	u32 vpts = 0;
 	int pts_valid = 0;
 
-	if (!itu_t_t35_enable)
+	if (!itu_t_t35_enable || pic == NULL)
 		return 0;
 
 	if (pic->aux_data_buf
