@@ -3163,13 +3163,9 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			aml_v4l2_vpp_recycle(ctx->vpp, buf);
 		}
 
-		if (ctx->ge2d) {
-			aml_v4l2_ge2d_recycle(ctx->ge2d, buf);
-		}
-
 		if (ambuf->entry.vb2 != vb) {
 			ambuf->entry.vb2 = vb;
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 				"vb2 (old idx: %d new idx: %d) update\n",
 				ambuf->vb->index, vb->index);
 		}
@@ -3455,7 +3451,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	} else {
 		ctx->is_stream_off = true;
 		ctx->dst_queue_streaming = false;
-		ctx->vpp_cache_num = 0;
+		atomic_set(&ctx->vpp_cache_num, 0);
+		atomic_set(&ctx->ge2d_cache_num, 0);
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {

@@ -249,9 +249,13 @@ struct vdec_mjpeg_hw_s {
 	char pts_name[32];
 	char new_q_name[32];
 	char disp_q_name[32];
+	int force_recycle;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
+static int mjpeg_recycle_frame_buffer(struct vdec_mjpeg_hw_s *hw,
+							int force_recycle);
+static int mjpeg_reset_frame_buffer(struct vdec_mjpeg_hw_s *hw);
 
 static void set_frame_info(struct vdec_mjpeg_hw_s *hw, struct vframe_s *vf)
 {
@@ -509,6 +513,8 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	hw->dec_result = DEC_RESULT_DONE;
 	vdec_schedule_work(&hw->work);
 
+	mjpeg_recycle_frame_buffer(hw, hw->force_recycle);
+
 	return IRQ_HANDLED;
 }
 
@@ -556,7 +562,7 @@ static struct vframe_s *vmjpeg_vf_get(void *op_arg)
 		atomic_add(1, &hw->get_num);
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
-		hw->vfbuf_use[vf->index]--;
+		//hw->vfbuf_use[vf->index]--;
 
 		kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
@@ -581,17 +587,7 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FRAME_NUM,
 		"%s:put_num:%d\n", __func__, hw->put_num);
 
-	if (vf->v4l_mem_handle !=
-		hw->buffer_spec[vf->index].v4l_ref_buf_addr) {
-		hw->buffer_spec[vf->index].v4l_ref_buf_addr = vf->v4l_mem_handle;
-
-		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-			"MJPEG update ambuf handle, old:%llx, new:%llx\n",
-			hw->buffer_spec[vf->index].v4l_ref_buf_addr,
-			vf->v4l_mem_handle);
-	}
-
-	hw->vfbuf_use[vf->index]--;
+	//hw->vfbuf_use[vf->index]--;
 
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
@@ -837,6 +833,7 @@ static void timeout_process(struct vdec_mjpeg_hw_s *hw)
 	amvdec_stop();
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 		"%s decoder timeout\n", __func__);
+	mjpeg_reset_frame_buffer(hw);
 	hw->dec_result = DEC_RESULT_DONE;
 	reset_process_time(hw);
 	vdec_schedule_work(&hw->work);
@@ -922,18 +919,6 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (hw->buffer_spec[i].v4l_ref_buf_addr) {
-		struct aml_buf *ambuf =
-			(struct aml_buf *)
-			hw->buffer_spec[i].v4l_ref_buf_addr;
-
-		ambuf->state = FB_ST_DECODER;
-
-		aml_buf_get_ref(&ctx->bm, ambuf);
-
-		return 0;
-	}
-
 	if (!ambuf)
 		return -1;
 
@@ -948,6 +933,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	}
 
 	hw->buffer_spec[i].v4l_ref_buf_addr = (ulong)ambuf;
+	hw->buffer_spec[i].cma_alloc_addr = ambuf->planes[0].addr;
 	if (ambuf->num_planes == 1) {
 		decbuf_start	= ambuf->planes[0].addr;
 		decbuf_y_size	= ambuf->planes[0].offset;
@@ -1045,8 +1031,6 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
 			&hw->buffer_spec[i].canvas_config[2], VDEC_1);
 
-	aml_buf_get_ref(&ctx->bm, ambuf);
-
 	hw->ambuf = NULL;
 
 	return 0;
@@ -1058,7 +1042,7 @@ static int find_free_buffer(struct vdec_mjpeg_hw_s *hw)
 
 	for (i = 0; i < hw->buf_num; i++) {
 		if (hw->vfbuf_use[i] == 0 &&
-			!hw->buffer_spec[i].v4l_ref_buf_addr)
+			!hw->buffer_spec[i].cma_alloc_addr)
 			break;
 	}
 
@@ -1097,7 +1081,7 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 			return -1;
 
 		for (i = 0; i < hw->buf_num; i++) {
-			if (hw->buffer_spec[i].v4l_ref_buf_addr) {
+			if (hw->buffer_spec[i].cma_alloc_addr) {
 				config_cav_lut(hw->buffer_spec[i].y_canvas_index,
 						&hw->buffer_spec[i].canvas_config[0], VDEC_1);
 				config_cav_lut(hw->buffer_spec[i].u_canvas_index,
@@ -1214,6 +1198,62 @@ static s32 vmjpeg_init(struct vdec_s *vdec)
 	return 0;
 }
 
+static int mjpeg_recycle_frame_buffer(struct vdec_mjpeg_hw_s *hw, int force_recycle)
+{
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *ambuf;
+	int i;
+
+	for (i = 0; i < hw->buf_num; ++i) {
+		if ((force_recycle || (hw->vfbuf_use[i])) &&
+			hw->buffer_spec[i].cma_alloc_addr) {
+			ambuf = (struct aml_buf *)hw->buffer_spec[i].v4l_ref_buf_addr;
+
+			mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+				"recycled buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d \n",
+				i, hw->buffer_spec[i].cma_alloc_addr,
+				ambuf->index,
+				hw->vfbuf_use[i]);
+
+			if (force_recycle)
+				aml_buf_put_ref(&ctx->bm, ambuf);
+
+			hw->buffer_spec[i].v4l_ref_buf_addr = 0;
+			hw->buffer_spec[i].cma_alloc_addr = 0;
+			while (hw->vfbuf_use[i]) {
+				hw->vfbuf_use[i]--;
+			}
+		}
+	}
+
+	if (force_recycle)
+		hw->force_recycle = 0;
+
+	return 0;
+}
+
+static int mjpeg_reset_frame_buffer(struct vdec_mjpeg_hw_s *hw)
+{
+	int i;
+
+	for (i = 0; i < hw->buf_num; ++i) {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+				"%s buf idx %d dma addr: 0x%lx vf_ref %d\n",
+				__func__, i,
+				hw->buffer_spec[i].cma_alloc_addr,
+				hw->vfbuf_use[i]);
+
+		if (hw->buffer_spec[i].cma_alloc_addr) {
+			hw->vfbuf_use[i] = 1;
+		}
+	}
+
+	hw->force_recycle = 1;
+
+	return 0;
+}
+
 static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
@@ -1255,18 +1295,29 @@ static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 			hw->buf_num = DECODE_BUFFER_NUM_MAX;
 	}
 
+	mjpeg_recycle_frame_buffer(hw, hw->force_recycle);
+
 	for (i = 0; i < hw->buf_num; ++i) {
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"%s idx %d vf_ref %d cma_alloc_addr = 0x%lx\n",
 		__func__, i,
 		hw->vfbuf_use[i],
-		hw->buffer_spec[i].v4l_ref_buf_addr);
+		hw->buffer_spec[i].cma_alloc_addr);
 		if ((hw->vfbuf_use[i] == 0) &&
-			!hw->buffer_spec[i].v4l_ref_buf_addr) {
+			!hw->buffer_spec[i].cma_alloc_addr) {
 			free_slot++;
 
 			break;
 		}
+	}
+
+	if (ctx->ge2d &&
+		atomic_read(&ctx->ge2d_cache_num) >= 4) {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+			"%s ge2d cache: %d full!\n",
+			__func__, atomic_read(&ctx->ge2d_cache_num));
+
+		return false;
 	}
 
 	if (!free_slot) {
@@ -1278,56 +1329,32 @@ static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 			"%s idx %d vf_ref %d cma_alloc_addr = 0x%lx\n",
 			__func__, i,
 			hw->vfbuf_use[i],
-			hw->buffer_spec[i].v4l_ref_buf_addr);
+			hw->buffer_spec[i].cma_alloc_addr);
 		}
 
 		return false;
 	}
 
-	for (i = 0; i < hw->buf_num; ++i) {
-		if ((hw->vfbuf_use[i] == 0) &&
-			!hw->buffer_spec[i].v4l_ref_buf_addr){
-			if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
-				hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-				if (!hw->ambuf) {
-					return false;
-				}
-				hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
-				hw->ambuf->state = FB_ST_DECODER;
-			}
-		} else if (hw->buffer_spec[i].v4l_ref_buf_addr) {
-			used_count++;
+
+	if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
+		hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+		if (!hw->ambuf) {
+			return false;
 		}
+		hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
+		hw->ambuf->state = FB_ST_DECODER;
 	}
 
 	if (hw->ambuf) {
 		free_count++;
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"%s get fb: 0x%lx fb idx: %d\n",
-		__func__, hw->buffer_spec[i].v4l_ref_buf_addr, hw->ambuf->index);
+		__func__, hw->ambuf, hw->ambuf->index);
+	} else {
+		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
+		"no frame buffer!\n");
 	}
 
-#if 0
-	for (i = 0; i < hw->buf_num; ++i) {
-		if ((hw->vfbuf_use[i] == 0) &&
-			hw->buffer_spec[i].v4l_ref_buf_addr) {
-			free_count++;
-		} else if (!hw->buffer_spec[i].v4l_ref_buf_addr){
-			if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
-				hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, true);
-				if (!hw->ambuf) {
-					return 0;
-				}
-				hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
-				hw->ambuf->state = FB_ST_DECODER;
-			}
-		} else if (hw->buffer_spec[i].v4l_ref_buf_addr)
-			used_count++;
-	}
-
-	if (hw->ambuf)
-		free_count++;
-#endif
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
 	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
@@ -1647,6 +1674,7 @@ static void reset(struct vdec_s *vdec)
 
 	for (i = 0; i < hw->buf_num; i++) {
 		hw->buffer_spec[i].v4l_ref_buf_addr = 0;
+		hw->buffer_spec[i].cma_alloc_addr = 0;
 		hw->vfbuf_use[i] = 0;
 	}
 

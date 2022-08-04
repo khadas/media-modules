@@ -261,7 +261,7 @@ static enum DI_ERRORTYPE
 
 static void update_vpp_num_cache(struct aml_v4l2_vpp *vpp)
 {
-	vpp->ctx->vpp_cache_num = VPP_FRAME_SIZE - kfifo_len(&vpp->input);
+	atomic_set(&vpp->ctx->vpp_cache_num, VPP_FRAME_SIZE - kfifo_len(&vpp->input));
 }
 
 static enum DI_ERRORTYPE
@@ -639,15 +639,7 @@ void aml_v4l2_vpp_recycle(struct aml_v4l2_vpp *vpp, struct aml_v4l2_buf *aml_vb)
 	eos	= (buf->flag & DI_FLAG_EOS);
 	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 	vf      = vpp_buf->di_buf.vf;
-#if 0
-	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"%s: vf:%px, index:%d, flag(vf:%x di:%x), ts:%lld\n",
-		__func__, vf,
-		vf->index,
-		vf->flag,
-		buf->flag,
-		vf->timestamp);
-#endif
+
 	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", aml_vb->ambuf->index);
 
 	if (!eos && !bypass) {
@@ -1219,8 +1211,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 	if (vpp->in_num[INPUT_PORT] == 2)
 		vf->type |= VIDTYPE_V4L_EOS;
 #endif
-
-	in_buf->di_buf.vf = vf;
+	in_buf->di_buf.vf = &in_buf->vf;
 	in_buf->di_buf.flag = 0;
 	if (vf->type & VIDTYPE_V4L_EOS) {
 		u32 dw_mode = VDEC_DW_NO_AFBC;
@@ -1259,10 +1250,11 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
 			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 	}
+	memcpy(&in_buf->vf, vf, sizeof(struct vframe_s));
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp_push_vframe: idx:%d, vf:%px, idx:%d, type:%x, ts:%lld\n",
-		ambuf->index, vf, vf->index, vf->type, vf->timestamp);
+		"vpp_push_vframe: idx:%d, vf:%px, idx:%d, type:%x, ts:%lld flag:%x\n",
+		ambuf->index, vf, vf->index, vf->type, vf->timestamp, vf->flag);
 
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;

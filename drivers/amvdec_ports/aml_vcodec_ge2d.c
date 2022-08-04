@@ -192,6 +192,12 @@ static int get_input_format(struct vframe_s *vf)
 	return format;
 }
 
+static void update_ge2d_num_cache(struct aml_v4l2_ge2d *ge2d)
+{
+	atomic_set(&ge2d->ctx->ge2d_cache_num,
+		GE2D_FRAME_SIZE - kfifo_len(&ge2d->input));
+}
+
 static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 {
 	struct aml_v4l2_ge2d *ge2d = buf->caller_data;
@@ -217,7 +223,7 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
 		"ge2d_input done: vf:%px, idx: %d, flag(vf:%x ge2d:%x) %s, ts:%lld, "
-		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
+		"in:%d, out:%d, vf:%d, in done:%d, out done:%d, ge2d_cache_num:%d\n",
 		buf->vf,
 		buf->vf->index,
 		buf->vf->flag,
@@ -228,11 +234,13 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 		kfifo_len(&ge2d->output),
 		kfifo_len(&ge2d->frame),
 		kfifo_len(&ge2d->in_done_q),
-		kfifo_len(&ge2d->out_done_q));
+		kfifo_len(&ge2d->out_done_q),
+		atomic_read(&ge2d->ctx->ge2d_cache_num));
 
 	aml_buf_fill(&ge2d->ctx->bm, ambuf, BUF_USER_GE2D);
 
 	kfifo_put(&ge2d->input, buf);
+	update_ge2d_num_cache(ge2d);
 
 	ATRACE_COUNTER("VC_IN_GE2D-1.recycle", ambuf->index);
 
@@ -354,62 +362,6 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 
 static void ge2d_vf_put(void *caller, struct vframe_s *vf)
 {
-	#if 0
-	struct aml_v4l2_ge2d *ge2d = (struct aml_v4l2_ge2d *)caller;
-	struct aml_buf *ambuf = NULL;
-	struct aml_v4l2_buf *aml_vb = NULL;
-	struct aml_v4l2_ge2d_buf *buf = NULL;
-	bool bypass = false;
-	bool eos = false;
-
-	ambuf	= (struct aml_buf *) vf->v4l_mem_handle;
-	aml_vb	= container_of(to_vb2_v4l2_buffer(ambuf->vb), struct aml_v4l2_buf, vb);
-	buf	= (struct aml_v4l2_ge2d_buf *) aml_vb->ge2d_buf_handle;
-	eos	= (buf->flag & GE2D_FLAG_EOS);
-	bypass	= (buf->flag & GE2D_FLAG_BUF_BY_PASS);
-
-	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
-		"%s: vf:%px, index:%d, flag(vf:%x ge2d:%x), ts:%lld\n",
-		__func__, vf,
-		vf->index,
-		vf->flag,
-		buf->flag,
-		vf->timestamp);
-
-	ATRACE_COUNTER("VC_IN_GE2D-0.vf_put", ambuf->index);
-
-	mutex_lock(&ge2d->output_lock);
-	kfifo_put(&ge2d->frame, vf);
-	kfifo_put(&ge2d->output, buf);
-	mutex_unlock(&ge2d->output_lock);
-	up(&ge2d->sem_out);
-	#endif
-}
-
-void aml_v4l2_ge2d_recycle(struct aml_v4l2_ge2d *ge2d, struct aml_v4l2_buf *aml_vb)
-{
-	struct aml_v4l2_ge2d_buf *buf = NULL;
-	struct vframe_s *vf;
-	bool bypass = false;
-	bool eos = false;
-
-	if (aml_vb->ambuf->ge2d_buf == NULL)
-		return;
-
-	buf	= (struct aml_v4l2_ge2d_buf *) aml_vb->ambuf->ge2d_buf;
-	eos	= (buf->flag & GE2D_FLAG_EOS);
-	bypass	= (buf->flag & GE2D_FLAG_BUF_BY_PASS);
-	vf      = buf->vf;
-
-	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
-		"%s: vf:%px, index:%d, flag(vf:%x ge2d:%x), ts:%lld\n",
-		__func__, vf,
-		vf->index,
-		vf->flag,
-		buf->flag,
-		vf->timestamp);
-
-	ATRACE_COUNTER("VC_IN_GE2D-0.vf_put", aml_vb->ambuf->index);
 }
 
 static int aml_v4l2_ge2d_thread(void* param)
@@ -981,6 +933,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 	ATRACE_COUNTER("VC_OUT_GE2D-0.receive", ambuf->index);
 
 	kfifo_put(&ge2d->in_done_q, in_buf);
+	update_ge2d_num_cache(ge2d);
 	up(&ge2d->sem_in);
 
 	return 0;

@@ -83,8 +83,5 @@ int aml_v4l2_ge2d_init(
 
 int aml_v4l2_ge2d_destroy(struct aml_v4l2_ge2d* ge2d);
 
-void aml_v4l2_ge2d_recycle(struct aml_v4l2_ge2d *ge2d,
-					struct aml_v4l2_buf *aml_vb);
-
 
 #endif

@@ -295,9 +295,9 @@ static unsigned int i_only_flag;
 	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
 	bit[24] 0: not output no_display frame, 1: output no_display frame.
 */
-static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0xbfCfb6;//0x3fCfb6; /*0x1f14*/
 
-static unsigned int v4l_error_policy = 0x8117C3B5; //default
+static unsigned int v4l_error_policy = 0x8197C3B5;//0x8117C3B5; //default
 
 /*
 	error_skip_count:
@@ -2364,10 +2364,10 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	}
 
 	if (!((hw->seq_info >> 15) & 0x01) &&
-		ctx->vpp_cache_num > 1) {
+		atomic_read(&ctx->vpp_cache_num) > 1) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s vpp cache: %d full!\n",
-			__func__, ctx->vpp_cache_num);
+			__func__, atomic_read(&ctx->vpp_cache_num));
 
 		return false;
 	}

@@ -1269,7 +1269,7 @@ int av1_alloc_mmu(
 				ambuf->fbc->frame_size,
 				mmu_index_adr);
 
-	av1_print(hw, AV1_DEBUG_BUFMGR, "%s cur fb idx mmu %d dma 0x%lx\n",
+	av1_print(hw, AV1_DEBUG_BUFMGR, "%s afbc_index %d dma 0x%lx\n",
 			__func__, ambuf->fbc->index, ambuf->planes[0].addr);
 
 	ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
@@ -2981,7 +2981,7 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 			hw->afbc_buf_table[ambuf->fbc->index].used = 1;
 		} else {
 			av1_print(hw, 0,
-				"[ERR] fb(afbc idx: %d) 0x%lx is occupied!\n",
+				"[ERR] fb(afbc_index: %d) 0x%lx is occupied!\n",
 				ambuf->fbc->index, hw->m_BUF[i].v4l_ref_buf_addr);
 		}
 	}
@@ -5721,6 +5721,8 @@ static void av1_recycle_dec_resource(void *priv,
 	struct AV1HW_s *hw = (struct AV1HW_s *)priv;
 
 	if (hw->mmu_enable) {
+		av1_print(hw, AV1_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
+			__func__, ambuf->fbc->index, ambuf->fbc->haddr, ambuf->planes[0].addr);
 		hw->afbc_buf_table[ambuf->fbc->index].used = 0;
 		hw->afbc_buf_table[ambuf->fbc->index].fb = 0;
 	}

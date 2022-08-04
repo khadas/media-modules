@@ -49,6 +49,7 @@ struct aml_v4l2_vpp_buf {
 #endif
 	struct aml_v4l2_buf *aml_vb;
 	struct aml_v4l2_vpp_buf *inbuf;
+	struct vframe_s vf;
 };
 
 struct aml_v4l2_vpp {

@@ -3316,8 +3316,12 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	int i = pic->index;
 	struct aml_buf *ambuf = hevc->ambuf;
 
-	if (!ambuf)
+	if (!ambuf) {
+		hevc_print(hevc, 0,
+			"%s ambuf is NULL\n",
+			__func__);
 		return -1;
+	}
 
 	if (hevc->mmu_enable) {
 		hevc->m_BUF[i].header_addr = ambuf->fbc->haddr;
@@ -5487,8 +5491,8 @@ static int get_idle_pos(struct hevc_state_s *hevc)
 		if ((pic->output_mark == 0) &&
 			(pic->referenced == 0) &&
 			(pic->output_ready == 0) &&
-			(pic->height == hevc->pic_h) &&
-			(pic->width == hevc->pic_w) &&
+			(((pic->height == hevc->pic_h) &&
+			(pic->width == hevc->pic_w)) || hevc->resolution_change) &&
 			(pic->vf_ref == 0) && !hevc->m_PIC[i]->cma_alloc_addr)
 			break;
 	}
@@ -5508,12 +5512,19 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 	if (new_pic == NULL) {
 		int pos = get_idle_pos(hevc);
 
-		if (pos < 0)
+		if (pos < 0) {
+			hevc_print(hevc, 0,
+				"No idle pos!\n");
 			return NULL;
+		}
 
 		pic = hevc->m_PIC[pos];
-		if (pic && v4l_alloc_buf(hevc, pic))
+		if (pic && v4l_alloc_buf(hevc, pic)) {
+			hevc_print(hevc, 0,
+			"%s pic %px or v4l_alloc_buf fail!\n",
+			__func__, pic);
 			return NULL;
+		}
 
 		pic->BUF_index	= pos;
 		pic->width	= hevc->pic_w;
@@ -11927,13 +11938,6 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL)
 			continue;
-#if 0
-		hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"%s buf idx %d ref: %d output_mark: %d dma addr: 0x%lx vf_ref %d output_ready %d \n",
-				__func__, i, pic->referenced, pic->output_mark,
-				pic->cma_alloc_addr,
-				pic->vf_ref, pic->output_ready);
-#endif
 		if ((pic->output_mark == 0) &&
 			(pic->referenced == 0) &&
 			(pic->output_ready == 0) &&
@@ -11964,10 +11968,10 @@ static bool is_avaliable_buffer(struct hevc_state_s *hevc)
 	}
 
 	if (is_interlace(hevc) &&
-		ctx->vpp_cache_num > 1) {
+		atomic_read(&ctx->vpp_cache_num) > 1) {
 		hevc_print(hevc, H265_DEBUG_DETAIL,
 			"%s vpp cache: %d full!\n",
-			__func__, ctx->vpp_cache_num);
+			__func__, atomic_read(&ctx->vpp_cache_num));
 
 		return false;
 	}
@@ -12059,6 +12063,30 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 
 	return (new_pic != NULL) ? 1 : 0;
 }
+
+static int count_free_buffer_slot(struct hevc_state_s *hevc)
+{
+	struct PIC_s *pic = NULL;
+	int i;
+	int free_slot = 0;
+
+	for (i = 0; i < hevc->used_buf_num; ++i) {
+		pic = hevc->m_PIC[i];
+		if (pic == NULL)
+			continue;
+		if ((pic->output_mark == 0) &&
+			(pic->referenced == 0) &&
+			(pic->output_ready == 0) &&
+			(pic->vf_ref == 0) &&
+			!pic->cma_alloc_addr) {
+			free_slot++;
+
+		}
+	}
+
+	return free_slot;
+}
+
 
 static int vmh265_stop(struct hevc_state_s *hevc)
 {
@@ -13048,7 +13076,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 	}
 
 	hevc_print(hevc, 0,
-		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), pic_list_init_flag(%d), is_new_pic_available(%d)\n",
+		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), pic_list_init_flag(%d), pic_available(%d)\n",
 		__func__,
 		kfifo_len(&hevc->newframe_q),
 		VF_POOL_SIZE,
@@ -13058,7 +13086,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		hevc->vf_get_count,
 		hevc->vf_put_count,
 		hevc->pic_list_init_flag,
-		is_new_pic_available(hevc));
+		count_free_buffer_slot(hevc));
 
 	dump_pic_list(hevc);
 

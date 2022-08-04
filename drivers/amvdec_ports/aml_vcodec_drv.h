@@ -752,7 +752,8 @@ struct aml_vcodec_ctx {
 	void			*mmu_box_dw;
 	struct aml_buf_mgr_s		bm;
 	void (*vdec_recycle_dec_resource)(void *, struct aml_buf *);
-	int			vpp_cache_num;
+	atomic_t		vpp_cache_num;
+	atomic_t		ge2d_cache_num;
 	int 			cache_input_buffer_num;
 };
 

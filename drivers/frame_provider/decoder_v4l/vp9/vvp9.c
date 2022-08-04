@@ -1705,7 +1705,7 @@ int vp9_alloc_mmu(
 				ambuf->fbc->frame_size,
 				mmu_index_adr);
 
-	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s cur fb idx mmu %d, haddr:%lx, dma 0x%lx\n",
+	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
 			__func__, ambuf->fbc->index, ambuf->fbc->haddr, ambuf->planes[0].addr);
 
 	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
@@ -5141,7 +5141,7 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 		pbi->afbc_buf_table[ambuf->fbc->index].used = 1;
 	} else {
 		vp9_print(pbi, 0,
-			"[ERR] fb(afbc idx: %d) 0x%lx is occupied!\n",
+			"[ERR] fb(afbc_index: %d) 0x%lx is occupied!\n",
 			ambuf->fbc->index, pbi->m_BUF[i].v4l_ref_buf_addr);
 	}
 	if (ambuf->num_planes == 1) {

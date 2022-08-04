@@ -106,6 +106,8 @@ static int fops_vcodec_open(struct file *file)
 	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);
 	INIT_KFIFO(ctx->dmabuff_recycle);
 	INIT_KFIFO(ctx->capture_buffer);
+	atomic_set(&ctx->vpp_cache_num, 0);
+	atomic_set(&ctx->ge2d_cache_num, 0);
 
 	ctx->post_to_upper_done = true;
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
