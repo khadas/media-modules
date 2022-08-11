@@ -9526,7 +9526,6 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
-	int used_count = 0;
 	int free_slot = 0;
 
 	hw->cur_idx = INVALID_IDX;
@@ -9636,7 +9635,6 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 #endif
 
 	ATRACE_COUNTER("av1_free_buff_count", free_count);
-	ATRACE_COUNTER("av1_used_buff_count", used_count);
 
 	return free_count >= hw->run_ready_min_buf_num ? true : false;
 }

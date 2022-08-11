@@ -10101,7 +10101,6 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int i, free_count = 0;
-	int used_count = 0;
 	int free_slot = 0;
 
 	pbi->cur_idx = INVALID_IDX;
@@ -10175,7 +10174,6 @@ static bool is_avaliable_buffer(struct VP9Decoder_s *pbi)
 	}
 
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
 	return (free_count >= pbi->run_ready_min_buf_num) ? true : false;
 }

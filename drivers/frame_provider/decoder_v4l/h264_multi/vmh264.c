@@ -2335,7 +2335,6 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 
 	struct h264_dpb_stru *dpb = &hw->dpb;
 	int free_count = 0;
-	int used_count = 0;
 	int free_slot = 0;
 	int found = 0;
 
@@ -2401,8 +2400,6 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	}
 
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
-
 
 	return found && free_count >= run_ready_min_buf_num ? 1 : 0;
 }

@@ -2440,7 +2440,6 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
-	int used_count = 0;
 	int free_slot = 0;
 
 	/* Ignore the buffer avaliable check until the head parse done. */
@@ -2533,7 +2532,6 @@ static bool is_avaliable_buffer(struct vdec_mpeg4_hw_s *hw)
 	}
 
 	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
-	ATRACE_COUNTER("V_ST_DEC-used_buff_count", used_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }

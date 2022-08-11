@@ -23,18 +23,18 @@
 #include <linux/init.h>
 #include <linux/printk.h>
 #include <linux/fs.h>
-#include <trace/hooks/aml_v4l2.h>
+#include <trace/hooks/v4l2.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-v4l2.h>
 #include "../../amvdec_ports/aml_vcodec_drv.h"
 #include "vendor_hooks.h"
 
-void meta_ptr_update(void *data, struct vb2_v4l2_buffer *vbuf, struct v4l2_buffer *b)
+void v4l2_meta_ptr_update(void *data, struct vb2_v4l2_buffer *vbuf, struct v4l2_buffer *b)
 {
-	vbuf->android_vendor_data2 = (ulong)(((u64)b->reserved2 << 32) | b->reserved);
+	vbuf->android_kabi_reserved1 = (ulong)(((u64)b->reserved2 << 32) | b->reserved);
 }
 
-void fill_fmtdesc(void *data, struct v4l2_fmtdesc *format)
+void v4l2_fill_fmtdesc(void *data, struct v4l2_fmtdesc *format)
 {
 	const char *descr = NULL;
 	u32 flags = V4L2_FMT_FLAG_COMPRESSED;
@@ -54,46 +54,48 @@ void fill_fmtdesc(void *data, struct v4l2_fmtdesc *format)
 	format->flags = format->flags | flags;
 }
 
-void strparm_save(void *data, struct v4l2_streamparm *p, unsigned int mod)
+struct v4l2_streamparm q;
+
+void v4l2_strparm_save(void *data, struct v4l2_streamparm *p)
 {
-	static struct v4l2_streamparm q;
+	memcpy(q.parm.output.reserved, p->parm.output.reserved,
+			sizeof(q.parm.output.reserved));
+	q.parm.output.extendedmode = p->parm.output.extendedmode;
+	q.parm.output.outputmode = p->parm.output.outputmode;
 
-	if (mod == 1) {
-		memcpy(q.parm.output.reserved, p->parm.output.reserved,
-				sizeof(q.parm.output.reserved));
-		q.parm.output.extendedmode = p->parm.output.extendedmode;
-		q.parm.output.outputmode = p->parm.output.outputmode;
+	memcpy(q.parm.capture.reserved, p->parm.capture.reserved,
+			sizeof(q.parm.capture.reserved));
+	q.parm.capture.extendedmode = p->parm.capture.extendedmode;
+	q.parm.capture.capturemode = p->parm.capture.capturemode;
+}
 
-		memcpy(q.parm.capture.reserved, p->parm.capture.reserved,
-				sizeof(q.parm.capture.reserved));
-		q.parm.capture.extendedmode = p->parm.capture.extendedmode;
-		q.parm.capture.capturemode = p->parm.capture.capturemode;
-	} else {
-		memcpy(p->parm.output.reserved, q.parm.output.reserved,
-				sizeof(p->parm.output.reserved));
-		p->parm.output.extendedmode = q.parm.output.extendedmode;
-		p->parm.output.outputmode = q.parm.output.outputmode;
+void v4l2_strparm_restore(void *data, struct v4l2_streamparm *p)
+{
+	memcpy(p->parm.output.reserved, q.parm.output.reserved,
+			sizeof(p->parm.output.reserved));
+	p->parm.output.extendedmode = q.parm.output.extendedmode;
+	p->parm.output.outputmode = q.parm.output.outputmode;
 
-		memcpy(p->parm.capture.reserved, q.parm.capture.reserved,
-				sizeof(p->parm.capture.reserved));
-		p->parm.capture.extendedmode = q.parm.capture.extendedmode;
-		p->parm.capture.capturemode = q.parm.capture.capturemode;
-	}
+	memcpy(p->parm.capture.reserved, q.parm.capture.reserved,
+			sizeof(p->parm.capture.reserved));
+	p->parm.capture.extendedmode = q.parm.capture.extendedmode;
+	p->parm.capture.capturemode = q.parm.capture.capturemode;
 }
 
 void register_media_modules_vendor_hooks()
 {
-	register_trace_android_vh_meta_ptr_update(meta_ptr_update, NULL);
-	register_trace_android_vh_fill_fmtdesc(fill_fmtdesc, NULL);
-	register_trace_android_vh_strparm_save(strparm_save, NULL);
+	register_trace_android_vh_v4l2_meta_ptr_update(v4l2_meta_ptr_update, NULL);
+	register_trace_android_vh_v4l2_fill_fmtdesc(v4l2_fill_fmtdesc, NULL);
+	register_trace_android_vh_v4l2_strparm_save(v4l2_strparm_save, NULL);
+	register_trace_android_vh_v4l2_strparm_restore(v4l2_strparm_restore, NULL);
 }
 EXPORT_SYMBOL(register_media_modules_vendor_hooks);
 
 void unregister_media_modules_vendor_hooks()
 {
-	unregister_trace_android_vh_meta_ptr_update(meta_ptr_update, NULL);
-	unregister_trace_android_vh_fill_fmtdesc(fill_fmtdesc, NULL);
-	unregister_trace_android_vh_strparm_save(strparm_save, NULL);
-
+	unregister_trace_android_vh_v4l2_meta_ptr_update(v4l2_meta_ptr_update, NULL);
+	unregister_trace_android_vh_v4l2_fill_fmtdesc(v4l2_fill_fmtdesc, NULL);
+	unregister_trace_android_vh_v4l2_strparm_save(v4l2_strparm_save, NULL);
+	unregister_trace_android_vh_v4l2_strparm_restore(v4l2_strparm_restore, NULL);
 }
 EXPORT_SYMBOL(unregister_media_modules_vendor_hooks);

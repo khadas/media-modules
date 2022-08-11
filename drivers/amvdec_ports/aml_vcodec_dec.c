@@ -2761,10 +2761,13 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
 	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
 
-	if (vb2_v4l2->android_vendor_data2 && (copy_from_user(buf->meta_data,
-		(void *)vb2_v4l2->android_vendor_data2, META_DATA_SIZE + 4))) {
+	if (vb2_v4l2->android_kabi_reserved1 &&
+		(copy_from_user(buf->meta_data,
+		(void *)vb2_v4l2->android_kabi_reserved1,
+		META_DATA_SIZE + 4))) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"%s:copy meta data error. ptr: %lx\n", __func__, vb2_v4l2->android_vendor_data2);
+			"%s:copy meta data error. ptr: %lx\n", __func__,
+			vb2_v4l2->android_kabi_reserved1);
 	}
 
 	return 0;
