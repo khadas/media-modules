@@ -557,6 +557,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_FORCE_EXIT       8
 #define DEC_RESULT_TIMEOUT			9
 #define DEC_RESULT_NEED_MORE_BUFFER 10
+#define DEC_RESULT_ERROR_DATA      	12
 
 #define UCODE_IP_ONLY 2
 #define UCODE_IP_ONLY_PARAM 1
@@ -8936,7 +8937,28 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		u32 param2 = READ_VREG(AV_SCRATCH_2);
 		u32 param3 = READ_VREG(AV_SCRATCH_6);
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
+		int mb_width = 0;
+		int mb_total = 0;
+		int mb_height = 0;
+		int frame_width = 0;
+		int frame_height = 0;
+		mb_width = param1 & 0xff;
+		mb_total = (param1 >> 8) & 0xffff;
+		if (!mb_width && mb_total) /*for 4k2k*/
+			mb_width = 256;
+		if (mb_width)
+			mb_height = mb_total / mb_width;
+		frame_width = mb_width << 4;
+		frame_height = mb_height << 4;
 
+		if (is_oversize(frame_width, frame_height) ||
+			(frame_width == 0) ||
+			(frame_height == 0)) {
+			pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
+			hw->dec_result = DEC_RESULT_ERROR_DATA;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
 		if (ctx->param_sets_from_ucode) {
 			if (!v4l_res_change(hw, param1, param2, param3, param4)) {
 				if (!hw->v4l_params_parsed) {
@@ -9242,6 +9264,18 @@ result_done:
 			start_process_time(hw);
 		}
 		return;
+	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s dec_result %d %x %x %x\n",
+			__func__,
+			hw->dec_result,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_RP));
+		mutex_lock(&hw->chunks_mutex);
+		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		hw->chunk = NULL;
+		mutex_unlock(&hw->chunks_mutex);
 	}
 
 	if (p_H264_Dpb->mVideo.dec_picture) {
