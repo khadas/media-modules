@@ -2397,12 +2397,6 @@ static int mpeg4_recycle_frame_buffer(struct vdec_mpeg4_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->buf_num; ++i) {
-		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i,hw->ref_use[i],
-				hw->pic[i].cma_alloc_addr,
-				hw->vfbuf_use[i]);
-
 		if ((hw->vfbuf_use[i]) &&
 			!(hw->ref_use[i]) &&
 			hw->pic[i].v4l_ref_buf_addr){

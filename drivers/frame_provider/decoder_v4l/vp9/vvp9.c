@@ -67,6 +67,7 @@
 #include "../../decoder/utils/vdec_v4l2_buffer_ops.h"
 #include "../../decoder/utils/vdec_feature.h"
 #include "../../decoder/utils/aml_buf_helper.h"
+#include "../../decoder/utils/vdec_ge2d_utils.h"
 #include "vvp9.h"
 
 #define MEM_NAME "codec_vp9"
@@ -594,6 +595,9 @@ struct PIC_BUFFER_CONFIG_s {
 
 	/* vdec sync. */
 	struct dma_fence *fence;
+
+	int ge2d_copy_frame;
+	int frame_to_show;
 
 	/* hdr10 plus data */
 	u32 hdr10p_data_size;
@@ -1226,10 +1230,10 @@ struct VP9Decoder_s {
 	unsigned *rdma_adr;
 	struct trace_decoder_name trace;
 	int existing_buff_index;
-	u32 check_existing_buff_flag;
 	u32 show_fake_frame;
 	bool high_bandwidth_flag;
 	int cur_idx;
+	struct vdec_ge2d *ge2d;
 	struct afbc_buf  afbc_buf_table[BUF_FBC_NUM_MAX];
 };
 
@@ -1341,7 +1345,8 @@ static int setup_frame_size(
 	if (is_oversize(width, height)) {
 		pbi->error_frame_width = width;
 		pbi->error_frame_height = height;
-		vp9_print(pbi, 0, "%s, Error: Invalid frame size\n", __func__);
+		vp9_print(pbi, 0, "%s, Error: Invalid frame size, width %d, height %d\n",
+			__func__, width, height);
 		return -1;
 	}
 	pbi->error_frame_width = 0;
@@ -1442,7 +1447,8 @@ static int setup_frame_size_with_refs(
 	if (is_oversize(width, height)) {
 		pbi->error_frame_width = width;
 		pbi->error_frame_height = height;
-		vp9_print(pbi, 0, "%s, Error: Invalid frame size\n", __func__);
+		vp9_print(pbi, 0, "%s, Error: Invalid frame size, width: %d height: %d\n",
+			__func__, width, height);
 		return -1;
 	}
 	pbi->error_frame_width = 0;
@@ -2587,34 +2593,14 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		if (!pbi->show_fake_frame) {
 			ref_cnt_fb(frame_bufs, &cm->new_fb_idx, frame_to_show);
 		} else {
-			struct aml_buf *dstbuf =
-				(struct aml_buf *)pbi->m_BUF[cm->new_fb_idx].v4l_ref_buf_addr;
-			struct vb2_buffer *dst_vb2_buf = dstbuf->vb;
-			struct aml_buf *srcbuf =
-				(struct aml_buf *)pbi->m_BUF[frame_to_show].v4l_ref_buf_addr;
-			struct vb2_buffer *src_vb2_buf = srcbuf->vb;
 			int index, BUF_index;
 			ulong cma_alloc_addr;
-			unlock_buffer_pool(pool, flags);
-			for (i = 0 ; i < src_vb2_buf->num_planes; i++) {
-				if (i == 0) {
-					//Y
-					if (src_vb2_buf->num_planes == 1) {
-						memcpy((void *)vb2_plane_vaddr(dst_vb2_buf, 0),
-							(void *)vb2_plane_vaddr(src_vb2_buf, 0),
-							srcbuf->planes[0].length);
-					}
-				} else {
-					//UV
-					if (src_vb2_buf->num_planes == 2) {
-						memcpy((void *)vb2_plane_vaddr(dst_vb2_buf, 1),
-							(void *)vb2_plane_vaddr(src_vb2_buf, 1),
-							srcbuf->planes[1].length);
-					}
-				}
-			}
+			struct canvas_config_s canvas_config[2];
+
 			tmp_pic = &cm->buffer_pool->frame_bufs[cm->new_fb_idx].buf;
 
+			canvas_config[0] = tmp_pic->canvas_config[0];
+			canvas_config[1] = tmp_pic->canvas_config[1];
 			index = tmp_pic->index;
 			BUF_index = tmp_pic->BUF_index;
 			cma_alloc_addr = tmp_pic->cma_alloc_addr;
@@ -2626,15 +2612,19 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 				cm->new_fb_idx,
 				tmp_pic->cma_alloc_addr);
 
+			unlock_buffer_pool(pool, flags);
 			memcpy((void *)tmp_pic, (void *)src_pic,
 				sizeof(struct PIC_BUFFER_CONFIG_s));
 			lock_buffer_pool(pool, flags);
 
+			tmp_pic->canvas_config[0] = canvas_config[0];
+			tmp_pic->canvas_config[1] = canvas_config[1];
 			tmp_pic->index = index;
 			tmp_pic->BUF_index = BUF_index;
 			tmp_pic->cma_alloc_addr = cma_alloc_addr;
 			tmp_pic->vf_ref = 0;
-
+			tmp_pic->frame_to_show = frame_to_show;
+			tmp_pic->ge2d_copy_frame = 1;
 			pbi->show_fake_frame = 0;
 		}
 
@@ -5139,11 +5129,11 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	if (!pbi->afbc_buf_table[ambuf->fbc->index].used) {
 		pbi->afbc_buf_table[ambuf->fbc->index].fb = pbi->m_BUF[i].v4l_ref_buf_addr;
 		pbi->afbc_buf_table[ambuf->fbc->index].used = 1;
-	} else {
-		vp9_print(pbi, 0,
-			"[ERR] fb(afbc_index: %d) 0x%lx is occupied!\n",
-			ambuf->fbc->index, pbi->m_BUF[i].v4l_ref_buf_addr);
+		vp9_print(pbi, VP9_DEBUG_BUFMGR,
+				"fb(afbc_index: %d) fb: 0x%lx, i: %d!\n",
+				ambuf->fbc->index, pbi->m_BUF[i].v4l_ref_buf_addr, i);
 	}
+
 	if (ambuf->num_planes == 1) {
 		pbi->m_BUF[i].start_adr = ambuf->planes[0].addr;
 		pbi->m_BUF[i].luma_size = ambuf->planes[0].offset;
@@ -7031,20 +7021,6 @@ static void vp9_recycle_dec_resource(void *priv,
 		vf->hdr10p_data_size = 0;
 	}
 
-	if (index < pbi->used_buf_num) {
-		vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
-			__func__, ambuf->fbc->index, ambuf->fbc->haddr, ambuf->planes[0].addr);
-		pbi->afbc_buf_table[ambuf->fbc->index].used = 0;
-		pbi->afbc_buf_table[ambuf->fbc->index].fb = 0;
-	}
-
-	if (pbi->check_existing_buff_flag &&
-		pbi->existing_buff_index == index) {
-		pbi->check_existing_buff_flag = 0;
-		vp9_print(pbi, VP9_DEBUG_BUFMGR,
-			"show_exiting_frame(index %d) back!\n", index);
-	}
-
 	vp9_print(pbi, VP9_DEBUG_BUFMGR,
 		"%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
 		__func__, index, vf->type,
@@ -7487,6 +7463,45 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			struct vdec_info tmp4x;
 
 			inc_vf_ref(pbi, pic_config->index);
+
+			if (pic_config->ge2d_copy_frame)	{
+				struct PIC_BUFFER_CONFIG_s *dst_pic = pic_config;
+				struct PIC_BUFFER_CONFIG_s *src_pic =
+					&pbi->common.buffer_pool->frame_bufs[pic_config->frame_to_show].buf;
+				struct vdec_ge2d_info ge2d_info;
+
+				ge2d_info.dst_vf = vf;
+				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = 0;
+				if (dst_pic->double_write_mode) {
+#ifdef MULTI_INSTANCE_SUPPORT
+					if (pbi->m_ins_flag) {
+						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = -1;
+						ge2d_info.src_canvas0_config[0] =
+							src_pic->canvas_config[0];
+						ge2d_info.src_canvas0_config[1] =
+							src_pic->canvas_config[1];
+						ge2d_info.src_canvas1_config[0] =
+							src_pic->canvas_config[0];
+						ge2d_info.src_canvas1_config[1] =
+							src_pic->canvas_config[1];
+					} else
+#endif
+					{
+						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr =
+							spec2canvas(src_pic);
+					}
+				}
+
+				if (!pbi->ge2d) {
+					int mode = nv_order == VIDTYPE_VIU_NV21 ? GE2D_MODE_CONVERT_NV21 : GE2D_MODE_CONVERT_NV12;
+					mode |= GE2D_MODE_CONVERT_LE;
+					vdec_ge2d_init(&pbi->ge2d, mode);
+				}
+				vdec_ge2d_copy_data(pbi->ge2d, &ge2d_info);
+
+				pic_config->ge2d_copy_frame = 0;
+			}
+
 			decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
@@ -8432,6 +8447,7 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 		pbi->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
+	ps->bitdepth = pbi->param.p.bit_depth;
 
 	return 0;
 }
@@ -10052,11 +10068,6 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 	int i;
 
 	for (i = 0; i < pbi->used_buf_num; ++i) {
-		vp9_print(pbi, VP9_DEBUG_BUFMGR,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i,frame_bufs[i].ref_count,
-				frame_bufs[i].buf.cma_alloc_addr,
-				frame_bufs[i].buf.vf_ref);
 		if ((frame_bufs[i].ref_count == 0) &&
 			frame_bufs[i].buf.cma_alloc_addr &&
 			&frame_bufs[i] != cm->cur_frame) {
@@ -10073,8 +10084,6 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 			aml_buf_put_ref(&ctx->bm, ambuf);
 			if (!frame_bufs[i].buf.vf_ref) {
 				aml_buf_put_ref(&ctx->bm, ambuf);
-				pbi->afbc_buf_table[ambuf->fbc->index].fb = 0;
-				pbi->afbc_buf_table[ambuf->fbc->index].used = 0;
 			}
 
 			lock_buffer_pool(cm->buffer_pool, flags);
@@ -10629,7 +10638,6 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 	pbi->show_frame_num	= 0;
 	pbi->postproc_done	= 0;
 	pbi->process_busy	= 0;
-	pbi->check_existing_buff_flag = 0;
 	pbi->show_fake_frame    = 0;
 	pbi->eos		= false;
 	pbi->ambuf		= NULL;
@@ -10664,6 +10672,11 @@ static void reset(struct vdec_s *vdec)
 	atomic_set(&pbi->vf_pre_count, 0);
 	atomic_set(&pbi->vf_get_count, 0);
 	atomic_set(&pbi->vf_put_count, 0);
+
+	if (pbi->ge2d) {
+		vdec_ge2d_destroy(pbi->ge2d);
+		pbi->ge2d = NULL;
+	}
 
 	vp9_print(pbi, 0, "%s\r\n", __func__);
 }
@@ -11154,7 +11167,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->first_sc_checked = 0;
 	pbi->fatal_error = 0;
 	pbi->show_frame_num = 0;
-	pbi->check_existing_buff_flag = 0;
 
 	if (debug) {
 		pr_info("===VP9 decoder mem resource 0x%lx size 0x%x\n",
@@ -11227,6 +11239,11 @@ static int ammvdec_vp9_remove(struct platform_device *pdev)
 		pr_info("amvdec_vp9_remove\n");
 
 	vmvp9_stop(pbi);
+
+	if (pbi->ge2d) {
+		vdec_ge2d_destroy(pbi->ge2d);
+		pbi->ge2d = NULL;
+	}
 
 #ifdef SUPPORT_FB_DECODING
 	vdec_core_release(hw_to_vdec(pbi), CORE_MASK_VDEC_1 | CORE_MASK_HEVC

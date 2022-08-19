@@ -3297,6 +3297,13 @@ static struct aml_buf *index_to_afbc_ambuf(struct hevc_state_s *hevc, int index)
 		}
 	}
 
+	if (i >= BUF_FBC_NUM_MAX) {
+		hevc_print(hevc, 0, "[ERR]%s afbc_index: %d i: %d fb: %lx\n",
+		__func__, index, i, hevc->m_BUF[index].v4l_ref_buf_addr);
+
+		return NULL;
+	}
+
 	return (struct aml_buf *)hevc->afbc_buf_table[i].fb;
 }
 #if 0
@@ -3334,10 +3341,8 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	if (!hevc->afbc_buf_table[ambuf->fbc->index].used) {
 		hevc->afbc_buf_table[ambuf->fbc->index].fb = hevc->m_BUF[i].v4l_ref_buf_addr;
 		hevc->afbc_buf_table[ambuf->fbc->index].used = 1;
-	} else {
-		hevc_print(hevc, 0,
-			"[ERR] fb(afbc idx: %d) 0x%lx is occupied!\n",
-			ambuf->fbc->index, hevc->m_BUF[i].v4l_ref_buf_addr);
+	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS, "%s afbc_index %d, i: %d, fb 0x%lx\n",
+			__func__, ambuf->fbc->index, i, hevc->afbc_buf_table[ambuf->fbc->index].fb);
 	}
 	if (ambuf->num_planes == 1) {
 		hevc->m_BUF[i].start_adr = ambuf->planes[0].addr;
@@ -8019,9 +8024,6 @@ static void h265_recycle_dec_resource(void *priv,
 		vf->hdr10p_data_buf = NULL;
 		vf->hdr10p_data_size = 0;
 	}
-
-	hevc->afbc_buf_table[ambuf->fbc->index].used = 0;
-	hevc->afbc_buf_table[ambuf->fbc->index].fb = 0;
 	spin_unlock_irqrestore(&lock, flags);
 
 	return;
@@ -9525,6 +9527,7 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	ps->field 		= hevc->interlace_flag ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
 	ps->dpb_frames		= v4l_parser_work_pic_num(hevc);
 	ps->dpb_margin		= get_dynamic_buf_num_margin(hevc);
+	ps->bitdepth		= (hevc->param.p.bit_depth & 0xf) + 8;
 
 	return 0;
 }
@@ -11840,11 +11843,6 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL)
 			continue;
-		hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i, pic->referenced,
-				pic->cma_alloc_addr,
-				pic->vf_ref);
 		if ((pic->referenced == 0) &&
 			(pic->vf_ref) &&
 			pic->cma_alloc_addr) {

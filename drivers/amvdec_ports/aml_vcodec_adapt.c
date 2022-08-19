@@ -376,7 +376,7 @@ void dump(const char* path, const char *data, unsigned int size)
 	struct file *fp;
 
 	fp = media_open(path,
-			O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
+			O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0666);
 	if (!IS_ERR(fp)) {
 		media_write(fp, data, size, 0);
 		media_close(fp, NULL);

@@ -15,6 +15,7 @@ ${MODULE_NAME}-objs	+=	vdec_sync.o
 ${MODULE_NAME}-objs	+=	vdec_power_ctrl.o
 ${MODULE_NAME}-objs	+=	vdec_canvas_utils.o
 ${MODULE_NAME}-objs	+=	vdec_feature.o
+${MODULE_NAME}-objs	+=	vdec_ge2d_utils.o
 
 PR_FMT = $(subst amlogic-,,$(MODULE_NAME))
 PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"

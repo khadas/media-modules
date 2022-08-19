@@ -1263,6 +1263,7 @@ static void set_param_ps_info(struct vdec_av1_inst *inst,
 	pic->vpp_margin		= ps->dpb_margin;
 	dec->dpb_sz		= ps->dpb_size;
 	pic->field		= ps->field;
+	pic->bitdepth		= ps->bitdepth;
 
 	inst->parms.ps 	= *ps;
 	inst->parms.parms_status |=

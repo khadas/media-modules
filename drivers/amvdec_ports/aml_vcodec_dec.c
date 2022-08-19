@@ -71,6 +71,8 @@
 #define AML_V4L2_SET_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
 #define AML_V4L2_GET_FILMGRAIN_INFO (V4L2_CID_USER_AMLOGIC_BASE + 3)
 #define AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE (V4L2_CID_USER_AMLOGIC_BASE + 4)
+/*V4L2_CID_USER_AMLOGIC_BASE + 5 ocuppied*/
+#define AML_V4L2_GET_BITDEPTH (V4L2_CID_USER_AMLOGIC_BASE + 6)
 
 
 #define WORK_ITEMS_MAX (32)
@@ -692,7 +694,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
-		ctx->ada_ctx->frm_name, ambuf->state, vf->index_disp,
+		ctx->ada_ctx->frm_name, ambuf->state, ctx->out_buff_cnt++,
 		vb2_buf->index, vb2_buf,
 		vf->index & 0xff, vf,
 		vf->timestamp,
@@ -3151,7 +3153,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"dma addr: %lx Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 			ctx->ada_ctx->frm_name,
 			ambuf->state,
-			vf ? vf->index_disp : -1,
+			ctx->in_buff_cnt++,
 			vb->index, vb,
 			vf ? vf->index & 0xff : -1, vf,
 			vf ? vf->timestamp : 0,
@@ -3456,6 +3458,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		ctx->dst_queue_streaming = false;
 		atomic_set(&ctx->vpp_cache_num, 0);
 		atomic_set(&ctx->ge2d_cache_num, 0);
+		ctx->out_buff_cnt = 0;
+		ctx->in_buff_cnt = 0;
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
@@ -3584,6 +3588,9 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	case AML_V4L2_GET_FILMGRAIN_INFO:
 		ctrl->val = ctx->film_grain_present;
 		break;
+	case AML_V4L2_GET_BITDEPTH:
+		ctrl->val = ctx->picinfo.bitdepth;
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -3678,6 +3685,18 @@ static const struct v4l2_ctrl_config ctrl_gt_filmgrain_info = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_gt_bit_depth = {
+	.name	= "bitdepth",
+	.id	= AML_V4L2_GET_BITDEPTH,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 128,
+	.step	= 1,
+	.def	= 0,
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -3729,6 +3748,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_filmgrain_info, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_bit_depth, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

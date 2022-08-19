@@ -2979,10 +2979,9 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 		if (!hw->afbc_buf_table[ambuf->fbc->index].used) {
 			hw->afbc_buf_table[ambuf->fbc->index].fb = hw->m_BUF[i].v4l_ref_buf_addr;
 			hw->afbc_buf_table[ambuf->fbc->index].used = 1;
-		} else {
-			av1_print(hw, 0,
-				"[ERR] fb(afbc_index: %d) 0x%lx is occupied!\n",
-				ambuf->fbc->index, hw->m_BUF[i].v4l_ref_buf_addr);
+			av1_print(hw, AV1_DEBUG_BUFMGR,
+				"fb(afbc_index: %d) fb: 0x%lx, i: %d!\n",
+				ambuf->fbc->index, hw->m_BUF[i].v4l_ref_buf_addr, i);
 		}
 	}
 
@@ -5718,16 +5717,6 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 static void av1_recycle_dec_resource(void *priv,
 						struct aml_buf *ambuf)
 {
-	struct AV1HW_s *hw = (struct AV1HW_s *)priv;
-
-	if (hw->mmu_enable) {
-		av1_print(hw, AV1_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
-			__func__, ambuf->fbc->index, ambuf->fbc->haddr, ambuf->planes[0].addr);
-		hw->afbc_buf_table[ambuf->fbc->index].used = 0;
-		hw->afbc_buf_table[ambuf->fbc->index].fb = 0;
-	}
-
-	return;
 }
 
 static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
@@ -7108,6 +7097,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		} else {
 			ret = 0;
 		}
+
 		if (av1_frame_is_inter(&hw->common)) {
 			//if ((pbi->common.frame_type != KEY_FRAME) && (!pbi->common.intra_only)) {
 #ifdef DUAL_DECODE
@@ -7719,6 +7709,7 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 		hw->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
+	ps->bitdepth = hw->aom_param.p.bit_depth;
 
 	return 0;
 }
@@ -7868,6 +7859,22 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	if (hw->eos)
 		return IRQ_HANDLED;
 	hw->wait_buf = 0;
+
+	if (vdec_secure(hw_to_vdec(hw)) &&
+		vdec_frame_based(hw_to_vdec(hw)) &&
+		(dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE)) {
+		if (READ_VREG(HEVC_SHIFT_BYTE_COUNT) >= hw->chunk->size) {
+			av1_print(hw, 0,
+			"chunk size: %x, shitfbyte: %x, now is padding!\n",
+			hw->chunk->size, READ_VREG(HEVC_SHIFT_BYTE_COUNT));
+			hw->dec_result = DEC_RESULT_DONE;
+			vdec_schedule_work(&hw->work);
+			hw->process_busy = 0;
+			return IRQ_HANDLED;
+		}
+
+	}
+
 	if ((dec_status == AOM_NAL_DECODE_DONE) ||
 			(dec_status == AOM_SEARCH_BUFEMPTY) ||
 			(dec_status == AOM_DECODE_BUFEMPTY)
@@ -9476,12 +9483,6 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 	int i;
 
 	for (i = 0; i < hw->used_buf_num; ++i) {
-		av1_print(hw, AV1_DEBUG_BUFMGR,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d show_frame %d showable_frame %d\n",
-				__func__, i,frame_bufs[i].ref_count,
-				frame_bufs[i].buf.cma_alloc_addr,
-				frame_bufs[i].buf.vf_ref, frame_bufs[i].show_frame,
-				frame_bufs[i].showable_frame);
 		if ((frame_bufs[i].ref_count == 0) &&
 			frame_bufs[i].buf.cma_alloc_addr &&
 			&frame_bufs[i] != cm->cur_frame) {
@@ -9498,8 +9499,6 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 			aml_buf_put_ref(&ctx->bm, ambuf);
 			if (!frame_bufs[i].buf.vf_ref) {
 				aml_buf_put_ref(&ctx->bm, ambuf);
-				hw->afbc_buf_table[ambuf->fbc->index].fb = 0;
-				hw->afbc_buf_table[ambuf->fbc->index].used = 0;
 			}
 
 			lock_buffer_pool(hw->common.buffer_pool, flags);
@@ -9609,30 +9608,6 @@ static bool is_avaliable_buffer(struct AV1HW_s *hw)
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hw->ambuf, hw->ambuf->index);
 	}
-#if 0
-	for (i = 0; i < hw->used_buf_num; ++i) {
-		if ((frame_bufs[i].ref_count == 0) &&
-			(frame_bufs[i].buf.vf_ref == 0) &&
-			(frame_bufs[i].buf.index >= 0) &&
-			frame_bufs[i].buf.cma_alloc_addr) {
-			free_count++;
-		} else if (!frame_bufs[i].buf.cma_alloc_addr){
-			if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
-				hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-				if (!hw->ambuf) {
-					return false;
-				}
-				hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw);
-				hw->ambuf->state = FB_ST_DECODER;
-			}
-		} else if (frame_bufs[i].buf.cma_alloc_addr) {
-			used_count++;
-		}
-	}
-
-	if (hw->ambuf)
-		free_count++;
-#endif
 
 	ATRACE_COUNTER("av1_free_buff_count", free_count);
 

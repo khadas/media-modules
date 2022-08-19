@@ -1740,10 +1740,10 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 			hw->afbc_buf_table[hw->ambuf->fbc->index].fb =
 				bs->cma_alloc_addr;
 			hw->afbc_buf_table[hw->ambuf->fbc->index].used = 1;
-		} else {
-			dpb_print(DECODE_ID(hw), 0,
-				"[ERR] fb(afbc idx: %d) 0x%lx is occupied!\n",
-				hw->ambuf->fbc->index, bs->cma_alloc_addr);
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
+				"fb(afbc_index: %d) fb: 0x%lx\n",
+				hw->ambuf->fbc->index,
+				bs->cma_alloc_addr);
 		}
 	}
 
@@ -4289,11 +4289,6 @@ static void h264_recycle_dec_resource(void *priv,
 	if (hw->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);
 		vf->fence = NULL;
-	}
-
-	if (hw->mmu_enable) {
-		hw->afbc_buf_table[ambuf->fbc->index].used = 0;
-		hw->afbc_buf_table[ambuf->fbc->index].fb = 0;
 	}
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,

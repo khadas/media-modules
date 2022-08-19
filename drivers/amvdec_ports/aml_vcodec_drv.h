@@ -271,6 +271,7 @@ struct vdec_pic_info {
 	u32 dpb_frames;
 	u32 dpb_margin;
 	u32 vpp_margin;
+	u32 bitdepth;
 };
 
 /**
@@ -344,7 +345,8 @@ struct aml_vdec_ps_infos {
 	u32 dpb_frames;
 	u32 dpb_margin;
 	u32 field;
-	u32 data[3];
+	u32 bitdepth;
+	u32 data[2];
 };
 
 struct aml_vdec_cnt_infos {
@@ -755,6 +757,8 @@ struct aml_vcodec_ctx {
 	atomic_t		vpp_cache_num;
 	atomic_t		ge2d_cache_num;
 	int 			cache_input_buffer_num;
+	int			in_buff_cnt;
+	int			out_buff_cnt;
 };
 
 /**
