@@ -1337,7 +1337,7 @@ long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold) {
 	return 0;
 }
 
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts) {
+long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adjust_pts) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1350,13 +1350,13 @@ long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts) {
 		return -1;
 	}
 
-	pInstance->mPtsAdjust = adujstpts;
+	pInstance->mPtsAdjust = adjust_pts;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
 }
 
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
+long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adjust_pts) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1369,7 +1369,7 @@ long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts) {
 		return -1;
 	}
 
-	*adujstpts = pInstance->mPtsAdjust;
+	*adjust_pts = pInstance->mPtsAdjust;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1692,7 +1692,7 @@ long mediasync_ins_get_avref(s32 sSyncInsId, int *ref) {
 	return 0;
 }
 
-long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1711,7 +1711,7 @@ long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) 
 	return 0;
 }
 
-long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1731,7 +1731,7 @@ long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info)
 	return 0;
 }
 
-long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1751,7 +1751,7 @@ long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) 
 
 }
 
-long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1771,7 +1771,7 @@ long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info)
 	return 0;
 }
 
-long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1790,7 +1790,7 @@ long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo i
 	return 0;
 }
 
-long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1810,7 +1810,7 @@ long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* 
 	return 0;
 }
 
-long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -1830,7 +1830,7 @@ long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo i
 
 }
 
-long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = sSyncInsId;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)

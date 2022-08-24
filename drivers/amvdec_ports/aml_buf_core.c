@@ -246,8 +246,8 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		goto out;
 	}
 
-	if (bc->externel_process)
-		bc->externel_process(bc, entry);
+	if (bc->external_process)
+		bc->external_process(bc, entry);
 
 	if (!atomic_dec_return(&entry->ref)) {
 		buf_core_free_que(bc, entry);
@@ -279,7 +279,7 @@ static bool buf_core_empty(struct buf_core_mgr_s *bc)
 static void buf_core_reset(struct buf_core_mgr_s *bc)
 {
 	struct buf_core_entry *entry, *tmp;
-	struct hlist_node *htmp;
+	struct hlist_node *h_tmp;
 	ulong bucket;
 
 	mutex_lock(&bc->mutex);
@@ -295,7 +295,7 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		list_del(&entry->node);
 	}
 
-	hash_for_each_safe(bc->buf_table, bucket, htmp, entry, hnode) {
+	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
 		entry->user = BUF_USER_MAX;
 		entry->state = BUF_STATE_INIT;
 		atomic_set(&entry->ref, 1);
@@ -311,16 +311,16 @@ static void buf_core_destroy(struct kref *kref)
 	struct buf_core_mgr_s *bc =
 		container_of(kref, struct buf_core_mgr_s, core_ref);
 	struct buf_core_entry *entry, *tmp;
-	struct hlist_node *htmp;
+	struct hlist_node *h_tmp;
 	ulong bucket;
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		list_del(&entry->node);
 	}
 
-	hash_for_each_safe(bc->buf_table, bucket, htmp, entry, hnode) {
+	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
 		entry->state = BUF_STATE_ERR;
-		hash_del(&entry->hnode);
+		hash_del(&entry->h_node);
 		bc->mem_ops.free(bc, entry);
 	}
 
@@ -339,7 +339,7 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
 
 	mutex_lock(&bc->mutex);
 
-	hash_for_each_possible_safe(bc->buf_table, entry, tmp, hnode, key) {
+	hash_for_each_possible_safe(bc->buf_table, entry, tmp, h_node, key) {
 		if (key == entry->key) {
 			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 				"reuse buffer, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -374,7 +374,7 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
 	entry->state	= BUF_STATE_INIT;
 	atomic_set(&entry->ref, 1);
 
-	hash_add(bc->buf_table, &entry->hnode, key);
+	hash_add(bc->buf_table, &entry->h_node, key);
 
 	bc->state	= BM_STATE_ACTIVE;
 	bc->buf_num++;
@@ -402,7 +402,7 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 
 	mutex_lock(&bc->mutex);
 
-	hash_for_each_possible(bc->buf_table, entry, hnode, key) {
+	hash_for_each_possible(bc->buf_table, entry, h_node, key) {
 		if (key == entry->key) {
 			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 				"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -426,7 +426,7 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 void buf_core_walk(struct buf_core_mgr_s *bc)
 {
 	struct buf_core_entry *entry, *tmp;
-	struct hlist_node *htmp;
+	struct hlist_node *h_tmp;
 	ulong bucket;
 
 	mutex_lock(&bc->mutex);
@@ -444,8 +444,8 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 			bc->free_num);
 	}
 
-	pr_info("\nHase table elements:\n");
-	hash_for_each_safe(bc->buf_table, bucket, htmp, entry, hnode) {
+	pr_info("\nHash table elements:\n");
+	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
 		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO,
 			"--> key:%lx, user:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 			entry->key,

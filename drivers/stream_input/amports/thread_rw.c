@@ -289,13 +289,13 @@ static void do_write_work(struct work_struct *work)
 }
 
 static int alloc_task_buffers_inlock(struct threadrw_write_task *task,
-		int new_bubffers,
+		int new_buffers,
 		int block_size)
 {
 	struct threadrw_buf *rwbuf;
 	int i;
 	int used_codec_mm = task->manual_write ? 0 : 1;
-	int new_num = new_bubffers;
+	int new_num = new_buffers;
 	int mm_slot = -1;
 	int start_idx = task->bufs_num;
 	int total_mm = 0;
@@ -530,7 +530,7 @@ int threadrw_passed_len(struct stream_buf_s *stbuf)
 
 }
 /*
- *all data writed.;
+ *all data wrote.;
  */
 int threadrw_dataoffset(struct stream_buf_s *stbuf)
 {

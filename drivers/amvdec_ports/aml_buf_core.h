@@ -87,7 +87,7 @@ enum buf_core_user {
  * @key		: Record the actual physical address associated with vb.
  * @ref		: Decode buffer's reference count status.
  * @node	: The position of the decoded buffer entry.
- * @hnode	: The node of hash list used for query buffer.
+ * @h_node	: The node of hash list used for query buffer.
  * @state	: The state of the buffer to be used.
  * @user	: Indicates the user that holds the current entry.
  * @vb2		: The handle of v4l2 video buffer2.
@@ -97,7 +97,7 @@ struct buf_core_entry {
 	ulong			key;
 	atomic_t		ref;
 	struct list_head	node;
-	struct hlist_node	hnode;
+	struct hlist_node	h_node;
 	enum buf_core_state	state;
 	enum buf_core_user	user;
 	void			*vb2;
@@ -148,7 +148,7 @@ struct buf_core_mem_ops {
  * @core_ref	: Reference count of the buffer core manager context.
  * @free_num	: The number of free buffers available.
  * @free_que	: Queue for storing free buffers.
- * @buf_num	: Record the serial number of buffre attached to the buffer manager.
+ * @buf_num	: Record the serial number of buffer attached to the buffer manager.
  * @buf_table	: Used to store the attached buffer.
  * @config	: Interface Settings parameters to buffer manager.
  * @attach	: The interface is used to attach buffer to buffer manager.
@@ -180,7 +180,7 @@ struct buf_core_mgr_s {
 	void	(*prepare)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*input)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void	(*output)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
-	void    (*externel_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
+	void    (*external_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;
