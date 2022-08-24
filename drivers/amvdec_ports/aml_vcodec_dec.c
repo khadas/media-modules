@@ -731,7 +731,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 		snprintf(file_name, 64, "%s/dec_dump_%ux%u.raw", dump_path, vf->width, vf->height);
 
 		fp = media_open(file_name,
-				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0600);
+				O_CREAT | O_RDWR | O_LARGEFILE | O_APPEND, 0666);
 
 		if (!IS_ERR(fp)) {
 			struct vb2_buffer *vb = vb2_buf;

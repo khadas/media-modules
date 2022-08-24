@@ -3100,6 +3100,8 @@ static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
 		hevc->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		if (!vdec_secure(hw_to_vdec(hevc)))
+			vdec_mm_dma_flush(hevc->m_mv_BUF[i].start_adr, hevc->mv_buf_size);
 		hevc->m_mv_BUF[i].size = hevc->mv_buf_size;
 		hevc->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -3339,7 +3341,12 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	hevc->m_BUF[i].v4l_ref_buf_addr	= (ulong)ambuf;
 	pic->cma_alloc_addr             = ambuf->planes[0].addr;
 
-	if (!hevc->afbc_buf_table[ambuf->fbc->index].used) {
+	if (hevc->mmu_enable &&
+		!hevc->afbc_buf_table[ambuf->fbc->index].used) {
+		if (!vdec_secure(hw_to_vdec(hevc)))
+			vdec_mm_dma_flush(ambuf->fbc->haddr,
+					ambuf->fbc->hsize);
+
 		hevc->afbc_buf_table[ambuf->fbc->index].fb = hevc->m_BUF[i].v4l_ref_buf_addr;
 		hevc->afbc_buf_table[ambuf->fbc->index].used = 1;
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS, "%s afbc_index %d, i: %d, fb 0x%lx\n",
@@ -11799,12 +11806,6 @@ static int h265_reset_frame_buffer(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL)
 			continue;
-		hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i, pic->referenced,
-				pic->cma_alloc_addr,
-				pic->vf_ref);
-
 		if (pic->cma_alloc_addr) {
 			ambuf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
@@ -13503,6 +13504,10 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		return ret;
 	}
 	hevc->buf_size = work_buf_size;
+
+	if (!vdec_secure(hw_to_vdec(hevc))) {
+		vdec_mm_dma_flush(hevc->buf_start, work_buf_size);
+	}
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) &&
 		(parser_sei_enable & 0x100) == 0)

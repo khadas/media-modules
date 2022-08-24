@@ -1738,6 +1738,9 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	if (hw->mmu_enable) {
 		bs->alloc_header_addr = hw->ambuf->fbc->haddr;
 		if (!hw->afbc_buf_table[hw->ambuf->fbc->index].used) {
+			if (!vdec_secure(hw_to_vdec(hw)))
+				vdec_mm_dma_flush(hw->ambuf->fbc->haddr,
+						hw->ambuf->fbc->hsize);
 			hw->afbc_buf_table[hw->ambuf->fbc->index].fb =
 				bs->cma_alloc_addr;
 			hw->afbc_buf_table[hw->ambuf->fbc->index].used = 1;

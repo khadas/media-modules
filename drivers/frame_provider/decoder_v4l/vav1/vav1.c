@@ -1379,6 +1379,8 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 		hw->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		if (!vdec_secure(hw_to_vdec(hw)))
+			vdec_mm_dma_flush(hw->m_mv_BUF[i].start_adr, size);
 		hw->m_mv_BUF[i].size = size;
 		hw->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -2977,6 +2979,9 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 
 	if (hw->mmu_enable) {
 		if (!hw->afbc_buf_table[ambuf->fbc->index].used) {
+			if (!vdec_secure(hw_to_vdec(hw)))
+				vdec_mm_dma_flush(ambuf->fbc->haddr,
+						ambuf->fbc->hsize);
 			hw->afbc_buf_table[ambuf->fbc->index].fb = hw->m_BUF[i].v4l_ref_buf_addr;
 			hw->afbc_buf_table[ambuf->fbc->index].used = 1;
 			av1_print(hw, AV1_DEBUG_BUFMGR,
@@ -9542,12 +9547,6 @@ static int av1_reset_frame_buffer(struct AV1HW_s *hw)
 	int i;
 
 	for (i = 0; i < hw->used_buf_num; ++i) {
-		av1_print(hw, AV1_DEBUG_BUFMGR,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i, frame_bufs[i].buf.referenced,
-				frame_bufs[i].buf.cma_alloc_addr,
-				frame_bufs[i].buf.vf_ref);
-
 		if (frame_bufs[i].buf.cma_alloc_addr) {
 			ambuf = (struct aml_buf *)hw->m_BUF[i].v4l_ref_buf_addr;
 
@@ -10612,6 +10611,12 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return ret;
 	}
+
+	if (!vdec_secure(hw_to_vdec(hw))) {
+		vdec_mm_dma_flush(hw->cma_alloc_addr,
+				hw->cma_alloc_count * PAGE_SIZE);
+	}
+
 	hw->buf_start = hw->cma_alloc_addr;
 	hw->buf_size = work_buf_size;
 

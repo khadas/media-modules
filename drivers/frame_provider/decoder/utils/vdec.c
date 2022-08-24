@@ -5794,7 +5794,23 @@ int vdec_post_task(post_task_handler func, void *args)
 }
 EXPORT_SYMBOL(vdec_post_task);
 
+void vdec_mm_dma_flush(ulong phys, u32 size)
+{
+	void *buf = NULL;
 
+	buf = codec_mm_vmap(phys, size);
+	if (!buf) {
+		pr_err("%s fail!\n");
+		return;
+	}
+
+	codec_mm_dma_flush(buf,
+		size, DMA_FROM_DEVICE);
+	codec_mm_unmap_phyaddr(buf);
+
+	return;
+}
+EXPORT_SYMBOL(vdec_mm_dma_flush);
 
 static int vdec_probe(struct platform_device *pdev)
 {

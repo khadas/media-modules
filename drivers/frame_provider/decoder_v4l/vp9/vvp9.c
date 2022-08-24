@@ -1759,6 +1759,8 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 		pbi->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
 	} else {
+		if (!vdec_secure(hw_to_vdec(pbi)))
+			vdec_mm_dma_flush(pbi->m_mv_BUF[i].start_adr, size);
 		pbi->m_mv_BUF[i].size = size;
 		pbi->m_mv_BUF[i].used_flag = 0;
 		ret = 0;
@@ -2237,43 +2239,26 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 	struct RefCntBuffer_s *const frame_bufs = cm->buffer_pool->frame_bufs;
 	struct PIC_BUFFER_CONFIG_s *pic = NULL;
 	struct PIC_BUFFER_CONFIG_s *free_pic = NULL;
-	//ulong flags;
-	//int i;
-#if 0
-	lock_buffer_pool(cm->buffer_pool, flags);
+	int pos = get_idle_pos(pbi);
 
-	for (i = 0; i < pbi->used_buf_num; ++i) {
-		pic = &frame_bufs[i].buf;
-		if ((frame_bufs[i].ref_count == 0) &&
-			(pic->vf_ref == 0) &&
-			(pic->index != -1) &&
-			pic->cma_alloc_addr &&
-			(cm->cur_frame != &frame_bufs[i])) {
-			free_pic = pic;
-		}
+	if (pos < 0) {
+		vp9_print(pbi, 0,
+			"get_idle_pos fail!\n");
+		return INVALID_IDX;
 	}
 
-	unlock_buffer_pool(cm->buffer_pool, flags);
-#endif
-	if (free_pic == NULL) {
-		int pos = get_idle_pos(pbi);
+	pic = &frame_bufs[pos].buf;
+	if (v4l_alloc_and_config_pic(pbi, pic))
+		return INVALID_IDX;
 
-		if (pos < 0)
-			return INVALID_IDX;
+	pic->BUF_index		= pos;
+	pic->y_crop_width	= pbi->frame_width;
+	pic->y_crop_height	= pbi->frame_height;
+	free_pic		= pic;
+	pbi->cur_idx = pos;
 
-		pic = &frame_bufs[pos].buf;
-		if (v4l_alloc_and_config_pic(pbi, pic))
-			return INVALID_IDX;
-
-		pic->BUF_index		= pos;
-		pic->y_crop_width	= pbi->frame_width;
-		pic->y_crop_height	= pbi->frame_height;
-		free_pic		= pic;
-		pbi->cur_idx = pos;
-
-		set_canvas(pbi, pic);
-		init_pic_list_hw(pbi);
-	}
+	set_canvas(pbi, pic);
+	init_pic_list_hw(pbi);
 
 	if (free_pic) {
 		frame_bufs[free_pic->BUF_index].ref_count = 1;
@@ -2286,7 +2271,6 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 	if (free_pic) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
-		//struct aml_buf *ambuf = index_to_ambuf(pbi, free_pic->BUF_index);
 
 		pbi->ambuf->state = FB_ST_DECODER;
 
@@ -5126,7 +5110,11 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 	pbi->m_BUF[i].v4l_ref_buf_addr = (ulong)ambuf;
 	pic->cma_alloc_addr = ambuf->planes[0].addr;
 
-	if (!pbi->afbc_buf_table[ambuf->fbc->index].used) {
+	if (pbi->mmu_enable &&
+		!pbi->afbc_buf_table[ambuf->fbc->index].used) {
+		if (!vdec_secure(hw_to_vdec(pbi)))
+			vdec_mm_dma_flush(ambuf->fbc->haddr,
+					ambuf->fbc->hsize);
 		pbi->afbc_buf_table[ambuf->fbc->index].fb = pbi->m_BUF[i].v4l_ref_buf_addr;
 		pbi->afbc_buf_table[ambuf->fbc->index].used = 1;
 		vp9_print(pbi, VP9_DEBUG_BUFMGR,
@@ -8463,6 +8451,7 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 		pbi->res_ch_flag == 0) {
 		struct aml_vdec_ps_infos ps;
 		struct vdec_comp_buf_info comp;
+		struct VP9_Common_s *cm = &pbi->common;
 
 		if ((pbi->last_width != 0 &&
 			pbi->last_height != 0) &&
@@ -8489,7 +8478,8 @@ static int v4l_res_change(struct VP9Decoder_s *pbi)
 			pbi->v4l_params_parsed = false;
 			pbi->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
-			vp9_bufmgr_postproc(pbi);
+			if (cm->new_fb_idx != INVALID_IDX)
+				vp9_bufmgr_postproc(pbi);
 			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
 			notify_v4l_eos(hw_to_vdec(pbi));
 			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
@@ -10029,13 +10019,6 @@ static int vp9_reset_frame_buffer(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if (frame_bufs[i].buf.cma_alloc_addr) {
 			ambuf = (struct aml_buf *)pbi->m_BUF[i].v4l_ref_buf_addr;
-
-			vp9_print(pbi, VP9_DEBUG_BUFMGR,
-				"%s buf idx: %d dma addr: 0x%lx vb idx: %d vf_ref %d\n",
-				__func__, i, frame_bufs[i].buf.cma_alloc_addr,
-				ambuf->index,
-				frame_bufs[i].buf.vf_ref);
-
 			if (!frame_bufs[i].buf.vf_ref &&
 				!(pbi->vframe_dummy.type & VIDTYPE_V4L_EOS)) {
 				aml_buf_put_ref(&ctx->bm, ambuf);
@@ -11160,6 +11143,12 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		return ret;
 	}
+
+	if (!vdec_secure(hw_to_vdec(pbi))) {
+		vdec_mm_dma_flush(pbi->cma_alloc_addr,
+				pbi->cma_alloc_count * PAGE_SIZE);
+	}
+
 	pbi->buf_start = pbi->cma_alloc_addr;
 	pbi->buf_size = work_buf_size;
 

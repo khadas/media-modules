@@ -719,6 +719,8 @@ int vdec_get_core_nr(void);
 
 int vdec_post_task(post_task_handler func, void *args);
 
+void vdec_mm_dma_flush(ulong phys, u32 size);
+
 void rdma_front_end_wrok(dma_addr_t ddr_phy_addr, u32 size);
 
 void rdma_back_end_work(dma_addr_t back_ddr_phy_addr, u32 size);
