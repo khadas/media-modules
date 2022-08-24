@@ -493,7 +493,6 @@ int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,
 {
 	int ret = -1;
 	struct vdec_s *vdec = ada_ctx->vdec;
-
 	/* set timestamp */
 	vdec_set_timestamp(vdec, timestamp);
 
@@ -569,6 +568,14 @@ int vdec_frame_number(struct aml_vdec_adapt *ada_ctx)
 		return vdec_get_frame_num(vdec);
 	else
 		return -1;
+}
+
+void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	if (vdec)
+		vdec->port_flag |= PORT_FLAG_DMABUF;
 }
 
 int vdec_get_instance_num(void)

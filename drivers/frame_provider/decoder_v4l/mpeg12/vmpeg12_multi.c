@@ -3518,7 +3518,7 @@ void (*callback)(struct vdec_s *, void *),
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->chunk->size;
 	}
-	if (vdec_frame_based(vdec) && !vdec_secure(vdec)) {
+	if (vdec_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 		/* HW needs padding (NAL start) for frame ending */
 		char* tail = (char *)hw->chunk->block->start_virt;
 
@@ -3530,7 +3530,7 @@ void (*callback)(struct vdec_s *, void *),
 		codec_mm_dma_flush(tail, 4, DMA_TO_DEVICE);
 	}
 
-	if (vdec_frame_based(vdec) && debug_enable && !vdec_secure(vdec)) {
+	if (vdec_frame_based(vdec) && debug_enable && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 		u8 *data = NULL;
 		if (hw->chunk)
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,

@@ -272,7 +272,7 @@ static int vdec_avs_probe(unsigned long h_vdec,
 	u32 size = bs->size;
 	int ret = 0;
 
-	if (inst->ctx->is_drm_mode) {
+	if (inst->ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
 			struct aml_video_stream *s =
 				(struct aml_video_stream *) buf;
@@ -317,7 +317,7 @@ static int vdec_avs_decode(unsigned long h_vdec,
 	if (vdec_input_full(vdec))
 		return -EAGAIN;
 
-	if (inst->ctx->is_drm_mode) {
+	if (inst->ctx->output_dma_mode) {
 		if (bs->model == VB2_MEMORY_MMAP) {
 			struct aml_video_stream *s =
 				(struct aml_video_stream *) buf;

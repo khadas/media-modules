@@ -9606,7 +9606,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		READ_VREG(VLD_MEM_VIFIFO_WP));
 #endif
 
-	if (input_frame_based(vdec) && !vdec_secure(vdec)) {
+	if (input_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 		u8 *data = NULL;
 
 		if (!hw->chunk->block->is_mapped)

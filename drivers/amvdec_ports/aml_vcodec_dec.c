@@ -33,6 +33,7 @@
 #include <linux/highmem.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
+#include <linux/amlogic/media/codec_mm/dmabuf_manage.h>
 
 #include "aml_vcodec_drv.h"
 #include "aml_vcodec_dec.h"
@@ -1250,8 +1251,7 @@ static void aml_vdec_worker(struct work_struct *work)
 	/*v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"timestamp: 0x%llx\n", src_buf->timestamp);*/
 
-	if (ctx->is_drm_mode &&
-		(buf.model == VB2_MEMORY_DMABUF)) {
+	if (ctx->output_dma_mode) {
 		ATRACE_COUNTER("VO_IN_VSINK-2.write_secure", buf.size);
 	} else {
 		ATRACE_COUNTER("VO_IN_VSINK-2.write", buf.size);
@@ -1268,8 +1268,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->is_drm_mode &&
-			(buf.model == VB2_MEMORY_DMABUF)) {
+		if (ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			ATRACE_COUNTER("VO_OUT_VSINK-0.wrtie_end", buf.size);
@@ -1280,8 +1279,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->is_drm_mode &&
-			(buf.model == VB2_MEMORY_DMABUF)) {
+		if (ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			ATRACE_COUNTER("VO_OUT_VSINK-3.write_error", buf.size);
@@ -1785,6 +1783,9 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 	} else {
 		ctx->output_dma_mode =
 			(rb->memory == VB2_MEMORY_DMABUF) ? 1 : 0;
+		if (ctx->output_dma_mode) {
+			vdec_set_dmabuf_type(ctx->ada_ctx);
+		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"output buffer memory mode is %d\n", rb->memory);
@@ -2744,14 +2745,31 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *vb2_v4l2 = NULL;
 	struct aml_v4l2_buf *buf = NULL;
 	int i;
-
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
 
-	if (vb->memory == VB2_MEMORY_DMABUF
-		&& V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type))
+	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
+	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
+
+	if (vb->memory == VB2_MEMORY_DMABUF && V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
+		if (!ctx->is_drm_mode) {
+			int fd = vb->planes[0].m.fd;
+			struct dmabuf_videodec_es_data *videodec_es_data;
+			if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_VIDEODEC_ES) {
+				return 0;
+			}
+			videodec_es_data = (struct dmabuf_videodec_es_data *)dmabuf_manage_get_info(fd, DMA_BUF_TYPE_VIDEODEC_ES);
+
+			if (videodec_es_data && videodec_es_data->data_type == DMA_BUF_VIDEODEC_HDR10PLUS) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "buf_prepare hdr10+ info type %d, len: %d\n",
+					videodec_es_data->data_type, videodec_es_data->data_len);
+				memcpy(buf->meta_data, (void *)videodec_es_data->data, videodec_es_data->data_len);
+			}
+		}
+
 		return 0;
+	}
 
 	q_data = aml_vdec_get_q_data(ctx, vb->vb2_queue->type);
 
@@ -2763,9 +2781,6 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 				q_data->sizeimage[i]);
 		}
 	}
-
-	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
-	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
 
 	if (vb2_v4l2->android_kabi_reserved1 &&
 		(copy_from_user(buf->meta_data,
@@ -3245,7 +3260,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"Invalid flush buffer.\n");
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		if (ctx->is_drm_mode && (vb->memory == VB2_MEMORY_DMABUF))
+		if (ctx->output_dma_mode)
 			wake_up_interruptible(&ctx->wq);
 
 		return;
@@ -3265,8 +3280,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->is_drm_mode &&
-			(src_mem.model == VB2_MEMORY_DMABUF)) {
+		if (ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			v4l2_buff_done(to_vb2_v4l2_buffer(vb),
@@ -3283,8 +3297,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	buf->used = false;
 	v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-	if (ctx->is_drm_mode &&
-		(src_mem.model == VB2_MEMORY_DMABUF)) {
+	if (ctx->output_dma_mode) {
 		wake_up_interruptible(&ctx->wq);
 	} else if (ctx->param_sets_from_ucode) {
 		v4l2_buff_done(to_vb2_v4l2_buffer(vb),

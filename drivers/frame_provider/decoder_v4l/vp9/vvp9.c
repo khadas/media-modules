@@ -9609,7 +9609,7 @@ static unsigned char get_data_check_sum
 	int sum = 0;
 	u8 *data = NULL;
 
-	if (vdec_secure(hw_to_vdec(pbi)))
+	if (vdec_secure(hw_to_vdec(pbi)) || vdec_dmabuf(hw_to_vdec(pbi)))
 		return 0;
 
 	if (!pbi->chunk->block->is_mapped)
@@ -10323,7 +10323,7 @@ static void run_front(struct vdec_s *vdec)
 		READ_VREG(HEVC_STREAM_RD_PTR),
 		pbi->start_shift_bytes);
 
-		if (!vdec_secure(hw_to_vdec(pbi)) &&
+		if (!(vdec_secure(hw_to_vdec(pbi)) || vdec_dmabuf(vdec)) &&
 			vdec_frame_based(vdec) && pbi->chunk) {
 			u8 *data = NULL;
 

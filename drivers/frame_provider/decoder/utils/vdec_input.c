@@ -796,7 +796,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 
 	int need_pading_size = MIN_FRAME_PADDING_SIZE;
 
-	if (vdec_secure(vdec)) {
+	if (vdec_secure(vdec) || vdec_dmabuf(vdec)) {
 		block = vdec_input_alloc_new_block(input, (ulong)buf,
 			PAGE_ALIGN(count + HEVC_PADDING_SIZE + 1),
 			free, priv); /*Add padding large than HEVC_PADDING_SIZE */
@@ -938,7 +938,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 	vdec->pts_valid = false;
 	INIT_LIST_HEAD(&chunk->list);
 
-	if (vdec_secure(vdec)) {
+	if (vdec_secure(vdec) || vdec_dmabuf(vdec)) {
 		chunk->offset = 0;
 		chunk->size = count;
 		chunk->pading_size = PAGE_ALIGN(chunk->size + need_pading_size) -
@@ -1026,7 +1026,7 @@ int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
 {
 	struct vdec_s *vdec = input->vdec;
 
-	return vdec_secure(vdec) ?
+	return (vdec_secure(vdec) || vdec_dmabuf(vdec)) ?
 		vdec_input_add_chunk(input,
 			(char *)addr, count, handle, free, priv) : -1;
 }

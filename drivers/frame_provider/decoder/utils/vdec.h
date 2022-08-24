@@ -511,6 +511,8 @@ typedef struct {
 	 (vdec_get_debug_flags() & 0x100))
 #define vdec_secure(vdec) \
 	(((vdec)->port_flag & PORT_FLAG_DRM))
+#define vdec_dmabuf(vdec) \
+	(((vdec)->port_flag & PORT_FLAG_DMABUF))
 
 #define PR_INIT(s)					\
 	int __len = 0, __size = s;			\

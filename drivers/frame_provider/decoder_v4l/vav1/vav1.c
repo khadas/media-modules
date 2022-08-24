@@ -9855,7 +9855,7 @@ static void run_front(struct vdec_s *vdec)
 
 	av1_frame_mode_pts_save(hw);
 	if (debug & PRINT_FLAG_VDEC_STATUS) {
-		if (vdec_frame_based(vdec) && hw->chunk && !vdec_secure(vdec)) {
+		if (vdec_frame_based(vdec) && hw->chunk && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 			u8 *data = NULL;
 
 			if (!hw->chunk->block->is_mapped)
