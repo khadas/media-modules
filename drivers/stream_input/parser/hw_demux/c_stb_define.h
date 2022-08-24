@@ -304,12 +304,12 @@
 #define SECTION_END_WITH_TABLE_ID               8
 #define SEND_COMPLETE_SECTION_ONLY              7
 #define KEEP_DUPLICATE_PACKAGE                  6
-#define SEACH_SOP_ON_TRANSPORT_ERROR            5
+#define SEARCH_SOP_ON_TRANSPORT_ERROR            5
 #define STB_DEMUX_ENABLE                        4
 #define NO_RESET_ON_SOP                         3
 #define SEARCH_SOP_ON_ERROR                     2
 #define NOT_USE_OF_SOP_INPUT                    1
-#define IGNORE_NONSOP_FEC_ERROR                 0
+#define IGNORE_NON_SOP_FEC_ERROR                 0
 
 /* bit 15:8 demux package length - 1 ( default : 187 )*/
 /* bit 7:0 default is 0x47*/

@@ -559,9 +559,9 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 	pbi->common->buffer_pool	= pool;
 }
 
-int release_fb_cb(void *cb_priv, aom_codec_frame_buffer_t *ambuf) {
+int release_fb_cb(void *cb_priv, aom_codec_frame_buffer_t *aml_buf) {
 #if 0
-  InternalFrameBuffer *const int_fb = (InternalFrameBuffer *)ambuf->priv;
+  InternalFrameBuffer *const int_fb = (InternalFrameBuffer *)aml_buf->priv;
   (void)cb_priv;
   if (int_fb) int_fb->in_use = 0;
 #endif

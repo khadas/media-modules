@@ -242,7 +242,7 @@ struct aml_enc_params {
  * @visible_width: picture width
  * @visible_height: picture height
  * @coded_width: picture buffer width (64 aligned up from pic_w)
- * @coded_height: picture buffer heiht (64 aligned up from pic_h)
+ * @coded_height: picture buffer height (64 aligned up from pic_h)
  * @y_bs_sz: Y bitstream size
  * @c_bs_sz: CbCr bitstream size
  * @y_len_sz: additional size required to store decompress information for y
@@ -277,7 +277,7 @@ struct vdec_pic_info {
 /**
  * struct vdec_comp_buf_info - compressed buffer info
  * @max_size: max size needed for MMU Box in MB
- * @header_size: contineous size for the compressed header
+ * @header_size: continuous size for the compressed header
  * @frame_buffer_size: SG page number to store the frame
  */
 struct vdec_comp_buf_info {
@@ -434,7 +434,7 @@ struct internal_comp_buf {
 };
 
 /*
- * struct aml_uvm_buff_ref - uvm buff is used reseve ctx ref count.
+ * struct aml_uvm_buff_ref - uvm buff is used reserve ctx ref count.
  * @index	: index of video buffer.
  * @addr	: physic address of video buffer.
  * @ref		: reference of v4ldec context.
@@ -448,7 +448,7 @@ struct aml_uvm_buff_ref {
 };
 
 /*
- * enum aml_fb_requester - indicate which module request ambuf buffers.
+ * enum aml_fb_requester - indicate which module request aml_buf buffers.
  */
 enum aml_fb_requester {
 	AML_FB_REQ_DEC,
@@ -458,8 +458,8 @@ enum aml_fb_requester {
 };
 
 /*
- * @query: try to achieved ambuf token.
- * @alloc: used for allocte ambuf buffer.
+ * @query: try to achieved aml_buf token.
+ * @alloc: used for allocte aml_buf buffer.
  */
 struct aml_fb_ops {
 	bool		(*query)(struct aml_fb_ops *, ulong *);
@@ -615,7 +615,7 @@ struct canvas_cache {
  * @param_sets_from_ucode: if true indicate ps from ucode.
  * @v4l_codec_dpb_ready: queue buffer number greater than dpb.
  * @dst_queue_streaming: the state of the destination queue.
- * @v4l_resolution_change: indicate resolution change happend.
+ * @v4l_resolution_change: indicate resolution change happened.
  * @comp: comp be used for sync picture information with decoder.
  * @config: used to set or get parms for application.
  * @picinfo: store picture info after header parsing.
@@ -778,8 +778,8 @@ struct aml_vcodec_ctx {
  * @dec_mutex		: decoder hardware lock.
  * @queue		: waitqueue for waiting for completion of device commands.
  * @vpp_count		: count the number of open vpp.
- * @v4ldec_class	: creat class sysfs uesd to show some information.
- * @canche		: canvas pool specific used for v4ldec context.
+ * @v4ldec_class	: creat class sysfs used to show some information.
+ * @cache		: canvas pool specific used for v4ldec context.
  */
 struct aml_vcodec_dev {
 	struct v4l2_device		v4l2_dev;
@@ -798,7 +798,7 @@ struct aml_vcodec_dev {
 	wait_queue_head_t		queue;
 	atomic_t			vpp_count;
 	struct class			v4ldec_class;
-	struct canvas_cache		canche;
+	struct canvas_cache		cache;
 };
 
 static inline struct aml_vcodec_ctx *fh_to_ctx(struct v4l2_fh *fh)
@@ -817,7 +817,7 @@ int aml_thread_start(struct aml_vcodec_ctx *ctx, aml_thread_func func,
 	enum aml_thread_type type, const char *thread_name);
 void aml_thread_stop(struct aml_vcodec_ctx *ctx);
 void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
-					struct aml_buf *ambuf);
+					struct aml_buf *aml_buf);
 
 
 /*

@@ -195,12 +195,12 @@ EXPORT_SYMBOL(write_dos_reg_comp);
 
 void dos_reg_write_bits(unsigned int reg, u32 val, int start, int len)
 {
-	u32 toval = read_dos_reg_comp(reg);
+	u32 to_val = read_dos_reg_comp(reg);
 	u32 mask = (((1L << (len)) - 1) << (start));
 
-	toval &= ~mask;
-	toval |= (val << start) & mask;
-	write_dos_reg_comp(reg, toval);
+	to_val &= ~mask;
+	to_val |= (val << start) & mask;
+	write_dos_reg_comp(reg, to_val);
 }
 EXPORT_SYMBOL(dos_reg_write_bits);
 

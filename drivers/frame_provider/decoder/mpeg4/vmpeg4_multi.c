@@ -408,29 +408,29 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 	int decbuf_y_size = 0, decbuf_uv_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->pic[i].v4l_ref_buf_addr) {
-		struct aml_buf *ambuf =
+		struct aml_buf *aml_buf =
 			(struct aml_buf *)
 			hw->pic[i].v4l_ref_buf_addr;
 
-		ambuf->state = FB_ST_DECODER;
+		aml_buf->state = FB_ST_DECODER;
 		return 0;
 	}
 
-	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &ambuf, AML_FB_REQ_DEC);
+	ret = ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &aml_buf, AML_FB_REQ_DEC);
 	if (ret < 0) {
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
-			"[%d] get ambuf fail.\n",
+			"[%d] get aml_buf fail.\n",
 			((struct aml_vcodec_ctx *)
 			(hw->v4l2_ctx))->id);
 		return ret;
 	}
 
-	ambuf->state	= FB_ST_DECODER;
+	aml_buf->state	= FB_ST_DECODER;
 
 	if (!hw->frame_width || !hw->frame_height) {
 			struct vdec_pic_info pic;
@@ -442,28 +442,28 @@ static int vmpeg4_v4l_alloc_buff_config_canvas(struct vdec_mpeg4_hw_s *hw, int i
 				hw->frame_width, hw->frame_height);
 	}
 
-	hw->pic[i].v4l_ref_buf_addr = (ulong)ambuf;
-	if (ambuf->num_planes == 1) {
-		decbuf_start	= ambuf->planes[0].addr;
-		decbuf_y_size	= ambuf->planes[0].offset;
+	hw->pic[i].v4l_ref_buf_addr = (ulong)aml_buf;
+	if (aml_buf->num_planes == 1) {
+		decbuf_start	= aml_buf->planes[0].addr;
+		decbuf_y_size	= aml_buf->planes[0].offset;
 		decbuf_uv_start	= decbuf_start + decbuf_y_size;
 		decbuf_uv_size	= decbuf_y_size / 2;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
-	} else if (ambuf->num_planes == 2) {
-		decbuf_start	= ambuf->planes[0].addr;
-		decbuf_y_size	= ambuf->planes[0].length;
-		decbuf_uv_start	= ambuf->planes[1].addr;
-		decbuf_uv_size	= ambuf->planes[1].length;
+		aml_buf->planes[0].bytes_used = aml_buf->planes[0].length;
+	} else if (aml_buf->num_planes == 2) {
+		decbuf_start	= aml_buf->planes[0].addr;
+		decbuf_y_size	= aml_buf->planes[0].length;
+		decbuf_uv_start	= aml_buf->planes[1].addr;
+		decbuf_uv_size	= aml_buf->planes[1].length;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		ambuf->planes[0].bytes_used = decbuf_y_size;
-		ambuf->planes[1].bytes_used = decbuf_uv_size;
+		aml_buf->planes[0].bytes_used = decbuf_y_size;
+		aml_buf->planes[1].bytes_used = decbuf_uv_size;
 	}
 
 	mmpeg4_debug_print(DECODE_ID(hw), 0, "[%d] %s(), v4l ref buf addr: 0x%x\n",
-		((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id, __func__, ambuf);
+		((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id, __func__, aml_buf);
 
 	if (vdec->parallel_dec == 1) {
 		u32 tmp;
@@ -722,7 +722,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	struct vframe_s *vf = NULL;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	int index = pic->index;
 	bool pb_skip = false;
@@ -750,7 +750,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (hw->is_used_v4l) {
 			vf->v4l_mem_handle
 				= hw->pic[index].v4l_ref_buf_addr;
-			ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+			aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 			mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"[%d] %s(), v4l mem handle: 0x%lx\n",
 				((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -820,7 +820,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
-						ambuf->task->submit(ambuf->task, TASK_TYPE_DEC);
+						aml_buf->task->submit(aml_buf->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(vdec->vf_provider_name,
@@ -902,7 +902,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
-						ambuf->task->submit(ambuf->task, TASK_TYPE_DEC);
+						aml_buf->task->submit(aml_buf->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(vdec->vf_provider_name,
@@ -1004,7 +1004,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					if (v4l2_ctx->is_stream_off) {
 						vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 					} else {
-						ambuf->task->submit(ambuf->task, TASK_TYPE_DEC);
+						aml_buf->task->submit(aml_buf->task, TASK_TYPE_DEC);
 					}
 				} else {
 					vf_notify_receiver(vdec->vf_provider_name,
@@ -1610,7 +1610,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = NULL;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	int index = -1;
 
 	if (hw->eos) {
@@ -1625,8 +1625,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 			index = find_free_buffer(hw);
 			if ((index == -1) || (index == 0xffffff)) {
 				ctx->fb_ops.query(&ctx->fb_ops, &hw->fb_token);
-				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &ambuf, AML_FB_REQ_DEC) < 0) {
-					pr_err("[%d] get ambuf fail.\n", ctx->id);
+				if (ctx->fb_ops.alloc(&ctx->fb_ops, hw->fb_token, &aml_buf, AML_FB_REQ_DEC) < 0) {
+					pr_err("[%d] get aml_buf fail.\n", ctx->id);
 					return -1;
 				}
 			}
@@ -1634,16 +1634,16 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 		vf->type |= VIDTYPE_V4L_EOS;
 		vf->timestamp = ULONG_MAX;
-		vf->v4l_mem_handle = (index == -1) ? (ulong)ambuf :
+		vf->v4l_mem_handle = (index == -1) ? (ulong)aml_buf :
 							hw->pic[index].v4l_ref_buf_addr;;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
-		ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		if (hw->is_used_v4l)
-			ambuf->task->submit(ambuf->task, TASK_TYPE_DEC);
+			aml_buf->task->submit(aml_buf->task, TASK_TYPE_DEC);
 		else
 			vf_notify_receiver(vdec->vf_provider_name,
 				VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
@@ -1758,7 +1758,7 @@ static struct vframe_s *vmpeg_vf_peek(void *op_arg)
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"kfifo len:%d invaild, peek error\n",
+			"kfifo len:%d invalid, peek error\n",
 			kfifo_len(&hw->display_q));
 		return NULL;
 	}
@@ -2023,7 +2023,7 @@ static void vmpeg4_dump_state(struct vdec_s *vdec)
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d), i_fram:%d, buffer_not_ready %d, buf_num %d, run_flag %d\n",
+		"width/height (%d/%d), i_frame:%d, buffer_not_ready %d, buf_num %d, run_flag %d\n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->first_i_frame_ready,

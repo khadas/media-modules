@@ -158,14 +158,14 @@ static unsigned int debug_mask = 0xff;
 	udebug_flag:
 	bit 0, enable ucode print
 	bit 1, enable ucode more print
-	bit 3, enable ucdode detail print
+	bit 3, enable ucode detail print
 	bit [31:16] not 0, pos to dump lmem
 		bit 2, pop bits to lmem
 		bit [11:8], pre-pop bits for alignment (when bit 2 is 1)
 
 	avs only:
 	bit [8], disable empty muitl-instance handling
-	bit [9], enable writting of VC1_CONTROL_REG in ucode
+	bit [9], enable writing of VC1_CONTROL_REG in ucode
 */
 static u32 udebug_flag;
 /*
@@ -538,7 +538,7 @@ struct vdec_avs_hw_s {
 	struct vframe_s vframe_dummy;
 	ulong fb_token;
 	u32 canvas_mode;
-	struct aml_buf *ambuf;
+	struct aml_buf *aml_buf;
 	bool process_busy;
 };
 
@@ -655,7 +655,7 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct aml_buf *ambuf;
+	struct aml_buf *aml_buf;
 	ulong flags;
 	int i;
 
@@ -669,17 +669,17 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 		if ((hw->vfbuf_use[i]) &&
 			!(hw->ref_use[i]) &&
 			hw->pics[i].v4l_ref_buf_addr){
-			ambuf = (struct aml_buf *)hw->pics[i].v4l_ref_buf_addr;
+			aml_buf = (struct aml_buf *)hw->pics[i].v4l_ref_buf_addr;
 
 			debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
 				"%s buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d\n",
 				__func__, i, hw->pics[i].cma_alloc_addr,
-				ambuf->index,
+				aml_buf->index,
 				hw->vfbuf_use[i]);
 			if (hw->interlace_flag &&
 				hw->vfbuf_use[i] < 2)
 				continue;
-			aml_buf_put_ref(&ctx->bm, ambuf);
+			aml_buf_put_ref(&ctx->bm, aml_buf);
 			spin_lock_irqsave(&hw->lock, flags);
 
 			hw->pics[i].v4l_ref_buf_addr = 0;
@@ -697,14 +697,14 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 	return 0;
 }
 
-static bool is_avaliable_buffer(struct vdec_avs_hw_s *hw)
+static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
 	int free_slot =0;
 
-	/* Ignore the buffer avaliable check until the head parse done. */
+	/* Ignore the buffer available check until the head parse done. */
 	if (!hw->v4l_params_parsed) {
 		/*
 		 * If a resolution change and eos are detected, decoding will
@@ -771,21 +771,21 @@ static bool is_avaliable_buffer(struct vdec_avs_hw_s *hw)
 	}
 
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
-			hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-			if (!hw->ambuf) {
+		if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
+			hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+			if (!hw->aml_buf) {
 				return false;
 			}
-			hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
-			hw->ambuf->state = FB_ST_DECODER;
+			hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			hw->aml_buf->state = FB_ST_DECODER;
 		}
 	}
 
-	if (hw->ambuf) {
+	if (hw->aml_buf) {
 		free_count++;
 		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
 		"%s get fb: 0x%lx fb idx: %d\n",
-		__func__, hw->pics[i].v4l_ref_buf_addr, hw->ambuf->index);
+		__func__, hw->pics[i].v4l_ref_buf_addr, hw->aml_buf->index);
 	}
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
@@ -814,11 +814,11 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 	int decbuf_y_size = 0, decbuf_uv_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct aml_buf *ambuf = hw->ambuf;
+	struct aml_buf *aml_buf = hw->aml_buf;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (!ambuf)
+	if (!aml_buf)
 		return -1;
 
 	if (!hw->frame_width || !hw->frame_height) {
@@ -831,30 +831,30 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 			hw->frame_width, hw->frame_height);
 	}
 
-	hw->pics[i].v4l_ref_buf_addr = (ulong)ambuf;
-	hw->pics[i].cma_alloc_addr = ambuf->planes[0].addr;
-	if (ambuf->num_planes == 1) {
-		decbuf_start	= ambuf->planes[0].addr;
-		decbuf_y_size	= ambuf->planes[0].offset;
+	hw->pics[i].v4l_ref_buf_addr = (ulong)aml_buf;
+	hw->pics[i].cma_alloc_addr = aml_buf->planes[0].addr;
+	if (aml_buf->num_planes == 1) {
+		decbuf_start	= aml_buf->planes[0].addr;
+		decbuf_y_size	= aml_buf->planes[0].offset;
 		decbuf_uv_start	= decbuf_start + decbuf_y_size;
 		decbuf_uv_size	= decbuf_y_size / 2;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
-	} else if (ambuf->num_planes == 2) {
-		decbuf_start	= ambuf->planes[0].addr;
-		decbuf_y_size	= ambuf->planes[0].length;
-		decbuf_uv_start	= ambuf->planes[1].addr;
-		decbuf_uv_size	= ambuf->planes[1].length;
+		aml_buf->planes[0].bytes_used = aml_buf->planes[0].length;
+	} else if (aml_buf->num_planes == 2) {
+		decbuf_start	= aml_buf->planes[0].addr;
+		decbuf_y_size	= aml_buf->planes[0].length;
+		decbuf_uv_start	= aml_buf->planes[1].addr;
+		decbuf_uv_size	= aml_buf->planes[1].length;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		ambuf->planes[0].bytes_used = decbuf_y_size;
-		ambuf->planes[1].bytes_used = decbuf_uv_size;
+		aml_buf->planes[0].bytes_used = decbuf_y_size;
+		aml_buf->planes[1].bytes_used = decbuf_uv_size;
 	}
 
 	debug_print(hw, PRINT_FLAG_V4L_DETAIL,
 		"[%d] %s(), v4l ref buf addr: 0x%x\n",
-		ctx->id, __func__, ambuf);
+		ctx->id, __func__, aml_buf);
 
 	if (vdec->parallel_dec == 1) {
 		u32 tmp;
@@ -909,11 +909,11 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 		decbuf_start, decbuf_uv_start,
 		canvas_width, canvas_height);
 
-	aml_buf_get_ref(&ctx->bm, ambuf);
+	aml_buf_get_ref(&ctx->bm, aml_buf);
 	if (hw->interlace_flag)
-		aml_buf_get_ref(&ctx->bm, ambuf);
+		aml_buf_get_ref(&ctx->bm, aml_buf);
 
-	hw->ambuf = NULL;
+	hw->aml_buf = NULL;
 
 	return 0;
 }
@@ -960,7 +960,7 @@ int update_reference(struct vdec_avs_hw_s *hw,
 		/* second pic do not output */
 		index = hw->vf_buf_num_used;
 	} else {
-		hw->ref_use[hw->refs[0]]--; 	//old ref0 ununsed
+		hw->ref_use[hw->refs[0]]--; 	//old ref0 unused
 		hw->refs[0] = hw->refs[1];
 		hw->refs[1] = index;
 		index = hw->refs[0];
@@ -2608,7 +2608,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 	recycle_frames(hw);
 
-	ret = is_avaliable_buffer(hw);
+	ret = is_available_buffer(hw);
 	if (ret) {
 		hw->not_run_ready = 0;
 	} else {
@@ -2626,7 +2626,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			again_threshold) {
 			int r = vdec_sync_input(vdec);
 				debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-					"%s buf lelvel:%x\n",  __func__, r);
+					"%s buf level:%x\n",  __func__, r);
 			ret = 0;
 			hw->not_run_ready++;
 
@@ -3224,7 +3224,7 @@ void (*callback)(struct vdec_s *, void *),
 	}
 
 	/*
-		This configureation of VC1_CONTROL_REG will
+		This configuration of VC1_CONTROL_REG will
 		pop bits (even no data in the stream buffer) if input is enabled,
 		so it can only be configured before vdec_enable_input() is called.
 		So move this code from ucode to here
@@ -3342,7 +3342,7 @@ static void reset(struct vdec_s *vdec)
 	hw->pre_parser_wr_ptr = 0;
 	hw->buf_status = 0;
 	hw->eos 		= 0;
-	hw->ambuf		= NULL;
+	hw->aml_buf		= NULL;
 
 	atomic_set(&hw->get_num, 0);
 	atomic_set(&hw->put_num, 0);
@@ -3356,7 +3356,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	struct vframe_s *vf = NULL;
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	u32 nv_order = VIDTYPE_VIU_NV21;
 	u32 reg = pic->buffer_info;
 	bool force_interlaced_frame = false;
@@ -3388,7 +3388,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 		vf->v4l_mem_handle
 			= hw->pics[buffer_index].v4l_ref_buf_addr;
-		ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 
 		debug_print(hw, PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",
@@ -3476,7 +3476,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		if (v4l2_ctx->is_stream_off) {
 			vavs_vf_put(vavs_vf_get(hw), hw);
 		} else {
-			aml_buf_done(&v4l2_ctx->bm, ambuf, BUF_USER_DEC);
+			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
 
 		if (kfifo_get(&hw->newframe_q, &vf) == 0) {
@@ -3486,7 +3486,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 		vf->v4l_mem_handle
 			= hw->pics[buffer_index].v4l_ref_buf_addr;
-		ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 
 		debug_print(hw, PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",
@@ -3568,7 +3568,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		if (v4l2_ctx->is_stream_off) {
 			vavs_vf_put(vavs_vf_get(hw), hw);
 		} else {
-			aml_buf_done(&v4l2_ctx->bm, ambuf, BUF_USER_DEC);
+			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
 
 		hw->total_frame++;
@@ -3584,7 +3584,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 		vf->v4l_mem_handle
 			= hw->pics[buffer_index].v4l_ref_buf_addr;
-		ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 
 		debug_print(hw, PRINT_FLAG_V4L_DETAIL,
 			"[%d] %s(), v4l mem handle: 0x%lx\n",
@@ -3675,7 +3675,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		if (v4l2_ctx->is_stream_off) {
 			vavs_vf_put(vavs_vf_get(hw), hw);
 		} else {
-			aml_buf_done(&v4l2_ctx->bm, ambuf, BUF_USER_DEC);
+			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
 
 		hw->total_frame++;
@@ -3712,13 +3712,13 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vdec_avs_hw_s *hw = (struct vdec_avs_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = &hw->vframe_dummy;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
 
 	expires = jiffies + msecs_to_jiffies(2000);
 
-	while (!is_avaliable_buffer(hw)) {
+	while (!is_available_buffer(hw)) {
 		if (time_after(jiffies, expires)) {
 			pr_err("[%d] AVS isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
@@ -3731,18 +3731,18 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		return 0;
 	}
 
-	ambuf = (struct aml_buf *)
+	aml_buf = (struct aml_buf *)
 		hw->pics[index].v4l_ref_buf_addr;
 
 	vf->type		|= VIDTYPE_V4L_EOS;
 	vf->timestamp		= ULONG_MAX;
 	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
-	vf->v4l_mem_handle	= (ulong)ambuf;
+	vf->v4l_mem_handle	= (ulong)aml_buf;
 
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-	aml_buf_done(&ctx->bm, ambuf, BUF_USER_DEC);
+	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 
 	hw->eos = true;
 

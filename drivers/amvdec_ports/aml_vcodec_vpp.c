@@ -175,7 +175,7 @@ static enum DI_ERRORTYPE
 {
 	struct aml_v4l2_vpp *vpp = buf->caller_data;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	bool bypass = false;
 	bool eos = false;
 
@@ -202,7 +202,7 @@ static enum DI_ERRORTYPE
 		return DI_ERR_UNDEFINED;
 	}
 
-	ambuf	= vpp_buf->aml_vb->ambuf;
+	aml_buf	= vpp_buf->aml_vb->aml_buf;
 	eos	= (buf->flag & DI_FLAG_EOS);
 	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 
@@ -210,7 +210,7 @@ static enum DI_ERRORTYPE
 	vpp_buf->di_buf.private_data	= buf->private_data;
 	vpp_buf->di_buf.vf->vf_ext	= buf->vf;
 	vpp_buf->di_buf.flag		= buf->flag;
-	vpp_buf->di_buf.vf->v4l_mem_handle = (ulong)ambuf;
+	vpp_buf->di_buf.vf->v4l_mem_handle = (ulong)aml_buf;
 
 	if (!eos && !bypass) {
 		vpp_buf->di_local_buf = buf;
@@ -223,18 +223,18 @@ static enum DI_ERRORTYPE
 	if (vpp->is_prog)
 		kfifo_put(&vpp->input, vpp_buf->inbuf);
 
-	if (ambuf->vpp_buf == NULL) {
-		ambuf->vpp_buf = vzalloc(sizeof(struct aml_v4l2_vpp_buf));
+	if (aml_buf->vpp_buf == NULL) {
+		aml_buf->vpp_buf = vzalloc(sizeof(struct aml_v4l2_vpp_buf));
 	}
 
-	if (ambuf->vpp_buf)
-		memcpy((struct aml_v4l2_vpp_buf *)(ambuf->vpp_buf), vpp_buf,
+	if (aml_buf->vpp_buf)
+		memcpy((struct aml_v4l2_vpp_buf *)(aml_buf->vpp_buf), vpp_buf,
 			sizeof(struct aml_v4l2_vpp_buf));
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_output local done: idx:%d, vf:%px, ext vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
-		ambuf->index,
+		aml_buf->index,
 		vpp_buf->di_buf.vf,
 		vpp_buf->di_buf.vf->vf_ext,
 		vpp_buf->di_buf.vf->index,
@@ -249,9 +249,9 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("VC_OUT_VPP-2.lc_submit", ambuf->index);
+	ATRACE_COUNTER("VC_OUT_VPP-2.lc_submit", aml_buf->index);
 
-	aml_buf_done(&vpp->ctx->bm, ambuf, BUF_USER_VPP);
+	aml_buf_done(&vpp->ctx->bm, aml_buf, BUF_USER_VPP);
 
 	vpp->out_num[OUTPUT_PORT]++;
 	vpp->in_num[OUTPUT_PORT]++;
@@ -269,7 +269,7 @@ static enum DI_ERRORTYPE
 {
 	struct aml_v4l2_vpp *vpp = buf->caller_data;
 	struct aml_v4l2_vpp_buf *vpp_buf;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	bool eos = false;
 
 	if (!vpp || !vpp->ctx) {
@@ -287,13 +287,13 @@ static enum DI_ERRORTYPE
 	}
 
 	vpp_buf	= container_of(buf, struct aml_v4l2_vpp_buf, di_buf);
-	ambuf 	= vpp_buf->aml_vb->ambuf;
+	aml_buf 	= vpp_buf->aml_vb->aml_buf;
 	eos	= (buf->flag & DI_FLAG_EOS);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_input done: idx:%d, vf:%px, idx: %d, flag(vf:%x di:%x) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
-		ambuf->index,
+		aml_buf->index,
 		buf->vf,
 		buf->vf->index,
 		buf->vf->flag,
@@ -309,7 +309,7 @@ static enum DI_ERRORTYPE
 
 	if (!vpp->is_prog) {
 		/* recycle vf only in non-bypass mode */
-		aml_buf_fill(&vpp->ctx->bm, ambuf, BUF_USER_VPP);
+		aml_buf_fill(&vpp->ctx->bm, aml_buf, BUF_USER_VPP);
 
 		kfifo_put(&vpp->input, vpp_buf);
 		update_vpp_num_cache(vpp);
@@ -322,7 +322,7 @@ static enum DI_ERRORTYPE
 	if (vpp->buffer_mode != BUFFER_MODE_ALLOC_BUF)
 		vpp->in_num[OUTPUT_PORT]++;
 
-	ATRACE_COUNTER("VC_IN_VPP-1.recycle", ambuf->index);
+	ATRACE_COUNTER("VC_IN_VPP-1.recycle", aml_buf->index);
 
 	return DI_ERR_NONE;
 }
@@ -332,7 +332,7 @@ static enum DI_ERRORTYPE
 {
 	struct aml_v4l2_vpp *vpp = buf->caller_data;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	bool bypass = false;
 	bool eos = false;
 
@@ -351,27 +351,27 @@ static enum DI_ERRORTYPE
 	}
 
 	vpp_buf	= container_of(buf, struct aml_v4l2_vpp_buf, di_buf);
-	ambuf	= vpp_buf->aml_vb->ambuf;
+	aml_buf	= vpp_buf->aml_vb->aml_buf;
 	eos	= (buf->flag & DI_FLAG_EOS);
 	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 
-	/* recovery ambuf handle. */
-	buf->vf->v4l_mem_handle = (ulong)ambuf;
+	/* recovery aml_buf handle. */
+	buf->vf->v4l_mem_handle = (ulong)aml_buf;
 
 	kfifo_put(&vpp->out_done_q, vpp_buf);
 
-	if (ambuf->vpp_buf == NULL) {
-		ambuf->vpp_buf = vzalloc(sizeof(struct aml_v4l2_vpp_buf));
+	if (aml_buf->vpp_buf == NULL) {
+		aml_buf->vpp_buf = vzalloc(sizeof(struct aml_v4l2_vpp_buf));
 	}
 
-	if (ambuf->vpp_buf)
-		memcpy((struct aml_v4l2_vpp_buf *)(ambuf->vpp_buf), vpp_buf,
+	if (aml_buf->vpp_buf)
+		memcpy((struct aml_v4l2_vpp_buf *)(aml_buf->vpp_buf), vpp_buf,
 			sizeof(struct aml_v4l2_vpp_buf));
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_output done: idx:%d, vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
-		ambuf->index,
+		aml_buf->index,
 		buf->vf,
 		buf->vf->index,
 		buf->vf->flag,
@@ -385,9 +385,9 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("VC_OUT_VPP-2.submit", ambuf->index);
+	ATRACE_COUNTER("VC_OUT_VPP-2.submit", aml_buf->index);
 
-	aml_buf_done(&vpp->ctx->bm, ambuf, BUF_USER_VPP);
+	aml_buf_done(&vpp->ctx->bm, aml_buf, BUF_USER_VPP);
 
 	vpp->out_num[OUTPUT_PORT]++;
 
@@ -429,7 +429,7 @@ static enum DI_ERRORTYPE
 		return DI_ERR_UNDEFINED;
 	}
 
-	fb	= vpp_buf->aml_vb->ambuf;
+	fb	= vpp_buf->aml_vb->aml_buf;
 	eos	= (buf->flag & DI_FLAG_EOS);
 	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 
@@ -500,7 +500,7 @@ static void vpp_vf_get(void *caller, struct vframe_s *vf_out)
 {
 	struct aml_v4l2_vpp *vpp = (struct aml_v4l2_vpp *)caller;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	struct di_buffer *buf = NULL;
 	struct vframe_s *vf = NULL;
 	bool bypass = false;
@@ -514,7 +514,7 @@ static void vpp_vf_get(void *caller, struct vframe_s *vf_out)
 	}
 
 	if (kfifo_get(&vpp->out_done_q, &vpp_buf)) {
-		ambuf	= vpp_buf->aml_vb->ambuf;
+		aml_buf	= vpp_buf->aml_vb->aml_buf;
 		buf	= &vpp_buf->di_buf;
 		eos	= (buf->flag & DI_FLAG_EOS);
 		bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
@@ -543,7 +543,7 @@ static void vpp_vf_get(void *caller, struct vframe_s *vf_out)
 
 		up(&vpp->sem_out);
 
-		ATRACE_COUNTER("VC_OUT_VPP-3.vf_get", ambuf->index);
+		ATRACE_COUNTER("VC_OUT_VPP-3.vf_get", aml_buf->index);
 
 		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 			"%s: vf:%px, index:%d, flag(vf:%x di:%x), ts:%lld\n",
@@ -559,15 +559,15 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 {
 	#if 0
 	struct aml_v4l2_vpp *vpp = (struct aml_v4l2_vpp *)caller;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 	struct aml_v4l2_buf *aml_vb = NULL;
 	struct aml_v4l2_vpp_buf *vpp_buf = NULL;
 	struct di_buffer *buf = NULL;
 	bool bypass = false;
 	bool eos = false;
 
-	ambuf	= (struct aml_buf *) vf->v4l_mem_handle;
-	aml_vb	= container_of(to_vb2_v4l2_buffer(ambuf->vb), struct aml_v4l2_buf, vb);
+	aml_buf	= (struct aml_buf *) vf->v4l_mem_handle;
+	aml_vb	= container_of(to_vb2_v4l2_buffer(aml_buf->vb), struct aml_v4l2_buf, vb);
 
 	vpp_buf	= (struct aml_v4l2_vpp_buf *) aml_vb->vpp_buf_handle;
 	buf	= &vpp_buf->di_buf;
@@ -582,7 +582,7 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 		buf->flag,
 		vf->timestamp);
 
-	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", ambuf->index);
+	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", aml_buf->index);
 
 	if (!eos && !bypass) {
 		if (vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF) {
@@ -611,8 +611,8 @@ void vpp_wrapper_worker(struct work_struct *work)
 		}
 
 		if (vpp->is_prog) {
-			ATRACE_COUNTER("VC_IN_VPP-1.recycle", vpp_buf->aml_vb->ambuf->index);
-			aml_buf_fill(&vpp->ctx->bm, vpp_buf->aml_vb->ambuf, BUF_USER_VPP);
+			ATRACE_COUNTER("VC_IN_VPP-1.recycle", vpp_buf->aml_vb->aml_buf->index);
+			aml_buf_fill(&vpp->ctx->bm, vpp_buf->aml_vb->aml_buf, BUF_USER_VPP);
 		}
 
 		mutex_lock(&vpp->output_lock);
@@ -631,16 +631,16 @@ void aml_v4l2_vpp_recycle(struct aml_v4l2_vpp *vpp, struct aml_v4l2_buf *aml_vb)
 	bool bypass = false;
 	bool eos = false;
 
-	if (aml_vb->ambuf->vpp_buf == NULL)
+	if (aml_vb->aml_buf->vpp_buf == NULL)
 		return;
 
-	vpp_buf = (struct aml_v4l2_vpp_buf *)aml_vb->ambuf->vpp_buf;
+	vpp_buf = (struct aml_v4l2_vpp_buf *)aml_vb->aml_buf->vpp_buf;
 	buf	= &vpp_buf->di_buf;
 	eos	= (buf->flag & DI_FLAG_EOS);
 	bypass	= (buf->flag & DI_FLAG_BUF_BY_PASS);
 	vf      = vpp_buf->di_buf.vf;
 
-	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", aml_vb->ambuf->index);
+	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", aml_vb->aml_buf->index);
 
 	if (!eos && !bypass) {
 		if (vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF) {
@@ -659,7 +659,7 @@ static int aml_v4l2_vpp_thread(void* param)
 		struct aml_v4l2_vpp_buf *in_buf;
 		struct aml_v4l2_vpp_buf *out_buf = NULL;
 		struct vframe_s *vf_out = NULL;
-		struct aml_buf *ambuf;
+		struct aml_buf *aml_buf;
 
 		if (down_interruptible(&vpp->sem_in))
 			goto exit;
@@ -675,7 +675,7 @@ retry:
 
 		if ((vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF) &&
 			(is_di_input_buff_full(vpp) || is_di_output_buff_full(vpp))) {
-			v4l_dbg(ctx, 0, "di input/ouput full!\n");
+			v4l_dbg(ctx, 0, "di input/output full!\n");
 			usleep_range(500, 550);
 			goto retry;
 		}
@@ -731,21 +731,21 @@ retry:
 
 		if (!vpp->is_prog) {
 			/* submit I to DI. */
-			ambuf = out_buf->aml_vb->ambuf;
-			ambuf->state = FB_ST_VPP;
+			aml_buf = out_buf->aml_vb->aml_buf;
+			aml_buf->state = FB_ST_VPP;
 
 			memcpy(vf_out, in_buf->di_buf.vf, sizeof(*vf_out));
 			memcpy(vf_out->canvas0_config,
 				in_buf->di_buf.vf->canvas0_config,
 				2 * sizeof(struct canvas_config_s));
 
-			vf_out->canvas0_config[0].phy_addr = ambuf->planes[0].addr;
-			if (ambuf->num_planes == 1)
+			vf_out->canvas0_config[0].phy_addr = aml_buf->planes[0].addr;
+			if (aml_buf->num_planes == 1)
 				vf_out->canvas0_config[1].phy_addr =
-					ambuf->planes[0].addr + ambuf->planes[0].offset;
+					aml_buf->planes[0].addr + aml_buf->planes[0].offset;
 			else
 				vf_out->canvas0_config[1].phy_addr =
-					ambuf->planes[1].addr;
+					aml_buf->planes[1].addr;
 
 			if (in_buf->di_buf.flag & DI_FLAG_EOS)
 				memset(vf_out, 0, sizeof(*vf_out));
@@ -788,8 +788,8 @@ retry:
 		v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR,
 			"vpp_handle start: idx:(%d, %d), dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "
 			"in:%d, out:%d, vf:%d, in done:%d, out done:%d",
-			in_buf->aml_vb->ambuf->index,
-			out_buf->aml_vb->ambuf->index,
+			in_buf->aml_vb->aml_buf->index,
+			out_buf->aml_vb->aml_buf->index,
 			in_buf->di_buf.vf,
 			in_buf->di_buf.vf->index,
 			out_buf->di_buf.vf, VPP_BUF_GET_IDX(out_buf),
@@ -811,18 +811,18 @@ retry:
 
 		if (vpp->work_mode == VPP_MODE_S4_DW_MMU) {
 			ATRACE_COUNTER("VC_OUT_VPP-1.fill_output_start_dw",
-				out_buf->aml_vb->ambuf->index);
+				out_buf->aml_vb->aml_buf->index);
 
 			kfifo_put(&vpp->processing, in_buf);
 
 			di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 			ATRACE_COUNTER("VC_OUT_VPP-1.empty_input_start_dw",
-				in_buf->aml_vb->ambuf->index);
+				in_buf->aml_vb->aml_buf->index);
 			di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 		} else {
 			if (vpp->is_bypass_p) {
 				ATRACE_COUNTER("V4L_OUT_VPP-1.direct_handle_start",
-					in_buf->aml_vb->ambuf->index);
+					in_buf->aml_vb->aml_buf->index);
 				out_buf->di_buf.flag = in_buf->di_buf.flag;
 				out_buf->di_buf.vf->vf_ext = in_buf->di_buf.vf;
 
@@ -835,18 +835,18 @@ retry:
 					 * empty input -> output done cb -> fetch processing fifo.
 					 */
 					ATRACE_COUNTER("VC_OUT_VPP-1.lc_handle_start",
-						in_buf->aml_vb->ambuf->index);
+						in_buf->aml_vb->aml_buf->index);
 					out_buf->inbuf = in_buf;
 					kfifo_put(&vpp->processing, out_buf);
 
 					di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 				} else {
 					ATRACE_COUNTER("VC_OUT_VPP-1.fill_output_start",
-						out_buf->aml_vb->ambuf->index);
+						out_buf->aml_vb->aml_buf->index);
 					di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 
 					ATRACE_COUNTER("VC_OUT_VPP-1.empty_input_start",
-						in_buf->aml_vb->ambuf->index);
+						in_buf->aml_vb->aml_buf->index);
 					di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 				}
 			}
@@ -994,7 +994,7 @@ int aml_v4l2_vpp_init(
 	else if ((vpp->buffer_mode == BUFFER_MODE_USE_BUF) &&
 		((cfg->fmt == V4L2_PIX_FMT_NV12M) || (cfg->fmt == V4L2_PIX_FMT_NV12)))
 		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
-	else /* AFBC deocde case, NV12 as default */
+	else /* AFBC decoder case, NV12 as default */
 		init.output_format = DI_OUTPUT_NV12 | DI_OUTPUT_LINEAR;
 
 	if (cfg->is_drm)
@@ -1194,7 +1194,7 @@ EXPORT_SYMBOL(aml_v4l2_vpp_destroy);
 static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *vf)
 {
 	struct aml_v4l2_vpp_buf *in_buf;
-	struct aml_buf *ambuf = NULL;
+	struct aml_buf *aml_buf = NULL;
 
 	if (!vpp)
 		return -EINVAL;
@@ -1229,8 +1229,8 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 			vf->type |= VIDTYPE_COMPRESS;
 	}
 
-	ambuf = (struct aml_buf *)vf->v4l_mem_handle;
-	in_buf->aml_vb = container_of(to_vb2_v4l2_buffer(ambuf->vb), struct aml_v4l2_buf, vb);
+	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+	in_buf->aml_vb = container_of(to_vb2_v4l2_buffer(aml_buf->vb), struct aml_v4l2_buf, vb);
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
 		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) {
@@ -1242,7 +1242,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 				vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 			}
 			else {
-				if (ambuf->state == FB_ST_GE2D)
+				if (aml_buf->state == FB_ST_GE2D)
 					vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 			}
 		}
@@ -1254,7 +1254,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"vpp_push_vframe: idx:%d, vf:%px, idx:%d, type:%x, ts:%lld flag:%x\n",
-		ambuf->index, vf, vf->index, vf->type, vf->timestamp, vf->flag);
+		aml_buf->index, vf, vf->index, vf->type, vf->timestamp, vf->flag);
 
 	do {
 		unsigned int dw_mode = VDEC_DW_NO_AFBC;
@@ -1296,7 +1296,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		}
 	} while(0);
 
-	ATRACE_COUNTER("VC_OUT_VPP-0.receive", ambuf->index);
+	ATRACE_COUNTER("VC_OUT_VPP-0.receive", aml_buf->index);
 
 	kfifo_put(&vpp->in_done_q, in_buf);
 	up(&vpp->sem_in);
@@ -1310,10 +1310,10 @@ static void fill_vpp_buf_cb(void *v4l_ctx, void *fb_ctx)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)v4l_ctx;
-	struct aml_buf *ambuf =
+	struct aml_buf *aml_buf =
 		(struct aml_buf *)fb_ctx;
 	int ret = -1;
-	ret = aml_v4l2_vpp_push_vframe(ctx->vpp, &ambuf->vframe);
+	ret = aml_v4l2_vpp_push_vframe(ctx->vpp, &aml_buf->vframe);
 	if (ret < 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"vpp push vframe err, ret: %d\n", ret);

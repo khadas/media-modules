@@ -782,6 +782,7 @@ static void software_match_section(struct aml_dmx *dmx, u16 buf_num)
 				fid = i;
 			} else {
 				pr_error("[sw match]multiple-filter match this\n"
+
 					"section, will skip this section\n");
 				return;
 			}
