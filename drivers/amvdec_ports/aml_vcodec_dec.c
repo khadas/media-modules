@@ -74,7 +74,7 @@
 #define AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE (V4L2_CID_USER_AMLOGIC_BASE + 4)
 /*V4L2_CID_USER_AMLOGIC_BASE + 5 occupied*/
 #define AML_V4L2_GET_BITDEPTH (V4L2_CID_USER_AMLOGIC_BASE + 6)
-
+#define AML_V4L2_DEC_PARMS_CONFIG (V4L2_CID_USER_AMLOGIC_BASE + 7)
 
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
@@ -291,6 +291,8 @@ static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
 				       struct v4l2_pix_format *pix,
 				       struct aml_q_data *q_data,
 				       u32 type);
+static void vidioc_vdec_s_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
+static void vidioc_vdec_g_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 
 static ulong aml_vcodec_ctx_lock(struct aml_vcodec_ctx *ctx)
 {
@@ -3681,6 +3683,9 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"bitdepth: %d\n", ctrl->val);
 		break;
+	case AML_V4L2_DEC_PARMS_CONFIG:
+		vidioc_vdec_g_parm_ext(ctrl, ctx);
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -3706,8 +3711,9 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 		ctx->cache_input_buffer_num = ctrl->val;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"cache_input_buffer_num: %d\n", ctrl->val);
+	} else if (ctrl->id == AML_V4L2_DEC_PARMS_CONFIG) {
+		vidioc_vdec_s_parm_ext(ctrl, ctx);
 	}
-
 	return 0;
 }
 
@@ -3787,6 +3793,19 @@ static const struct v4l2_ctrl_config ctrl_gt_bit_depth = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_sgt_streamparm = {
+	.name	= "streamparm",
+	.id	= AML_V4L2_DEC_PARMS_CONFIG,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_COMPOUND_TYPES,
+	.flags	= V4L2_CTRL_FLAG_VOLATILE,
+	.dims = { sizeof(struct aml_dec_params) },
+	.min	= 0,
+	.max	= 0xff,
+	.step	= 1,
+	.def	= 0,
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -3849,6 +3868,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 		goto err;
 	}
 
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_sgt_streamparm, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
 	v4l2_ctrl_handler_setup(&ctx->ctrl_hdl);
 
 	return 0;
@@ -3888,6 +3913,18 @@ static int vidioc_vdec_g_parm(struct file *file, void *fh,
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s\n", __func__);
 
 	return 0;
+}
+
+static void vidioc_vdec_g_parm_ext(struct v4l2_ctrl *ctrl,
+	struct aml_vcodec_ctx *ctx)
+{
+	struct v4l2_streamparm parm = {0};
+
+	parm.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	memcpy(&parm.parm.raw_data, ctrl->p_new.p, sizeof(parm.parm.raw_data));
+	vidioc_vdec_g_parm(NULL, &ctx->fh, &parm);
+	memcpy(ctrl->p_new.p, &parm.parm.raw_data, sizeof(parm.parm.raw_data));
+
 }
 
 static int vidioc_vdec_g_pixelaspect(struct file *file, void *fh,
@@ -4016,6 +4053,15 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 	return 0;
 }
 
+static void vidioc_vdec_s_parm_ext(struct v4l2_ctrl *ctrl,
+	struct aml_vcodec_ctx *ctx)
+{
+	struct v4l2_streamparm parm = {0};
+
+	parm.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+	memcpy(&parm.parm.raw_data, ctrl->p_new.p, sizeof(parm.parm.raw_data));
+	vidioc_vdec_s_parm(NULL, &ctx->fh, &parm);
+}
 
 const struct v4l2_m2m_ops aml_vdec_m2m_ops = {
 	.device_run	= m2mops_vdec_device_run,

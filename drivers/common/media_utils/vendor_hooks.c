@@ -54,40 +54,10 @@ void v4l2_fill_fmtdesc(void *data, struct v4l2_fmtdesc *format)
 	format->flags = format->flags | flags;
 }
 
-struct v4l2_streamparm q;
-
-void v4l2_strparm_save(void *data, struct v4l2_streamparm *p)
-{
-	memcpy(q.parm.output.reserved, p->parm.output.reserved,
-			sizeof(q.parm.output.reserved));
-	q.parm.output.extendedmode = p->parm.output.extendedmode;
-	q.parm.output.outputmode = p->parm.output.outputmode;
-
-	memcpy(q.parm.capture.reserved, p->parm.capture.reserved,
-			sizeof(q.parm.capture.reserved));
-	q.parm.capture.extendedmode = p->parm.capture.extendedmode;
-	q.parm.capture.capturemode = p->parm.capture.capturemode;
-}
-
-void v4l2_strparm_restore(void *data, struct v4l2_streamparm *p)
-{
-	memcpy(p->parm.output.reserved, q.parm.output.reserved,
-			sizeof(p->parm.output.reserved));
-	p->parm.output.extendedmode = q.parm.output.extendedmode;
-	p->parm.output.outputmode = q.parm.output.outputmode;
-
-	memcpy(p->parm.capture.reserved, q.parm.capture.reserved,
-			sizeof(p->parm.capture.reserved));
-	p->parm.capture.extendedmode = q.parm.capture.extendedmode;
-	p->parm.capture.capturemode = q.parm.capture.capturemode;
-}
-
 void register_media_modules_vendor_hooks()
 {
 	register_trace_android_vh_v4l2_meta_ptr_update(v4l2_meta_ptr_update, NULL);
 	register_trace_android_vh_v4l2_fill_fmtdesc(v4l2_fill_fmtdesc, NULL);
-	register_trace_android_vh_v4l2_strparm_save(v4l2_strparm_save, NULL);
-	register_trace_android_vh_v4l2_strparm_restore(v4l2_strparm_restore, NULL);
 }
 EXPORT_SYMBOL(register_media_modules_vendor_hooks);
 
@@ -95,7 +65,5 @@ void unregister_media_modules_vendor_hooks()
 {
 	unregister_trace_android_vh_v4l2_meta_ptr_update(v4l2_meta_ptr_update, NULL);
 	unregister_trace_android_vh_v4l2_fill_fmtdesc(v4l2_fill_fmtdesc, NULL);
-	unregister_trace_android_vh_v4l2_strparm_save(v4l2_strparm_save, NULL);
-	unregister_trace_android_vh_v4l2_strparm_restore(v4l2_strparm_restore, NULL);
 }
 EXPORT_SYMBOL(unregister_media_modules_vendor_hooks);
