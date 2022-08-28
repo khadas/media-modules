@@ -376,6 +376,8 @@ static u32 lookup_check_count = 30;
  */
 static u32 force_config_fence;
 
+static u32 one_packet_multi_frames_multi_run = 1;
+
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
 static void vmh264_dump_state(struct vdec_s *vdec);
@@ -577,6 +579,7 @@ static const struct vframe_operations_s vf_provider_ops = {
 #define DEC_RESULT_EOS              7
 #define DEC_RESULT_FORCE_EXIT       8
 #define DEC_RESULT_TIMEOUT          9
+#define DEC_RESULT_UNFINISH         11
 #define DEC_RESULT_ERROR_DATA       12
 
 
@@ -980,6 +983,10 @@ struct vdec_h264_hw_s {
 	ulong mc_cpu_handle;
 	struct mutex pic_mutex;
 	u32 is_interlace;
+	u32 chunk_size;
+	u32 chunk_offset;
+	u32 consume_byte;
+	u32 reserved_byte;
 };
 
 static u32 again_threshold;
@@ -2833,6 +2840,8 @@ static void dealloc_buf_specs(struct vdec_h264_hw_s *hw,
 			spin_lock_irqsave
 				(&hw->bufspec_lock, flags);
 			hw->buffer_spec[i].used = -1;
+			if (release_all && hw->is_used_v4l)
+				hw->buffer_spec[i].vf_ref = 0;
 			spin_unlock_irqrestore
 				(&hw->bufspec_lock, flags);
 			release_aux_data(hw, i);
@@ -7760,19 +7769,42 @@ pic_done_proc:
 		vh264_pic_done_proc(vdec);
 
 		if (hw->frmbase_cont_flag) {
-			/*do not DEC_RESULT_GET_DATA*/
-			hw->get_data_count = 0x7fffffff;
-			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
-			decode_frame_count[DECODE_ID(hw)]++;
-			if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
-				hw->gvs.i_decoded_frames++;
-			} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
-				hw->gvs.p_decoded_frames++;
-			} else if (p_H264_Dpb->mSlice.slice_type == B_SLICE) {
-				hw->gvs.b_decoded_frames++;
+			if (one_packet_multi_frames_multi_run) {
+				u32 bitcnt;
+
+				/*do not DEC_RESULT_GET_DATA*/
+				hw->get_data_count = 0x7fffffff;
+				decode_frame_count[DECODE_ID(hw)]++;
+				if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
+					hw->gvs.i_decoded_frames++;
+				} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
+					hw->gvs.p_decoded_frames++;
+				} else if (p_H264_Dpb->mSlice.slice_type == B_SLICE) {
+					hw->gvs.b_decoded_frames++;
+				}
+
+				bitcnt = READ_VREG(VIFF_BIT_CNT);
+				hw->reserved_byte = bitcnt >> 3;
+				hw->consume_byte = hw->chunk_size - hw->reserved_byte;
+
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+					"%s, size 0x%x, consume_byte 0x%x, reserved_byte 0x%x\n", __func__,
+					hw->chunk_size, hw->consume_byte, hw->reserved_byte);
+			} else {
+				/*do not DEC_RESULT_GET_DATA*/
+				hw->get_data_count = 0x7fffffff;
+				WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
+				decode_frame_count[DECODE_ID(hw)]++;
+				if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
+					hw->gvs.i_decoded_frames++;
+				} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
+					hw->gvs.p_decoded_frames++;
+				} else if (p_H264_Dpb->mSlice.slice_type == B_SLICE) {
+					hw->gvs.b_decoded_frames++;
+				}
+				start_process_time(hw);
+				return IRQ_HANDLED;
 			}
-			start_process_time(hw);
-			return IRQ_HANDLED;
 		}
 		amvdec_stop();
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -7815,6 +7847,9 @@ pic_done_proc:
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 
 		hw->dec_result = DEC_RESULT_DONE;
+		if (hw->frmbase_cont_flag && one_packet_multi_frames_multi_run) {
+			hw->dec_result = DEC_RESULT_UNFINISH;
+		}
 		vdec_schedule_work(&hw->work);
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -10404,6 +10439,54 @@ result_done:
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
 		mutex_unlock(&hw->chunks_mutex);
+	}  else if (hw->dec_result == DEC_RESULT_UNFINISH) {
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+			"%s, DEC_RESULT_UNFINISH\n", __func__);
+		amvdec_stop();
+
+		{
+			if (hw->error_proc_policy & 0x8000) {
+				struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+				int i;
+				struct DecodedPictureBuffer *p_Dpb = &p_H264_Dpb->mDPB;
+
+				for (i = 0; i < p_Dpb->used_size; i++) {
+					int i_flag = p_Dpb->fs[i]->bottom_field || p_Dpb->fs[i]->top_field;
+					int threshold = (i_flag || (hw->max_reference_size >= 12)) ? ((50 + p_Dpb->used_size) * 2)	: 50 + p_Dpb->used_size;
+					if ((p_Dpb->fs[i]->dpb_frame_count + threshold
+							< p_H264_Dpb->dpb_frame_count) &&
+						p_Dpb->fs[i]->is_reference &&
+						!p_Dpb->fs[i]->is_long_term &&
+						p_Dpb->fs[i]->is_output) {
+						dpb_print(DECODE_ID(hw),
+							0,
+							"unmark reference dpb_frame_count difference large in dpb\n");
+						unmark_for_reference(p_Dpb, p_Dpb->fs[i]);
+						update_ref_list(p_Dpb);
+					}
+				}
+			}
+		}
+		if (hw->mmu_enable
+			&& hw->frame_busy && hw->frame_done) {
+			long used_4k_num;
+			hevc_sao_wait_done(hw);
+			if (hw->hevc_cur_buf_idx != 0xffff) {
+				used_4k_num =
+				(READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+			if (used_4k_num >= 0)
+				dpb_print(DECODE_ID(hw),
+				PRINT_FLAG_MMU_DETAIL,
+				"release unused buf , used_4k_num %ld index %d\n",
+				used_4k_num, hw->hevc_cur_buf_idx);
+			hevc_mmu_dma_check(hw_to_vdec(hw));
+			decoder_mmu_box_free_idx_tail(
+				hw->mmu_box,
+				hw->hevc_cur_buf_idx,
+				used_4k_num);
+				hw->hevc_cur_buf_idx = 0xffff;
+			}
+		}
 	}
 
 	if (p_H264_Dpb->mVideo.dec_picture) {
@@ -10731,22 +10814,56 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (vdec->slave || vdec->master)
 		vdec_set_flag(vdec, VDEC_FLAG_SELF_INPUT_CONTEXT);
 #endif
-	size = vdec_prepare_input(vdec, &hw->chunk);
-	if ((size < 0) ||
-		(input_frame_based(vdec) && hw->chunk == NULL)) {
-		input_empty[DECODE_ID(hw)]++;
-		hw->dec_result = DEC_RESULT_AGAIN;
+	if ((vdec_frame_based(vdec)) &&
+		(hw->dec_result == DEC_RESULT_UNFINISH)) {
+		u32 data_invalid = 0;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+			"%s: DEC_RESULT_UNFINISH, before, chunk_offset:0x%x, chunk_size:0x%x, consume_byte:0x%x, reserved:0x%x, reserved*8:0x%x\n",
+			__func__,
+			hw->chunk_offset,
+			hw->chunk_size,
+			hw->consume_byte,
+			hw->reserved_byte,
+			hw->reserved_byte*8);
 
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-			"vdec_prepare_input: Insufficient data\n");
+		data_invalid = vdec_offset_prepare_input(vdec, hw->consume_byte, hw->chunk_offset, hw->chunk_size);
+		hw->chunk_offset = (hw->chunk_offset + hw->consume_byte) - data_invalid;
+		hw->chunk_size = (hw->chunk_size - hw->consume_byte) + data_invalid;
 
-		vdec_schedule_work(&hw->work);
-		return;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+			"%s: DEC_RESULT_UNFINISH, after, chunk_offset:0x%x, chunk_size:0x%x, data_invalid:0x%x\n",
+			__func__,
+			hw->chunk_offset,
+			hw->chunk_size,
+			data_invalid);
+		size = hw->chunk_size;
+		hw->consume_byte = 0; // must reset to 0, avoid res change 3 times run with different data size.
+		WRITE_VREG(AV_SCRATCH_1, hw->reserved_byte*8); // reuse the register AV_SCRATCH_1 to store the reserved bit_cnt for one packet multi-frame
+	} else {
+		size = vdec_prepare_input(vdec, &hw->chunk);
+		if ((size < 0) ||
+			(input_frame_based(vdec) && hw->chunk == NULL)) {
+			input_empty[DECODE_ID(hw)]++;
+			hw->dec_result = DEC_RESULT_AGAIN;
+
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+				"vdec_prepare_input: Insufficient data\n");
+
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		if ((vdec_frame_based(vdec)) &&
+			(hw->chunk != NULL)) {
+			hw->chunk_offset = hw->chunk->offset;
+			hw->chunk_size = hw->chunk->size;
+		}
+		WRITE_VREG(AV_SCRATCH_1, 0); // reuse the register AV_SCRATCH_1 to store the reserved bit_cnt for one packet multi-frame
 	}
 	input_empty[DECODE_ID(hw)] = 0;
 
-	hw->dec_result = DEC_RESULT_NONE;
-	hw->get_data_count = 0;
+	if (!(hw->dec_result == DEC_RESULT_UNFINISH)) {
+		hw->get_data_count = 0;
+	}
 
 #if 0
 	pr_info("VLD_MEM_VIFIFO_LEVEL = 0x%x, rp = 0x%x, wp = 0x%x\n",
@@ -10760,10 +10877,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 		if (!hw->chunk->block->is_mapped)
 			data = codec_mm_vmap(hw->chunk->block->start +
-				hw->chunk->offset, size);
+				hw->chunk_offset, size);
 		else
 			data = ((u8 *)hw->chunk->block->start_virt)
-				+ hw->chunk->offset;
+				+ hw->chunk_offset;
 
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FLAG_VDEC_STATUS)
@@ -10775,6 +10892,17 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			data[4], data[5], data[size - 4],
 			data[size - 3],	data[size - 2],
 			data[size - 1]);
+		}
+		if (hw->dec_result == DEC_RESULT_UNFINISH) {
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
+			"DEC_RESULT_UNFINISH %s: %x %x %x %x %x size 0x%x\n",
+			__func__,
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_RP),
+			STBUF_READ(&vdec->vbuf, get_rp),
+			STBUF_READ(&vdec->vbuf, get_wp),
+			size);
 		}
 		if (dpb_is_debug(DECODE_ID(hw),
 			PRINT_FRAMEBASE_DATA)
@@ -10809,6 +10937,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			STBUF_READ(&vdec->vbuf, get_wp),
 			size);
 
+	hw->dec_result = DEC_RESULT_NONE;
 	start_process_time(hw);
 	if (vdec->mc_loaded) {
 			/*firmware have load before,
@@ -10863,13 +10992,14 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (input_frame_based(vdec)) {
 		int decode_size = 0;
 
-		decode_size = hw->chunk->size +
-			(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+		decode_size = hw->chunk_size +
+			(hw->chunk_offset & (VDEC_FIFO_ALIGN - 1));
+
 		WRITE_VREG(H264_DECODE_INFO, (1<<13));
 		WRITE_VREG(H264_DECODE_SIZE, decode_size);
 		WRITE_VREG(VIFF_BIT_CNT, decode_size * 8);
 		if (vdec->mvfrm)
-			vdec->mvfrm->frame_size = hw->chunk->size;
+			vdec->mvfrm->frame_size = hw->chunk_size;
 	} else {
 		if (size <= 0)
 			size = 0x7fffffff; /*error happen*/
@@ -12073,6 +12203,9 @@ MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
 
 module_param(dirty_again_threshold, uint, 0664);
 MODULE_PARM_DESC(dirty_again_threshold, "\n amvdec_h264 dirty_again_threshold\n");
+
+module_param(one_packet_multi_frames_multi_run, uint, 0664);
+MODULE_PARM_DESC(one_packet_multi_frames_multi_run, "\n one_packet_multi_frames_multi_run\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);
