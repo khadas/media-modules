@@ -112,6 +112,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->post_to_upper_done = true;
 	ctx->param_sets_from_ucode = param_sets_from_ucode ? 1 : 0;
 	ctx->cache_input_buffer_num = 60;
+	ctx->write_frames = 0;
 
 	if (enable_drm_mode) {
 		ctx->is_drm_mode = true;

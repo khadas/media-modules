@@ -7956,6 +7956,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	unsigned int dec_status = hw->dec_status;
 	int obu_type;
 	int ret = 0;
+	uint debug_tag;
+	int i;
 
 	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
@@ -7965,6 +7967,94 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	else if (dec_status == AOM_AV1_DEC_PIC_END ||
 		dec_status == AOM_NAL_DECODE_DONE) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+	}
+
+	if (debug & AV1_DEBUG_BUFMGR)
+		av1_print(hw, AV1_DEBUG_BUFMGR,
+			"av1 isr (%d) dec status  = 0x%x (0x%x), lcu 0x%x shiftbyte 0x%x shifted_data 0x%x (%x %x lev %x, wr %x, rd %x) log %x\n",
+			irq,
+			dec_status, READ_VREG(HEVC_DEC_STATUS_REG),
+			READ_VREG(HEVC_PARSER_LCU_START),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFTED_DATA),
+			READ_VREG(HEVC_STREAM_START_ADDR),
+			READ_VREG(HEVC_STREAM_END_ADDR),
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR),
+#ifdef DEBUG_UCODE_LOG
+			READ_VREG(HEVC_DBG_LOG_ADR)
+#else
+			0
+#endif
+		);
+#ifdef DEBUG_UCODE_LOG
+	if ((udebug_flag & 0x8) &&
+		(hw->ucode_log_addr != 0) &&
+		(READ_VREG(HEVC_DEC_STATUS_REG) & 0x100)) {
+	    unsigned long flags;
+		unsigned short *log_adr =
+			(unsigned short *)hw->ucode_log_addr;
+		lock_buffer_pool(hw->pbi->common.buffer_pool, flags);
+		while (*(log_adr + 3)) {
+			pr_info("dbg%04x %04x %04x %04x\n",
+				*(log_adr + 3), *(log_adr + 2), *(log_adr + 1), *(log_adr + 0)
+				);
+			log_adr += 4;
+		}
+		unlock_buffer_pool(hw->pbi->common.buffer_pool, flags);
+	}
+#endif
+	debug_tag = READ_HREG(DEBUG_REG1);
+	if (debug_tag & 0x10000) {
+		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
+		for (i = 0; i < 0x400; i += 4) {
+			int ii;
+			if ((i & 0xf) == 0)
+				pr_info("%03x: ", i);
+			for (ii = 0; ii < 4; ii++) {
+				pr_info("%04x ",
+					   hw->lmem_ptr[i + 3 - ii]);
+			}
+			if (((i + ii) & 0xf) == 0)
+				pr_info("\n");
+		}
+		if (((udebug_pause_pos & 0xffff)
+			== (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == hw->result_done_count) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
+			udebug_pause_pos &= 0xffff;
+			hw->ucode_pause_pos = udebug_pause_pos;
+		}
+		else if (debug_tag & 0x20000)
+			hw->ucode_pause_pos = 0xffffffff;
+		if (hw->ucode_pause_pos)
+			reset_process_time(hw);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+	} else if (debug_tag != 0) {
+		pr_info(
+			"dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
+			   READ_HREG(DEBUG_REG2),
+			   READ_VREG(HEVC_PARSER_LCU_START));
+
+		if (((udebug_pause_pos & 0xffff)
+			== (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == hw->result_done_count) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
+			udebug_pause_pos &= 0xffff;
+			hw->ucode_pause_pos = udebug_pause_pos;
+		}
+		if (hw->ucode_pause_pos)
+			reset_process_time(hw);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+		hw->process_busy = 0;
+		return IRQ_HANDLED;
 	}
 
 	if (hw->eos)
@@ -8472,10 +8562,8 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 static irqreturn_t vav1_isr(int irq, void *data)
 {
-	int i;
 	unsigned int dec_status;
 	struct AV1HW_s *hw = (struct AV1HW_s *)data;
-	uint debug_tag;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
@@ -8503,93 +8591,6 @@ static irqreturn_t vav1_isr(int irq, void *data)
 
 	hw->dec_status = dec_status;
 	hw->process_busy = 1;
-	if (debug & AV1_DEBUG_BUFMGR)
-		av1_print(hw, AV1_DEBUG_BUFMGR,
-			"av1 isr (%d) dec status  = 0x%x (0x%x), lcu 0x%x shiftbyte 0x%x shifted_data 0x%x (%x %x lev %x, wr %x, rd %x) log %x\n",
-			irq,
-			dec_status, READ_VREG(HEVC_DEC_STATUS_REG),
-			READ_VREG(HEVC_PARSER_LCU_START),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_SHIFTED_DATA),
-			READ_VREG(HEVC_STREAM_START_ADDR),
-			READ_VREG(HEVC_STREAM_END_ADDR),
-			READ_VREG(HEVC_STREAM_LEVEL),
-			READ_VREG(HEVC_STREAM_WR_PTR),
-			READ_VREG(HEVC_STREAM_RD_PTR),
-#ifdef DEBUG_UCODE_LOG
-			READ_VREG(HEVC_DBG_LOG_ADR)
-#else
-			0
-#endif
-		);
-#ifdef DEBUG_UCODE_LOG
-	if ((udebug_flag & 0x8) &&
-		(hw->ucode_log_addr != 0) &&
-		(READ_VREG(HEVC_DEC_STATUS_REG) & 0x100)) {
-	    unsigned long flags;
-		unsigned short *log_adr =
-			(unsigned short *)hw->ucode_log_addr;
-		lock_buffer_pool(hw->pbi->common.buffer_pool, flags);
-		while (*(log_adr + 3)) {
-			pr_info("dbg%04x %04x %04x %04x\n",
-				*(log_adr + 3), *(log_adr + 2), *(log_adr + 1), *(log_adr + 0)
-				);
-			log_adr += 4;
-		}
-		unlock_buffer_pool(hw->pbi->common.buffer_pool, flags);
-	}
-#endif
-	debug_tag = READ_HREG(DEBUG_REG1);
-	if (debug_tag & 0x10000) {
-		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
-		for (i = 0; i < 0x400; i += 4) {
-			int ii;
-			if ((i & 0xf) == 0)
-				pr_info("%03x: ", i);
-			for (ii = 0; ii < 4; ii++) {
-				pr_info("%04x ",
-					   hw->lmem_ptr[i + 3 - ii]);
-			}
-			if (((i + ii) & 0xf) == 0)
-				pr_info("\n");
-		}
-		if (((udebug_pause_pos & 0xffff)
-			== (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == hw->result_done_count) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
-			udebug_pause_pos &= 0xffff;
-			hw->ucode_pause_pos = udebug_pause_pos;
-		}
-		else if (debug_tag & 0x20000)
-			hw->ucode_pause_pos = 0xffffffff;
-		if (hw->ucode_pause_pos)
-			reset_process_time(hw);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-	} else if (debug_tag != 0) {
-		pr_info(
-			"dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-			   READ_HREG(DEBUG_REG2),
-			   READ_VREG(HEVC_PARSER_LCU_START));
-
-		if (((udebug_pause_pos & 0xffff)
-			== (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == hw->result_done_count) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
-			udebug_pause_pos &= 0xffff;
-			hw->ucode_pause_pos = udebug_pause_pos;
-		}
-		if (hw->ucode_pause_pos)
-			reset_process_time(hw);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-		hw->process_busy = 0;
-		return IRQ_HANDLED;
-	}
 
 	if (hw->dec_status == AOM_AV1_FGS_PARAM) {
 	    uint32_t status_val = READ_VREG(HEVC_FG_STATUS);
@@ -8653,7 +8654,7 @@ static void vav1_put_timer_func(struct timer_list *timer)
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (hw->init_flag == 0) {
 		if (hw->stat & STAT_TIMER_ARM) {

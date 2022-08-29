@@ -138,6 +138,7 @@ struct aml_v4l2_buf {
 
 	struct sg_table *out_sgt;
 	struct sg_table *cap_sgt;
+	ulong addr;
 };
 
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;

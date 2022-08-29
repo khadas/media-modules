@@ -295,9 +295,9 @@ static unsigned int i_only_flag;
 	bit[23] 0: set error flag on frame number gap error and drop it, 1: ignore error.
 	bit[24] 0: not output no_display frame, 1: output no_display frame.
 */
-static unsigned int error_proc_policy = 0xbfCfb6;//0x3fCfb6; /*0x1f14*/
+static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
 
-static unsigned int v4l_error_policy = 0x8197C3B5;//0x8117C3B5; //default
+static unsigned int v4l_error_policy = 0x8117C3B5; //default
 
 /*
 	error_skip_count:
@@ -6241,6 +6241,19 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 	else if (dec_dpb_status == H264_AUX_DATA_READY)
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_AUX_START);
 
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
+			"%s DPB_STATUS_REG: 0x%x, run(%d) last_state (%x) ERROR_STATUS_REG 0x%x, sb (0x%x 0x%x 0x%x) bitcnt 0x%x mby_mbx 0x%x\n",
+			__func__,
+			p_H264_Dpb->dec_dpb_status,
+			run_count[DECODE_ID(hw)],
+			hw->dec_result,
+			READ_VREG(ERROR_STATUS_REG),
+			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+			READ_VREG(VLD_MEM_VIFIFO_WP),
+			READ_VREG(VLD_MEM_VIFIFO_RP),
+			READ_VREG(VIFF_BIT_CNT),
+			READ_VREG(MBY_MBX));
+
 	if (dec_dpb_status == H264_CONFIG_REQUEST) {
 		unsigned short *p = (unsigned short *)hw->lmem_addr;
 		for (i = 0; i < (RPM_END-RPM_BEGIN); i += 4) {
@@ -7139,19 +7152,6 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_SEI_DONE);
 	else if (p_H264_Dpb->dec_dpb_status == H264_AUX_DATA_READY)
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_AUX_DONE);
-
-	dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
-			"%s DPB_STATUS_REG: 0x%x, run(%d) last_state (%x) ERROR_STATUS_REG 0x%x, sb (0x%x 0x%x 0x%x) bitcnt 0x%x mby_mbx 0x%x\n",
-			__func__,
-			p_H264_Dpb->dec_dpb_status,
-			run_count[DECODE_ID(hw)],
-			hw->dec_result,
-			READ_VREG(ERROR_STATUS_REG),
-			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-			READ_VREG(VLD_MEM_VIFIFO_WP),
-			READ_VREG(VLD_MEM_VIFIFO_RP),
-			READ_VREG(VIFF_BIT_CNT),
-			READ_VREG(MBY_MBX));
 
 	ATRACE_COUNTER("V_ST_DEC-decode_state", p_H264_Dpb->dec_dpb_status);
 

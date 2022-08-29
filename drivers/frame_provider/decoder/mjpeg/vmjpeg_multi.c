@@ -732,7 +732,7 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		hw->input_empty
 		);
 	if (vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);

@@ -996,6 +996,9 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 		ctx->vpp_cfg.enable_local_buf,
 		ctx->vpp_cfg.enable_nr,
 		ctx->ge2d_cfg.mode);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"write frames : %d, out_buff : %d in_buff : %d\n",
+		ctx->write_frames, ctx->out_buff_cnt, ctx->in_buff_cnt);
 }
 
 void aml_buffer_status(struct aml_vcodec_ctx *ctx)
@@ -1124,7 +1127,7 @@ void dmabuff_recycle_worker(struct work_struct *work)
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"recycle buff idx: %d, vbuf: %lx\n", vb->vb2_buf.index,
-			(ulong)sg_dma_address(buf->out_sgt->sgl));
+			buf->addr ? buf->addr: (ulong)sg_dma_address(buf->out_sgt->sgl));
 
 		ATRACE_COUNTER("VO_OUT_VSINK-2.write_secure_end", vb->vb2_buf.index);
 
@@ -1223,7 +1226,8 @@ static void aml_vdec_worker(struct work_struct *work)
 	buf.index	= vb->index;
 	if (!ctx->is_drm_mode)
 		buf.vaddr = vb2_plane_vaddr(vb, 0);
-	buf.addr	= sg_dma_address(aml_vb->out_sgt->sgl);
+	buf.addr	= aml_vb->addr ? aml_vb->addr :
+				sg_dma_address(aml_vb->out_sgt->sgl);
 	buf.size	= vb->planes[0].bytesused;
 	buf.model	= vb->memory;
 	buf.timestamp	= vb->timestamp;
@@ -3106,6 +3110,35 @@ int aml_uvm_buff_attach(struct vb2_buffer * vb)
 	return ret;
 }
 
+static int prepare_get_addr(struct dma_buf *dbuf, struct device	 *dev)
+{
+	struct dma_buf_attachment *dba;
+	struct sg_table *sgt;
+	ulong addr;
+
+	/* create attachment for the dmabuf with the user device */
+	dba = dma_buf_attach(dbuf, dev);
+	if (IS_ERR(dba)) {
+		pr_err("failed to attach dmabuf\n");
+		return 0;
+	}
+
+	/* get the associated scatterlist for this buffer */
+	sgt = dma_buf_map_attachment(dba, DMA_BIDIRECTIONAL);
+	if (IS_ERR(sgt)) {
+		pr_err("Error getting dmabuf scatterlist\n");
+		return 0;
+	}
+
+	addr = sg_dma_address(sgt->sgl);
+
+	/* unmap attachment and detach dbuf */
+	dma_buf_unmap_attachment(dba, sgt, DMA_BIDIRECTIONAL);
+	dma_buf_detach(dbuf, dba);
+
+	return addr;
+}
+
 static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 {
 	struct aml_vcodec_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
@@ -3179,6 +3212,22 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		wake_up_interruptible(&ctx->cap_wq);
 		return;
+	} else if (ctx->is_drm_mode) {
+		struct dma_buf *dbuf = vb->planes[0].dbuf;
+		struct device *dev = vb->vb2_queue->alloc_devs[0] ? :
+							vb->vb2_queue->dev;
+
+		if (dbuf && dev) {
+			buf->addr = prepare_get_addr(dbuf, dev);
+			if (buf->addr &&
+				buf->addr != sg_dma_address(buf->out_sgt->sgl)) {
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+					"vb2 dma addr update(0x%lx --> 0x%x)\n",
+					sg_dma_address(buf->out_sgt->sgl), buf->addr);
+			}
+		} else
+			v4l_dbg(ctx, 0,
+					"dbuf %px dev %px\n", dbuf, dev);
 	}
 
 	v4l2_m2m_buf_queue(ctx->m2m_ctx, to_vb2_v4l2_buffer(vb));
@@ -3205,7 +3254,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.index	= vb->index;
 	if (!ctx->is_drm_mode)
 		src_mem.vaddr = vb2_plane_vaddr(vb, 0);
-	src_mem.addr	= sg_dma_address(buf->out_sgt->sgl);
+	src_mem.addr	= buf->addr ? buf->addr :
+				sg_dma_address(buf->out_sgt->sgl);
 	src_mem.size	= vb->planes[0].bytesused;
 	src_mem.model	= vb->memory;
 	src_mem.timestamp = vb->timestamp;
@@ -3318,6 +3368,7 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 					struct aml_v4l2_buf, vb);
 	u32 size, phy_addr = 0;
 	int i;
+	int ret;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s, type: %d, idx: %d\n",
 		__func__, vb->vb2_queue->type, vb->index);
@@ -3373,7 +3424,13 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		aml_buf_attach(&ctx->bm, vb2_dma_contig_plane_dma_addr(vb, 0), vb);
+		ret = aml_buf_attach(&ctx->bm,
+			vb2_dma_contig_plane_dma_addr(vb, 0), vb);
+		if (ret) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+				"aml_buf_attach fail!\n");
+			return ret;
+		}
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(vb->type)) {
@@ -3460,6 +3517,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		atomic_set(&ctx->ge2d_cache_num, 0);
 		ctx->out_buff_cnt = 0;
 		ctx->in_buff_cnt = 0;
+		ctx->write_frames = 0;
 	}
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {

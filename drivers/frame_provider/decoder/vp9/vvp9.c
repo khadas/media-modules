@@ -10053,7 +10053,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 {
 	struct VP9Decoder_s *pbi = container_of(timer,
 		struct VP9Decoder_s, timer);
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
@@ -11953,7 +11953,7 @@ static void vp9_dump_state(struct vdec_s *vdec)
 		);
 
 	if (!pbi->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);

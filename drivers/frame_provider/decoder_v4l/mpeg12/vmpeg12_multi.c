@@ -2288,14 +2288,14 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	expires = jiffies + msecs_to_jiffies(2000);
 	while (!is_avaliable_buffer(hw)) {
 		if (time_after(jiffies, expires)) {
-			pr_err("[%d] MPEG2 isn't enough buff for notify eos.\n", ctx->id);
+			pr_info("[%d] MPEG2 isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
 		}
 	}
 
 	index = find_free_buffer(hw);
 	if (INVALID_IDX == index) {
-		pr_err("[%d] MPEG2 EOS get free buff fail.\n", ctx->id);
+		pr_info("[%d] MPEG2 EOS get free buff fail.\n", ctx->id);
 		return 0;
 	}
 

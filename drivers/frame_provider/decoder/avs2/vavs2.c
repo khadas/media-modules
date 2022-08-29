@@ -6094,7 +6094,7 @@ static void vavs2_put_timer_func(struct timer_list *timer)
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 	if (dec->m_ins_flag) {
 		if (hw_to_vdec(dec)->next_status
 			== VDEC_STATUS_DISCONNECTED) {
@@ -7260,7 +7260,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 		input_empty[dec->index]);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);

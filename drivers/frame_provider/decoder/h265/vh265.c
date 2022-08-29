@@ -10752,7 +10752,7 @@ static void vh265_check_timer_func(struct timer_list *timer)
 	unsigned char empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (hevc->init_flag == 0) {
 		if (hevc->stat & STAT_TIMER_ARM) {
@@ -11837,7 +11837,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		}
 	}
 	if (new_pic == NULL) {
-		enum receviver_start_e state = RECEIVER_INACTIVE;
+		enum receiver_start_e state = RECEIVER_INACTIVE;
 		if (vf_get_receiver(vdec->vf_provider_name)) {
 			state =
 			vf_notify_receiver(vdec->vf_provider_name,
@@ -11916,7 +11916,7 @@ static void check_buffer_status(struct hevc_state_s *hevc)
 	struct PIC_s *pic;
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
 		state =
@@ -13255,7 +13255,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		);
 
 	if (hevc->is_used_v4l && vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);

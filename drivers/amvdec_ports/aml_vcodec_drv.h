@@ -759,6 +759,7 @@ struct aml_vcodec_ctx {
 	int 			cache_input_buffer_num;
 	int			in_buff_cnt;
 	int			out_buff_cnt;
+	int                     write_frames;
 };
 
 /**

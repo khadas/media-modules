@@ -45,10 +45,10 @@ static inline void aml_buf_configure(struct aml_buf_mgr_s *bm,
  *
  * Use to attach buffers that need to be managed.
  */
-static inline void aml_buf_attach(struct aml_buf_mgr_s *bm,
+static inline int aml_buf_attach(struct aml_buf_mgr_s *bm,
 				 ulong key, void *priv)
 {
-	bm->bc.attach(&bm->bc, key, priv);
+	return bm->bc.attach(&bm->bc, key, priv);
 }
 
 /*

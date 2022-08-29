@@ -3343,7 +3343,7 @@ static void vh264_put_timer_func(struct timer_list *timer)
 	unsigned int wait_i_pass_frames;
 	unsigned int reg_val;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (vh264_reset) {
 		pr_info("operation forbidden in timer !\n");

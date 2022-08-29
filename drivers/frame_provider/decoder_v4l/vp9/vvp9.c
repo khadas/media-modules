@@ -8525,12 +8525,71 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	unsigned int dec_status = pbi->dec_status;
 	int i;
+	uint debug_tag;
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_START);
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+	}
+
+	if (debug & VP9_DEBUG_BUFMGR)
+		pr_info("vp9 isr (%d) dec status  = 0x%x, lcu 0x%x shiftbyte 0x%x (%x %x lev %x, wr %x, rd %x)\n",
+			irq,
+			dec_status, READ_VREG(HEVC_PARSER_LCU_START),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_STREAM_START_ADDR),
+			READ_VREG(HEVC_STREAM_END_ADDR),
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR)
+		);
+
+	debug_tag = READ_HREG(DEBUG_REG1);
+	if (debug_tag & 0x10000) {
+		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
+		for (i = 0; i < 0x400; i += 4) {
+			int ii;
+			if ((i & 0xf) == 0)
+				pr_info("%03x: ", i);
+			for (ii = 0; ii < 4; ii++) {
+				pr_info("%04x ",
+					   pbi->lmem_ptr[i + 3 - ii]);
+			}
+			if (((i + ii) & 0xf) == 0)
+				pr_info("\n");
+		}
+
+		if ((udebug_pause_pos == (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == pbi->slice_idx) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2)))
+			pbi->ucode_pause_pos = udebug_pause_pos;
+		else if (debug_tag & 0x20000)
+			pbi->ucode_pause_pos = 0xffffffff;
+		if (pbi->ucode_pause_pos)
+			reset_process_time(pbi);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+	} else if (debug_tag != 0) {
+		pr_info(
+			"dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
+			   READ_HREG(DEBUG_REG2),
+			   READ_VREG(HEVC_PARSER_LCU_START));
+		if ((udebug_pause_pos == (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == pbi->slice_idx) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2)))
+			pbi->ucode_pause_pos = udebug_pause_pos;
+		if (pbi->ucode_pause_pos)
+			reset_process_time(pbi);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+		pbi->process_busy = 0;
+		return IRQ_HANDLED;
 	}
 
 	if (pbi->eos)
@@ -8849,11 +8908,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 static irqreturn_t vvp9_isr(int irq, void *data)
 {
-	int i;
 	unsigned int dec_status;
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
 	unsigned int adapt_prob_status;
-	uint debug_tag;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
@@ -8878,63 +8935,6 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	}
 	pbi->dec_status = dec_status;
 	pbi->process_busy = 1;
-	if (debug & VP9_DEBUG_BUFMGR)
-		pr_info("vp9 isr (%d) dec status  = 0x%x, lcu 0x%x shiftbyte 0x%x (%x %x lev %x, wr %x, rd %x)\n",
-			irq,
-			dec_status, READ_VREG(HEVC_PARSER_LCU_START),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_STREAM_START_ADDR),
-			READ_VREG(HEVC_STREAM_END_ADDR),
-			READ_VREG(HEVC_STREAM_LEVEL),
-			READ_VREG(HEVC_STREAM_WR_PTR),
-			READ_VREG(HEVC_STREAM_RD_PTR)
-		);
-
-	debug_tag = READ_HREG(DEBUG_REG1);
-	if (debug_tag & 0x10000) {
-		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
-		for (i = 0; i < 0x400; i += 4) {
-			int ii;
-			if ((i & 0xf) == 0)
-				pr_info("%03x: ", i);
-			for (ii = 0; ii < 4; ii++) {
-				pr_info("%04x ",
-					   pbi->lmem_ptr[i + 3 - ii]);
-			}
-			if (((i + ii) & 0xf) == 0)
-				pr_info("\n");
-		}
-
-		if ((udebug_pause_pos == (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == pbi->slice_idx) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2)))
-			pbi->ucode_pause_pos = udebug_pause_pos;
-		else if (debug_tag & 0x20000)
-			pbi->ucode_pause_pos = 0xffffffff;
-		if (pbi->ucode_pause_pos)
-			reset_process_time(pbi);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-	} else if (debug_tag != 0) {
-		pr_info(
-			"dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-			   READ_HREG(DEBUG_REG2),
-			   READ_VREG(HEVC_PARSER_LCU_START));
-		if ((udebug_pause_pos == (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == pbi->slice_idx) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2)))
-			pbi->ucode_pause_pos = udebug_pause_pos;
-		if (pbi->ucode_pause_pos)
-			reset_process_time(pbi);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-		pbi->process_busy = 0;
-		return IRQ_HANDLED;
-	}
 
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (!pbi->m_ins_flag) {
@@ -9018,7 +9018,7 @@ static void vvp9_put_timer_func(struct timer_list *timer)
 {
 	struct VP9Decoder_s *pbi = container_of(timer,
 		struct VP9Decoder_s, timer);
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 	uint8_t empty_flag;
 	unsigned int buf_level;
 

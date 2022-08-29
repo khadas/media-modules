@@ -9835,7 +9835,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 	struct hevc_state_s *hevc = (struct hevc_state_s *) data;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	unsigned int dec_status = hevc->dec_status;
-	int i, ret;
+	int i, ret, temp;
+	u32 debug_tag;
 
 	struct vdec_s *vdec = hw_to_vdec(hevc);
 
@@ -9844,6 +9845,81 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 	}
 	else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START);
+	}
+
+	if (is_log_enable(hevc))
+		add_log(hevc,
+			"isr: status = 0x%x dec info 0x%x lcu 0x%x shiftbyte 0x%x shiftstatus 0x%x",
+			dec_status, READ_HREG(HEVC_DECODE_INFO),
+			READ_VREG(HEVC_MPRED_CURR_LCU),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_STATUS));
+
+	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
+		hevc_print(hevc, 0,
+			"265 isr dec status = 0x%x dec info 0x%x shiftbyte 0x%x shiftstatus 0x%x\n",
+			dec_status, READ_HREG(HEVC_DECODE_INFO),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_STATUS));
+
+	debug_tag = READ_HREG(DEBUG_REG1);
+	if (debug_tag & 0x10000) {
+		PR_INIT(128);
+		hevc_print(hevc, 0,
+			"LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
+
+		if (hevc->mmu_enable)
+			temp = 0x500;
+		else
+			temp = 0x400;
+		for (i = 0; i < temp; i += 4) {
+			int ii;
+			if ((i & 0xf) == 0)
+				PR_FILL("%03x: ", i);
+			for (ii = 0; ii < 4; ii++) {
+				PR_FILL("%04x ",
+					   hevc->lmem_ptr[i + 3 - ii]);
+			}
+			if (((i + ii) & 0xf) == 0)
+				PR_INFO(hevc->index);
+		}
+
+		PR_INFO(hevc->index);
+
+		if (((udebug_pause_pos & 0xffff) == (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == hevc->decode_idx) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
+			udebug_pause_pos &= 0xffff;
+			hevc->ucode_pause_pos = udebug_pause_pos;
+		}
+		else if (debug_tag & 0x20000)
+			hevc->ucode_pause_pos = 0xffffffff;
+		if (hevc->ucode_pause_pos)
+			reset_process_time(hevc);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+	} else if (debug_tag != 0) {
+		hevc_print(hevc, 0,
+			"dbg%x: %x l/w/r %x %x %x\n", READ_HREG(DEBUG_REG1),
+			READ_HREG(DEBUG_REG2),
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR));
+		if (((udebug_pause_pos & 0xffff) == (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == hevc->decode_idx) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
+			udebug_pause_pos &= 0xffff;
+			hevc->ucode_pause_pos = udebug_pause_pos;
+		}
+		if (hevc->ucode_pause_pos)
+			reset_process_time(hevc);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+		return IRQ_HANDLED;
 	}
 
 	if (hevc->eos)
@@ -10844,10 +10920,8 @@ static void wait_hevc_search_done(struct hevc_state_s *hevc)
 }
 static irqreturn_t vh265_isr(int irq, void *data)
 {
-	int i, temp;
 	unsigned int dec_status;
 	struct hevc_state_s *hevc = (struct hevc_state_s *)data;
-	u32 debug_tag;
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 
 	if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
@@ -10863,81 +10937,6 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
 
 	hevc->dec_status = dec_status;
-	if (is_log_enable(hevc))
-		add_log(hevc,
-			"isr: status = 0x%x dec info 0x%x lcu 0x%x shiftbyte 0x%x shiftstatus 0x%x",
-			dec_status, READ_HREG(HEVC_DECODE_INFO),
-			READ_VREG(HEVC_MPRED_CURR_LCU),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_SHIFT_STATUS));
-
-	if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
-		hevc_print(hevc, 0,
-			"265 isr dec status = 0x%x dec info 0x%x shiftbyte 0x%x shiftstatus 0x%x\n",
-			dec_status, READ_HREG(HEVC_DECODE_INFO),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_SHIFT_STATUS));
-
-	debug_tag = READ_HREG(DEBUG_REG1);
-	if (debug_tag & 0x10000) {
-		PR_INIT(128);
-		hevc_print(hevc, 0,
-			"LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
-
-		if (hevc->mmu_enable)
-			temp = 0x500;
-		else
-			temp = 0x400;
-		for (i = 0; i < temp; i += 4) {
-			int ii;
-			if ((i & 0xf) == 0)
-				PR_FILL("%03x: ", i);
-			for (ii = 0; ii < 4; ii++) {
-				PR_FILL("%04x ",
-					   hevc->lmem_ptr[i + 3 - ii]);
-			}
-			if (((i + ii) & 0xf) == 0)
-				PR_INFO(hevc->index);
-		}
-
-		PR_INFO(hevc->index);
-
-		if (((udebug_pause_pos & 0xffff) == (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == hevc->decode_idx) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
-			udebug_pause_pos &= 0xffff;
-			hevc->ucode_pause_pos = udebug_pause_pos;
-		}
-		else if (debug_tag & 0x20000)
-			hevc->ucode_pause_pos = 0xffffffff;
-		if (hevc->ucode_pause_pos)
-			reset_process_time(hevc);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-	} else if (debug_tag != 0) {
-		hevc_print(hevc, 0,
-			"dbg%x: %x l/w/r %x %x %x\n", READ_HREG(DEBUG_REG1),
-			READ_HREG(DEBUG_REG2),
-			READ_VREG(HEVC_STREAM_LEVEL),
-			READ_VREG(HEVC_STREAM_WR_PTR),
-			READ_VREG(HEVC_STREAM_RD_PTR));
-		if (((udebug_pause_pos & 0xffff) == (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == hevc->decode_idx) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
-			udebug_pause_pos &= 0xffff;
-			hevc->ucode_pause_pos = udebug_pause_pos;
-		}
-		if (hevc->ucode_pause_pos)
-			reset_process_time(hevc);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-		return IRQ_HANDLED;
-	}
-
 
 	if (hevc->pic_list_init_flag == 1)
 		return IRQ_HANDLED;
@@ -10976,7 +10975,7 @@ static void vh265_check_timer_func(struct timer_list *timer)
 	unsigned char empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 
 	if (hevc->init_flag == 0) {
 		if (hevc->stat & STAT_TIMER_ARM) {
@@ -13091,7 +13090,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		input_empty[hevc->index]);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
-		enum receviver_start_e state =
+		enum receiver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE, NULL);
 		hevc_print(hevc, 0,

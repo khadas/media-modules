@@ -6190,7 +6190,7 @@ static void vavs2_put_timer_func(struct timer_list *timer)
 	uint8_t empty_flag;
 	unsigned int buf_level;
 
-	enum receviver_start_e state = RECEIVER_INACTIVE;
+	enum receiver_start_e state = RECEIVER_INACTIVE;
 	if (dec->init_flag == 0) {
 		if (dec->stat & STAT_TIMER_ARM) {
 			timer->expires = jiffies + PUT_INTERVAL;
