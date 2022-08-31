@@ -49,11 +49,11 @@ typedef struct updatetime_para {
 	bool mForceUpdate;
 }mediasync_updatetime_para;
 
-typedef struct anchor_time_para {
+typedef struct arthortime_para {
 	int64_t mMediaTimeUs;
 	int64_t mSystemTimeUs;
 	int64_t mStcTimeUs;
-}mediasync_anchor_time_para;
+}mediasync_arthortime_para;
 
 typedef struct priv_s {
 	s32 mSyncInsId;
@@ -119,7 +119,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_priv_s *priv = (mediasync_priv_s *)file->private_data;
 	mediasync_ins *SyncIns = NULL;
 	mediasync_alloc_para parm = {0};
-	mediasync_anchor_time_para Anchor_Time = {0};
+	mediasync_arthortime_para ArthorTime = {0};
 	mediasync_updatetime_para UpdateTime = {0};
 	mediasync_systime_para SystemTime = {0};
 	aml_Source_Type sourceType = TS_DEMOD;
@@ -196,13 +196,13 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 				return -EFAULT;
 			}
 			ret = mediasync_ins_get_anchor_time(priv->mSyncInsId,
-							&(Anchor_Time.mMediaTimeUs),
-							&(Anchor_Time.mStcTimeUs),
-							&(Anchor_Time.mSystemTimeUs));
+							&(ArthorTime.mMediaTimeUs),
+							&(ArthorTime.mStcTimeUs),
+							&(ArthorTime.mSystemTimeUs));
 			if (ret == 0) {
 				if (copy_to_user((void *)arg,
-						&Anchor_Time,
-						sizeof(Anchor_Time))) {
+						&ArthorTime,
+						sizeof(ArthorTime))) {
 					return -EFAULT;
 				}
 			}
@@ -1045,7 +1045,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_set_queue_audio_info(priv->mSyncInsId,
+			ret = mediasync_ins_set_queueaudioinfo(priv->mSyncInsId,
 								FrameInfo);
 		break;
 
@@ -1053,7 +1053,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_get_queue_audio_info(priv->mSyncInsId,
+			ret = mediasync_ins_get_queueaudioinfo(priv->mSyncInsId,
 								&FrameInfo);
 			if (ret == 0) {
 				if (copy_to_user((void *)arg,
@@ -1071,7 +1071,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_set_queue_video_info(priv->mSyncInsId,
+			ret = mediasync_ins_set_queuevideoinfo(priv->mSyncInsId,
 								FrameInfo);
 		break;
 
@@ -1079,7 +1079,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_get_queue_video_info(priv->mSyncInsId,
+			ret = mediasync_ins_get_queuevideoinfo(priv->mSyncInsId,
 								&FrameInfo);
 			if (ret == 0) {
 				if (copy_to_user((void *)arg,
@@ -1098,7 +1098,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_set_first_queue_audio_info(priv->mSyncInsId,
+			ret = mediasync_ins_set_firstqueueaudioinfo(priv->mSyncInsId,
 								FrameInfo);
 		break;
 
@@ -1106,7 +1106,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_get_first_queue_audio_info(priv->mSyncInsId,
+			ret = mediasync_ins_get_firstqueueaudioinfo(priv->mSyncInsId,
 								&FrameInfo);
 			if (ret == 0) {
 				if (copy_to_user((void *)arg,
@@ -1124,7 +1124,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_set_first_queue_video_info(priv->mSyncInsId,
+			ret = mediasync_ins_set_firstqueuevideoinfo(priv->mSyncInsId,
 								FrameInfo);
 		break;
 
@@ -1132,7 +1132,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			if (priv->mSyncIns == NULL)
 				return -EFAULT;
 
-			ret = mediasync_ins_get_first_queue_video_info(priv->mSyncInsId,
+			ret = mediasync_ins_get_firstqueuevideoinfo(priv->mSyncInsId,
 								&FrameInfo);
 			if (ret == 0) {
 				if (copy_to_user((void *)arg,

@@ -610,7 +610,7 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	config.enable_extbuf	= true;
 	config.enable_fbc	= (dw != VDEC_DW_NO_AFBC) ? true : false;
 	config.enable_secure	= ctx->is_drm_mode;
-	config.memory_mode	= que->memory;
+	config.memery_mode	= que->memory;
 	config.planes		= V4L2_TYPE_IS_MULTIPLANAR(que->type) ? 2 : 1;
 	config.luma_length	= ctx->picinfo.y_len_sz;
 	config.chroma_length	= ctx->picinfo.c_len_sz;
@@ -679,13 +679,13 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 }
 
  static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
-	struct aml_buf *aml_buf)
+	struct aml_buf *ambuf)
 {
-	struct vb2_buffer *vb2_buf = aml_buf->vb;
+	struct vb2_buffer *vb2_buf = ambuf->vb;
 	struct vb2_v4l2_buffer *vb = to_vb2_v4l2_buffer(vb2_buf);
 	struct aml_v4l2_buf *dstbuf =
 		container_of(vb, struct aml_v4l2_buf, vb);
-	struct vframe_s *vf = &aml_buf->vframe;
+	struct vframe_s *vf = &ambuf->vframe;
 
 	vf->index_disp = ctx->index_disp;
 	ctx->index_disp++;
@@ -694,20 +694,20 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
-		ctx->ada_ctx->frm_name, aml_buf->state, ctx->out_buff_cnt++,
+		ctx->ada_ctx->frm_name, ambuf->state, ctx->out_buff_cnt++,
 		vb2_buf->index, vb2_buf,
 		vf->index & 0xff, vf,
 		vf->timestamp,
 		vf->flag,
-		aml_buf->planes[0].addr, aml_buf->planes[0].length,
-		aml_buf->planes[1].addr, aml_buf->planes[1].length,
-		aml_buf->planes[2].addr, aml_buf->planes[2].length);
+		ambuf->planes[0].addr, ambuf->planes[0].length,
+		ambuf->planes[1].addr, ambuf->planes[1].length,
+		ambuf->planes[2].addr, ambuf->planes[2].length);
 
-	if (dstbuf->aml_buf->num_planes == 1) {
-		vb2_set_plane_payload(vb2_buf, 0, aml_buf->planes[0].bytes_used);
-	} else if (dstbuf->aml_buf->num_planes == 2) {
-		vb2_set_plane_payload(vb2_buf, 0, aml_buf->planes[0].bytes_used);
-		vb2_set_plane_payload(vb2_buf, 1, aml_buf->planes[1].bytes_used);
+	if (dstbuf->ambuf->num_planes == 1) {
+		vb2_set_plane_payload(vb2_buf, 0, ambuf->planes[0].bytes_used);
+	} else if (dstbuf->ambuf->num_planes == 2) {
+		vb2_set_plane_payload(vb2_buf, 0, ambuf->planes[0].bytes_used);
+		vb2_set_plane_payload(vb2_buf, 1, ambuf->planes[1].bytes_used);
 	}
 	vb2_buf->timestamp = vf->timestamp;
 	dstbuf->vb.flags |= vf->frame_type;
@@ -758,15 +758,15 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 
 	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
 		dstbuf->vb.flags = V4L2_BUF_FLAG_LAST;
-		if (dstbuf->aml_buf->num_planes == 1) {
+		if (dstbuf->ambuf->num_planes == 1) {
 			vb2_set_plane_payload(vb2_buf, 0, 0);
-		} else if (dstbuf->aml_buf->num_planes == 2) {
+		} else if (dstbuf->ambuf->num_planes == 2) {
 			vb2_set_plane_payload(vb2_buf, 0, 0);
 			vb2_set_plane_payload(vb2_buf, 1, 0);
 		}
 		ctx->has_receive_eos = true;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-			"receive a empty frame. idx: %d, state: %d\n",
+			"recevie a empty frame. idx: %d, state: %d\n",
 			vb2_buf->index, vb2_buf->state);
 	}
 
@@ -805,7 +805,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 					vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 				}
 				else {
-					if (aml_buf->state == FB_ST_GE2D)
+					if (ambuf->state == FB_ST_GE2D)
 						vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 				}
 			}
@@ -835,7 +835,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 		else
 			v4l2_buff_done(&dstbuf->vb, VB2_BUF_STATE_DONE);
 
-		aml_buf->state = FB_ST_DISPLAY;
+		ambuf->state = FB_ST_DISPLAY;
 	}
 
 	mutex_lock(&ctx->state_lock);
@@ -860,12 +860,12 @@ static void fill_capture_done_cb(void *v4l_ctx, void *fb_ctx)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)v4l_ctx;
-	struct aml_buf *aml_buf = (struct aml_buf *)fb_ctx;
-	struct vb2_buffer *vb2_buf = aml_buf->vb;
+	struct aml_buf *ambuf = (struct aml_buf *)fb_ctx;
+	struct vb2_buffer *vb2_buf = ambuf->vb;
 	struct vb2_v4l2_buffer *vb = to_vb2_v4l2_buffer(vb2_buf);
 	if (ctx->is_stream_off) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-			"ignore buff idx: %d streamoff\n", aml_buf->index);
+			"ignore buff idx: %d streamoff\n", ambuf->index);
 		return;
 	}
 
@@ -879,10 +879,10 @@ static void fill_capture_done_cb(void *v4l_ctx, void *fb_ctx)
 static struct task_ops_s *get_v4l_sink_ops(void);
 
 void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
-		       struct aml_buf *aml_buf,
+		       struct aml_buf *ambuf,
 		       u32 requester)
 {
-	struct task_chain_s *task = aml_buf->task;
+	struct task_chain_s *task = ambuf->task;
 	/*
 	 * line 1: dec <==> vpp <==> v4l-sink, for P / P + DI.NR.
 	 * line 2: dec <==> vpp, vpp <==> v4l-sink, for I / I + DI.NR.
@@ -1002,7 +1002,7 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 {
 	struct vb2_v4l2_buffer *vb = NULL;
 	struct aml_v4l2_buf *aml_buff = NULL;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	struct vb2_queue *q = NULL;
 	ulong flags;
 	int i;
@@ -1019,11 +1019,11 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 	for (i = 0; i < q->num_buffers; ++i) {
 		vb = to_vb2_v4l2_buffer(q->bufs[i]);
 		aml_buff = container_of(vb, struct aml_v4l2_buf, vb);
-		aml_buf = aml_buff->aml_buf;
+		ambuf = aml_buff->ambuf;
 
 		/* print out task chain status. */
-		if (aml_buf)
-			task_chain_show(aml_buf->task);
+		if (ambuf)
+			task_chain_show(ambuf->task);
 	}
 
 	aml_vcodec_ctx_unlock(ctx, flags);
@@ -1368,7 +1368,7 @@ void aml_thread_capture_worker(struct aml_vcodec_ctx *ctx)
 {
 	struct vb2_v4l2_buffer *vb = NULL;
 	struct aml_v4l2_buf *aml_buff = NULL;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 
 	for (;;) {
 		mutex_lock(&ctx->capture_buffer_lock);
@@ -1379,12 +1379,12 @@ void aml_thread_capture_worker(struct aml_vcodec_ctx *ctx)
 		mutex_unlock(&ctx->capture_buffer_lock);
 
 		aml_buff = container_of(vb, struct aml_v4l2_buf, vb);
-		aml_buf = aml_buff->aml_buf;
+		ambuf = aml_buff->ambuf;
 
 		if (ctx->is_stream_off)
 			continue;
 
-		post_frame_to_upper(ctx, aml_buf);
+		post_frame_to_upper(ctx, ambuf);
 	}
 }
 EXPORT_SYMBOL_GPL(aml_thread_capture_worker);
@@ -1723,7 +1723,7 @@ static int vidioc_decoder_streamoff(struct file *file, void *priv,
 		aml_v4l2_ge2d_destroy(ctx->ge2d);
 		ctx->ge2d = NULL;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"ge2d destroy in streamoff.\n");
+			"ge2d destory in streamoff.\n");
 	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
@@ -2919,78 +2919,78 @@ void aml_bind_dv_buffer(struct aml_vcodec_ctx *ctx, char **comp_buf, char **md_b
 	}
 }
 
-static void aml_canvas_cache_free(struct canvas_cache *cache)
+static void aml_canvas_cache_free(struct canvas_cache *canche)
 {
 	int i = -1;
 
-	for (i = 0; i < ARRAY_SIZE(cache->res); i++) {
-		if (cache->res[i].cid > 0) {
+	for (i = 0; i < ARRAY_SIZE(canche->res); i++) {
+		if (canche->res[i].cid > 0) {
 			v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
 				"canvas-free, name:%s, canvas id:%d\n",
-				cache->res[i].name,
-				cache->res[i].cid);
+				canche->res[i].name,
+				canche->res[i].cid);
 
-			canvas_pool_map_free_canvas(cache->res[i].cid);
+			canvas_pool_map_free_canvas(canche->res[i].cid);
 
-			cache->res[i].cid = 0;
+			canche->res[i].cid = 0;
 		}
 	}
 }
 
 void aml_canvas_cache_put(struct aml_vcodec_dev *dev)
 {
-	struct canvas_cache *cache = &dev->cache;
+	struct canvas_cache *canche = &dev->canche;
 
-	mutex_lock(&cache->lock);
+	mutex_lock(&canche->lock);
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-		"canvas-put, ref:%d\n", cache->ref);
+		"canvas-put, ref:%d\n", canche->ref);
 
-	cache->ref--;
+	canche->ref--;
 
-	if (cache->ref == 0) {
-		aml_canvas_cache_free(cache);
+	if (canche->ref == 0) {
+		aml_canvas_cache_free(canche);
 	}
 
-	mutex_unlock(&cache->lock);
+	mutex_unlock(&canche->lock);
 }
 
 int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr)
 {
-	struct canvas_cache *cache = &dev->cache;
+	struct canvas_cache *canche = &dev->canche;
 	int i;
 
-	mutex_lock(&cache->lock);
+	mutex_lock(&canche->lock);
 
-	cache->ref++;
+	canche->ref++;
 
-	for (i = 0; i < ARRAY_SIZE(cache->res); i++) {
-		if (cache->res[i].cid <= 0) {
-			snprintf(cache->res[i].name, 32, "%s-%d", usr, i);
-			cache->res[i].cid =
-				canvas_pool_map_alloc_canvas(cache->res[i].name);
+	for (i = 0; i < ARRAY_SIZE(canche->res); i++) {
+		if (canche->res[i].cid <= 0) {
+			snprintf(canche->res[i].name, 32, "%s-%d", usr, i);
+			canche->res[i].cid =
+				canvas_pool_map_alloc_canvas(canche->res[i].name);
 		}
 
 		v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
 			"canvas-alloc, name:%s, canvas id:%d\n",
-			cache->res[i].name,
-			cache->res[i].cid);
+			canche->res[i].name,
+			canche->res[i].cid);
 
-		if (cache->res[i].cid <= 0) {
+		if (canche->res[i].cid <= 0) {
 			v4l_dbg(0, V4L_DEBUG_CODEC_ERROR,
 				"canvas-fail, name:%s, canvas id:%d.\n",
-				cache->res[i].name,
-				cache->res[i].cid);
+				canche->res[i].name,
+				canche->res[i].cid);
 
-			mutex_unlock(&cache->lock);
+			mutex_unlock(&canche->lock);
 			goto err;
 		}
 	}
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-		"canvas-get, ref:%d\n", cache->ref);
+		"canvas-get, ref:%d\n", canche->ref);
 
-	mutex_unlock(&cache->lock);
+	mutex_unlock(&canche->lock);
 	return 0;
 err:
 	aml_canvas_cache_put(dev);
@@ -2999,11 +2999,11 @@ err:
 
 int aml_canvas_cache_init(struct aml_vcodec_dev *dev)
 {
-	dev->cache.ref = 0;
-	mutex_init(&dev->cache.lock);
+	dev->canche.ref = 0;
+	mutex_init(&dev->canche.lock);
 
 	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
-		"canvas-init, ref:%d\n", dev->cache.ref);
+		"canvas-init, ref:%d\n", dev->canche.ref);
 
 	return 0;
 }
@@ -3019,7 +3019,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 		atomic_dec(&ctx->dev->vpp_count);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"vpp destroy inst count:%d.\n",
+			"vpp destory inst count:%d.\n",
 			atomic_read(&ctx->dev->vpp_count));
 	}
 
@@ -3027,7 +3027,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 		aml_v4l2_ge2d_destroy(ctx->ge2d);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			"ge2d destroy.\n");
+			"ge2d destory.\n");
 	}
 
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
@@ -3125,8 +3125,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	 * check if this buffer is ready to be used after decode
 	 */
 	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
-		struct aml_buf *aml_buf = buf->aml_buf;
-		struct vframe_s *vf = &aml_buf->vframe;
+		struct aml_buf *ambuf = buf->ambuf;
+		struct vframe_s *vf = &ambuf->vframe;
 		u32 dw_mode = VDEC_DW_NO_AFBC;
 
 		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
@@ -3152,15 +3152,15 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"IN__BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, "
 			"dma addr: %lx Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 			ctx->ada_ctx->frm_name,
-			aml_buf->state,
+			ambuf->state,
 			ctx->in_buff_cnt++,
 			vb->index, vb,
 			vf ? vf->index & 0xff : -1, vf,
 			vf ? vf->timestamp : 0,
 			vb2_dma_contig_plane_dma_addr(vb, 0),
-			aml_buf->planes[0].addr, aml_buf->planes[0].length,
-			aml_buf->planes[1].addr, aml_buf->planes[1].length,
-			aml_buf->planes[2].addr, aml_buf->planes[2].length);
+			ambuf->planes[0].addr, ambuf->planes[0].length,
+			ambuf->planes[1].addr, ambuf->planes[1].length,
+			ambuf->planes[2].addr, ambuf->planes[2].length);
 
 		ATRACE_COUNTER("VC_IN_VSINK-4.recycle", vb->index);
 
@@ -3168,14 +3168,14 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			aml_v4l2_vpp_recycle(ctx->vpp, buf);
 		}
 
-		if (aml_buf->entry.vb2 != vb) {
-			aml_buf->entry.vb2 = vb;
+		if (ambuf->entry.vb2 != vb) {
+			ambuf->entry.vb2 = vb;
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 				"vb2 (old idx: %d new idx: %d) update\n",
-				aml_buf->vb->index, vb->index);
+				ambuf->vb->index, vb->index);
 		}
 
-		aml_buf_fill(&ctx->bm, aml_buf, BUF_USER_VSINK);
+		aml_buf_fill(&ctx->bm, ambuf, BUF_USER_VSINK);
 
 		wake_up_interruptible(&ctx->cap_wq);
 		return;
@@ -3262,7 +3262,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	config.enable_extbuf	= true;
 	config.enable_fbc	= (dw != VDEC_DW_NO_AFBC) ? true : false;
 	config.enable_secure	= ctx->is_drm_mode;
-	config.memory_mode	= vb->vb2_queue->memory;
+	config.memery_mode	= vb->vb2_queue->memory;
 	config.planes		= V4L2_TYPE_IS_MULTIPLANAR(vb->vb2_queue->type) ? 2 : 1;
 	config.luma_length	= ctx->picinfo.y_len_sz;
 	config.chroma_length	= ctx->picinfo.c_len_sz;
@@ -3334,14 +3334,14 @@ static int vb2ops_vdec_buf_init(struct vb2_buffer *vb)
 			char *owner = __getname();
 
 			snprintf(owner, PATH_MAX, "%s-%d", "v4l-output", ctx->id);
-			strncpy(buf->mem_owner, owner, sizeof(buf->mem_owner));
-			buf->mem_owner[sizeof(buf->mem_owner) - 1] = '\0';
+			strncpy(buf->mem_onwer, owner, sizeof(buf->mem_onwer));
+			buf->mem_onwer[sizeof(buf->mem_onwer) - 1] = '\0';
 			__putname(owner);
 
 			for (i = 0; i < vb->num_planes; i++) {
 				size = vb->planes[i].length;
 				phy_addr = vb2_dma_contig_plane_dma_addr(vb, i);
-				buf->mem[i] = v4l_reqbufs_from_codec_mm(buf->mem_owner,
+				buf->mem[i] = v4l_reqbufs_from_codec_mm(buf->mem_onwer,
 						phy_addr, size, vb->index);
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 						"OUT %c alloc, addr: %x, size: %u, idx: %u\n",
@@ -3413,7 +3413,7 @@ static void vb2ops_vdec_buf_cleanup(struct vb2_buffer *vb)
 					"OUT %c clean, addr: %lx, size: %u, idx: %u\n",
 					(i == 0)? 'Y':'C',
 					buf->mem[i]->phy_addr, buf->mem[i]->buffer_size, vb->index);
-				v4l_freebufs_back_to_codec_mm(buf->mem_owner, buf->mem[i]);
+				v4l_freebufs_back_to_codec_mm(buf->mem_onwer, buf->mem[i]);
 				buf->mem[i] = NULL;
 			}
 		}
@@ -3511,9 +3511,9 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		for (i = 0; i < q->num_buffers; ++i) {
 			vb2_v4l2 = to_vb2_v4l2_buffer(q->bufs[i]);
 			buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
-			if (buf->aml_buf) {
-				buf->aml_buf->state	= FB_ST_FREE;
-				memset(&buf->aml_buf->vframe,
+			if (buf->ambuf) {
+				buf->ambuf->state	= FB_ST_FREE;
+				memset(&buf->ambuf->vframe,
 					0, sizeof(struct vframe_s));
 			}
 			buf->attached		= false;

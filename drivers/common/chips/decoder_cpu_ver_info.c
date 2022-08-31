@@ -31,7 +31,7 @@
 #define DECODE_CPU_VER_ID_NODE_NAME "cpu_ver_name"
 #define CODEC_DOS_DEV_ID_NODE_NAME  "vcodec_dos_dev"
 
-#define AM_SUCCESS 0
+#define AM_SUCESS 0
 #define MAJOR_ID_START AM_MESON_CPU_MAJOR_ID_M6
 
 static bool codec_dos_dev = 0;

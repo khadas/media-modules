@@ -103,11 +103,11 @@ static int get_source_type(struct vframe_s *vf)
 static int get_input_format(struct vframe_s *vf)
 {
 	int format = GE2D_FORMAT_M24_YUV420;
-	enum videocom_source_type source_type;
+	enum videocom_source_type soure_type;
 
-	source_type = get_source_type(vf);
+	soure_type = get_source_type(vf);
 
-	switch (source_type) {
+	switch (soure_type) {
 	case DECODER_8BIT_NORMAL:
 		if (vf->type & VIDTYPE_VIU_422)
 			format = GE2D_FORMAT_S16_YUV422;
@@ -201,7 +201,7 @@ static void update_ge2d_num_cache(struct aml_v4l2_ge2d *ge2d)
 static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 {
 	struct aml_v4l2_ge2d *ge2d = buf->caller_data;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	bool eos = false;
 
 	if (!ge2d || !ge2d->ctx) {
@@ -218,7 +218,7 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 		return -1;
 	}
 
-	aml_buf 	= buf->aml_vb->aml_buf;
+	ambuf 	= buf->aml_vb->ambuf;
 	eos	= (buf->flag & GE2D_FLAG_EOS);
 
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
@@ -237,12 +237,12 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 		kfifo_len(&ge2d->out_done_q),
 		atomic_read(&ge2d->ctx->ge2d_cache_num));
 
-	aml_buf_fill(&ge2d->ctx->bm, aml_buf, BUF_USER_GE2D);
+	aml_buf_fill(&ge2d->ctx->bm, ambuf, BUF_USER_GE2D);
 
 	kfifo_put(&ge2d->input, buf);
 	update_ge2d_num_cache(ge2d);
 
-	ATRACE_COUNTER("VC_IN_GE2D-1.recycle", aml_buf->index);
+	ATRACE_COUNTER("VC_IN_GE2D-1.recycle", ambuf->index);
 
 	return 0;
 }
@@ -250,7 +250,7 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 {
 	struct aml_v4l2_ge2d *ge2d = buf->caller_data;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	bool bypass = false;
 	bool eos = false;
 
@@ -268,21 +268,21 @@ static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 		return -1;
 	}
 
-	aml_buf	= buf->aml_vb->aml_buf;
+	ambuf	= buf->aml_vb->ambuf;
 	eos	= (buf->flag & GE2D_FLAG_EOS);
 	bypass	= (buf->flag & GE2D_FLAG_BUF_BY_PASS);
 
-	/* recovery aml_buf handle. */
-	buf->vf->v4l_mem_handle = (ulong)aml_buf;
+	/* recovery ambuf handle. */
+	buf->vf->v4l_mem_handle = (ulong)ambuf;
 
 	kfifo_put(&ge2d->out_done_q, buf);
 
-	if (aml_buf->ge2d_buf == NULL) {
-		aml_buf->ge2d_buf = vzalloc(sizeof(struct aml_v4l2_ge2d_buf));
+	if (ambuf->ge2d_buf == NULL) {
+		ambuf->ge2d_buf = vzalloc(sizeof(struct aml_v4l2_ge2d_buf));
 	}
 
-	if (aml_buf->ge2d_buf)
-		memcpy((struct aml_v4l2_ge2d_buf *)(aml_buf->ge2d_buf), buf,
+	if (ambuf->ge2d_buf)
+		memcpy((struct aml_v4l2_ge2d_buf *)(ambuf->ge2d_buf), buf,
 			sizeof(struct aml_v4l2_ge2d_buf));
 
 	v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
@@ -301,9 +301,9 @@ static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 		kfifo_len(&ge2d->out_done_q),
 		buf->vf->width, buf->vf->height);
 
-	ATRACE_COUNTER("VC_OUT_GE2D-2.submit", aml_buf->index);
+	ATRACE_COUNTER("VC_OUT_GE2D-2.submit", ambuf->index);
 
-	aml_buf_done(&ge2d->ctx->bm, aml_buf, BUF_USER_GE2D);
+	aml_buf_done(&ge2d->ctx->bm, ambuf, BUF_USER_GE2D);
 
 	ge2d->out_num[OUTPUT_PORT]++;
 
@@ -314,7 +314,7 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 {
 	struct aml_v4l2_ge2d *ge2d = (struct aml_v4l2_ge2d *)caller;
 	struct aml_v4l2_ge2d_buf *buf = NULL;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	struct vframe_s *vf = NULL;
 	bool bypass = false;
 	bool eos = false;
@@ -327,7 +327,7 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 	}
 
 	if (kfifo_get(&ge2d->out_done_q, &buf)) {
-		aml_buf	= buf->aml_vb->aml_buf;
+		ambuf	= buf->aml_vb->ambuf;
 		eos	= (buf->flag & GE2D_FLAG_EOS);
 		bypass	= (buf->flag & GE2D_FLAG_BUF_BY_PASS);
 		vf	= buf->vf;
@@ -348,7 +348,7 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 		mutex_unlock(&ge2d->output_lock);
 		up(&ge2d->sem_out);
 
-		ATRACE_COUNTER("VC_OUT_GE2D-3.vf_get", aml_buf->index);
+		ATRACE_COUNTER("VC_OUT_GE2D-3.vf_get", ambuf->index);
 
 		v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
 			"%s: vf:%px, index:%d, flag(vf:%x ge2d:%x), ts:%lld, type:%x, wxh:%ux%u\n",
@@ -378,7 +378,7 @@ static int aml_v4l2_ge2d_thread(void* param)
 		struct aml_v4l2_ge2d_buf *in_buf;
 		struct aml_v4l2_ge2d_buf *out_buf = NULL;
 		struct vframe_s *vf_out = NULL;
-		struct aml_buf *aml_buf;
+		struct aml_buf *ambuf;
 
 		if (down_interruptible(&ge2d->sem_in))
 			goto exit;
@@ -400,8 +400,8 @@ retry:
 		}
 		mutex_unlock(&ge2d->output_lock);
 
-		aml_buf = aml_buf_get(&ctx->bm, BUF_USER_GE2D, false);
-		if (!aml_buf) {
+		ambuf = aml_buf_get(&ctx->bm, BUF_USER_GE2D, false);
+		if (!ambuf) {
 			usleep_range(5000, 5500);
 			mutex_lock(&ge2d->output_lock);
 			kfifo_put(&ge2d->output, out_buf);
@@ -410,7 +410,7 @@ retry:
 		}
 
 		out_buf->aml_vb =
-			container_of(to_vb2_v4l2_buffer(aml_buf->vb), struct aml_v4l2_buf, vb);
+			container_of(to_vb2_v4l2_buffer(ambuf->vb), struct aml_v4l2_buf, vb);
 		#if 0
 		memcpy(&out_buf->aml_vb->ge2d_buf, out_buf,
 					sizeof(struct aml_v4l2_ge2d_buf));
@@ -419,8 +419,8 @@ retry:
 			"ge2d bind buf:%d to ge2d_buf:%px\n",
 			GE2D_BUF_GET_IDX(out_buf), out_buf);
 
-		aml_buf->planes[0].bytes_used = aml_buf->planes[0].length;
-		aml_buf->planes[1].bytes_used = aml_buf->planes[1].length;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+		ambuf->planes[1].bytes_used = ambuf->planes[1].length;
 
 		/* safe to pop in_buf */
 		if (!kfifo_get(&ge2d->in_done_q, &in_buf)) {
@@ -438,11 +438,11 @@ retry:
 		}
 		mutex_unlock(&ge2d->output_lock);
 
-		aml_buf->state = FB_ST_GE2D;
+		ambuf->state = FB_ST_GE2D;
 
 		/* get reference for vpp wrapper. */
 		if (ctx->vpp)
-			aml_buf_get_ref(&ctx->bm, aml_buf);
+			aml_buf_get_ref(&ctx->bm, ambuf);
 
 		/* fill output vframe information. */
 		memcpy(vf_out, in_buf->vf, sizeof(*vf_out));
@@ -450,18 +450,18 @@ retry:
 			in_buf->vf->canvas0_config,
 			2 * sizeof(struct canvas_config_s));
 
-		vf_out->canvas0_config[0].phy_addr = aml_buf->planes[0].addr;
-		if (aml_buf->num_planes == 1) {
+		vf_out->canvas0_config[0].phy_addr = ambuf->planes[0].addr;
+		if (ambuf->num_planes == 1) {
 			vf_out->canvas0_config[1].phy_addr =
-				aml_buf->planes[0].addr + aml_buf->planes[0].offset;
+				ambuf->planes[0].addr + ambuf->planes[0].offset;
 			vf_out->canvas0_config[2].phy_addr =
-				aml_buf->planes[0].addr + aml_buf->planes[0].offset
-				+ (aml_buf->planes[0].offset >> 2);
+				ambuf->planes[0].addr + ambuf->planes[0].offset
+				+ (ambuf->planes[0].offset >> 2);
 		} else {
 			vf_out->canvas0_config[1].phy_addr =
-				aml_buf->planes[1].addr;
+				ambuf->planes[1].addr;
 			vf_out->canvas0_config[2].phy_addr =
-				aml_buf->planes[2].addr;
+				ambuf->planes[2].addr;
 		}
 
 		/* fill outbuf parms. */
@@ -512,17 +512,17 @@ retry:
 		vf_out->mem_sec = ctx->is_drm_mode ? 1 : 0;
 		start_time = local_clock();
 
-		mutex_lock(&ctx->dev->cache.lock);
+		mutex_lock(&ctx->dev->canche.lock);
 		/* src canvas configure. */
 		if ((in_buf->vf->canvas0Addr == 0) ||
 			(in_buf->vf->canvas0Addr == (u32)-1)) {
-			canvas_config_config(ctx->dev->cache.res[0].cid, &in_buf->vf->canvas0_config[0]);
-			canvas_config_config(ctx->dev->cache.res[1].cid, &in_buf->vf->canvas0_config[1]);
-			canvas_config_config(ctx->dev->cache.res[2].cid, &in_buf->vf->canvas0_config[2]);
+			canvas_config_config(ctx->dev->canche.res[0].cid, &in_buf->vf->canvas0_config[0]);
+			canvas_config_config(ctx->dev->canche.res[1].cid, &in_buf->vf->canvas0_config[1]);
+			canvas_config_config(ctx->dev->canche.res[2].cid, &in_buf->vf->canvas0_config[2]);
 			ge2d_config.src_para.canvas_index =
-				ctx->dev->cache.res[0].cid |
-				ctx->dev->cache.res[1].cid << 8 |
-				ctx->dev->cache.res[2].cid << 16;
+				ctx->dev->canche.res[0].cid |
+				ctx->dev->canche.res[1].cid << 8 |
+				ctx->dev->canche.res[2].cid << 16;
 
 			ge2d_config.src_planes[0].addr =
 				in_buf->vf->canvas0_config[0].phy_addr;
@@ -561,20 +561,20 @@ retry:
 			ge2d_config.src_para.height = in_buf->vf->height;
 
 		/* dst canvas configure. */
-		canvas_config_config(ctx->dev->cache.res[3].cid, &vf_out->canvas0_config[0]);
+		canvas_config_config(ctx->dev->canche.res[3].cid, &vf_out->canvas0_config[0]);
 		if ((ge2d_config.src_para.format & 0xfffff) == GE2D_FORMAT_M24_YUV420) {
 			vf_out->canvas0_config[1].width <<= 1;
 		}
-		canvas_config_config(ctx->dev->cache.res[4].cid, &vf_out->canvas0_config[1]);
-		canvas_config_config(ctx->dev->cache.res[5].cid, &vf_out->canvas0_config[2]);
+		canvas_config_config(ctx->dev->canche.res[4].cid, &vf_out->canvas0_config[1]);
+		canvas_config_config(ctx->dev->canche.res[5].cid, &vf_out->canvas0_config[2]);
 		ge2d_config.dst_para.canvas_index =
-			ctx->dev->cache.res[3].cid |
-			ctx->dev->cache.res[4].cid << 8;
-		canvas_read(ctx->dev->cache.res[3].cid, &cd);
+			ctx->dev->canche.res[3].cid |
+			ctx->dev->canche.res[4].cid << 8;
+		canvas_read(ctx->dev->canche.res[3].cid, &cd);
 		ge2d_config.dst_planes[0].addr	= cd.addr;
 		ge2d_config.dst_planes[0].w	= cd.width;
 		ge2d_config.dst_planes[0].h	= cd.height;
-		canvas_read(ctx->dev->cache.res[4].cid, &cd);
+		canvas_read(ctx->dev->canche.res[4].cid, &cd);
 		ge2d_config.dst_planes[1].addr	= cd.addr;
 		ge2d_config.dst_planes[1].w	= cd.width;
 		ge2d_config.dst_planes[1].h	= cd.height;
@@ -603,7 +603,7 @@ retry:
 		ge2d_config.mem_sec	= ctx->is_drm_mode ? 1 : 0;
 
 		ATRACE_COUNTER("VC_OUT_GE2D-1.handle_start",
-			in_buf->aml_vb->aml_buf->index);
+			in_buf->aml_vb->ambuf->index);
 
 		v4l_dbg(ctx, V4L_DEBUG_GE2D_BUFMGR,
 			"ge2d_handle start: dec vf:%px/%d, ge2d vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, vf:%ux%u, fmt(src:%x, dst:%x), "
@@ -629,7 +629,7 @@ retry:
 		if (ge2d_context_config_ex(ge2d->ge2d_context, &ge2d_config) < 0) {
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 				"ge2d_context_config_ex error.\n");
-			mutex_unlock(&ctx->dev->cache.lock);
+			mutex_unlock(&ctx->dev->canche.lock);
 			goto exit;
 		}
 
@@ -644,7 +644,7 @@ retry:
 					0, 0, in_buf->vf->width, in_buf->vf->height);
 			}
 		}
-		mutex_unlock(&ctx->dev->cache.lock);
+		mutex_unlock(&ctx->dev->canche.lock);
 
 		//pr_info("consume time %d us\n", div64_u64(local_clock() - start_time, 1000));
 
@@ -774,12 +774,12 @@ int aml_v4l2_ge2d_init(
 	if (aml_canvas_cache_get(ctx->dev, "v4ldec-ge2d") < 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"canvas pool alloc fail. src(%d, %d, %d) dst(%d, %d, %d).\n",
-			ctx->dev->cache.res[0].cid,
-			ctx->dev->cache.res[1].cid,
-			ctx->dev->cache.res[2].cid,
-			ctx->dev->cache.res[3].cid,
-			ctx->dev->cache.res[4].cid,
-			ctx->dev->cache.res[5].cid);
+			ctx->dev->canche.res[0].cid,
+			ctx->dev->canche.res[1].cid,
+			ctx->dev->canche.res[2].cid,
+			ctx->dev->canche.res[3].cid,
+			ctx->dev->canche.res[4].cid,
+			ctx->dev->canche.res[5].cid);
 		goto error8;
 	}
 
@@ -865,7 +865,7 @@ EXPORT_SYMBOL(aml_v4l2_ge2d_destroy);
 static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s *vf)
 {
 	struct aml_v4l2_ge2d_buf* in_buf;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 
 	if (!ge2d)
 		return -EINVAL;
@@ -883,8 +883,8 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		"ge2d_push_vframe: vf:%px, idx:%d, type:%x, ts:%lld\n",
 		vf, vf->index, vf->type, vf->timestamp);
 
-	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
-	in_buf->aml_vb = container_of(to_vb2_v4l2_buffer(aml_buf->vb), struct aml_v4l2_buf, vb);
+	ambuf = (struct aml_buf *)vf->v4l_mem_handle;
+	in_buf->aml_vb = container_of(to_vb2_v4l2_buffer(ambuf->vb), struct aml_v4l2_buf, vb);
 	in_buf->vf = vf;
 
 	do {
@@ -930,7 +930,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		}
 	} while(0);
 
-	ATRACE_COUNTER("VC_OUT_GE2D-0.receive", aml_buf->index);
+	ATRACE_COUNTER("VC_OUT_GE2D-0.receive", ambuf->index);
 
 	kfifo_put(&ge2d->in_done_q, in_buf);
 	update_ge2d_num_cache(ge2d);
@@ -943,11 +943,11 @@ static void fill_ge2d_buf_cb(void *v4l_ctx, void *fb_ctx)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)v4l_ctx;
-	struct aml_buf *aml_buf =
+	struct aml_buf *ambuf =
 		(struct aml_buf *)fb_ctx;
 	int ret = -1;
 
-	ret = aml_v4l2_ge2d_push_vframe(ctx->ge2d, &aml_buf->vframe);
+	ret = aml_v4l2_ge2d_push_vframe(ctx->ge2d, &ambuf->vframe);
 	if (ret < 0) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"ge2d push vframe err, ret: %d\n", ret);

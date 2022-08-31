@@ -239,7 +239,7 @@ static int vdec_ports_release(struct stream_port_s *port)
 	return 0;
 }
 
-static void set_vdec_property(struct vdec_s *vdec,
+static void set_vdec_properity(struct vdec_s *vdec,
 	struct aml_vdec_adapt *ada_ctx)
 {
 	vdec->sys_info	= &ada_ctx->dec_prop;
@@ -299,7 +299,7 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 		return -1;
 
 	vdec->disable_vfm = true;
-	set_vdec_property(vdec, ada_ctx);
+	set_vdec_properity(vdec, ada_ctx);
 
 	/* init hw and gate*/
 	ret = enable_hardware(vdec->port);
@@ -585,9 +585,9 @@ void vdec_set_duration(s32 duration)
 }
 
 void aml_vdec_recycle_dec_resource(struct aml_vcodec_ctx * ctx,
-					struct aml_buf *aml_buf)
+					struct aml_buf *ambuf)
 {
 	if (ctx->vdec_recycle_dec_resource)
-		ctx->vdec_recycle_dec_resource(ctx->ada_ctx->vdec->private, aml_buf);
+		ctx->vdec_recycle_dec_resource(ctx->ada_ctx->vdec->private, ambuf);
 }
 

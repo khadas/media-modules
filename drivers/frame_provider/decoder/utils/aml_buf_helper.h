@@ -108,7 +108,7 @@ static inline bool aml_buf_empty(struct aml_buf_mgr_s *bm)
  * aml_buf_done() - The done interface is called if the user finishes fill the data.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
- * @buf		: The structure of aml_buf.
+ * @buf		: The structure of ambuf.
  * @user	: The current buffer user.
  *
  * The done interface is called if the user finishes fill the data.
@@ -124,7 +124,7 @@ static inline void aml_buf_done(struct aml_buf_mgr_s *bm,
  * aml_buf_fill() - The fill interface is called if the user consumes the data.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
- * @buf		: The structure of aml_buf.
+ * @buf		: The structure of ambuf.
  * @user	: The current buffer user.
  *
  * The fill interface is called if the user consumes the data.
@@ -153,14 +153,14 @@ static inline struct aml_buf *aml_buf_get(struct aml_buf_mgr_s *bm, int user, bo
 
 	bm->bc.buf_ops.get(&bm->bc, user, &entry, more_ref);
 
-	return entry ? entry_to_aml_buf(entry) : NULL;
+	return entry ? entry_to_ambuf(entry) : NULL;
 }
 
 /*
  * aml_buf_put() - Put an unused buffer to the free queue.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
- * @buf		: The structure of aml_buf
+ * @buf		: The structure of ambuf
  *
  * Put an unused buffer to the free queue.
  */
@@ -173,7 +173,7 @@ static inline void aml_buf_put(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
  * aml_buf_get_ref() - Increase a reference count to the buffer.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
- * @buf		: The structure of aml_buf.
+ * @buf		: The structure of ambuf.
  *
  * Increase a reference count to the buffer.
  */
@@ -193,7 +193,7 @@ static inline void aml_buf_get_ref(struct aml_buf_mgr_s *bm,
  * aml_buf_put_ref() - Decrease a reference count to the buffer.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
- * @buf		: The structure of aml_buf.
+ * @buf		: The structure of ambuf.
  *
  * Decrease a reference count to the buffer.
  */

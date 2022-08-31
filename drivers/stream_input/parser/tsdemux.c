@@ -405,7 +405,7 @@ static int reset_pcr_regs(void)
 	u32 pcr_regs = 0;
 	if (curr_pcr_id >= 0x1FFF)
 		return 0;
-	/* set parameter to fetch pcr */
+	/* set paramater to fetch pcr */
 	pcr_num = 0;
 	if (curr_pcr_id == curr_vid_id)
 		pcr_num = 0;

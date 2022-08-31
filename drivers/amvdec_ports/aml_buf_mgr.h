@@ -41,7 +41,7 @@ struct aml_buf_mgr_s;
  * @buf_size		: The size of buffer that should be allocated.
  * @enable_fbc		: Enables the AFBC feature.
  * @enable_secure	: Indicates the secure mode.
- * @memory_mode		: memory mode used by v4l2 vb queue.
+ * @memery_mode		: memory mode used by v4l2 vb queue.
  * @planes		: The number of planes used.
  * @luma_length		: The size of the image brightness data.
  * @chroma_length	: The size of the image chroma data.
@@ -50,7 +50,7 @@ struct aml_buf_config {
 	bool	enable_extbuf;
 	bool	enable_fbc;
 	bool 	enable_secure;
-	int	memory_mode;
+	int	memery_mode;
 	int	planes;
 	u32	luma_length;
 	u32	chroma_length;
@@ -83,7 +83,7 @@ struct aml_buf_plane {
  * struct aml_buf_fbc_info - AFBC buffer size information.
  *
  * @max_size	: Max size needed for mmu box.
- * @header_size	: Continuous size for the compressed header.
+ * @header_size	: Contineous size for the compressed header.
  * @frame_size	: SG page number to store the frame.
  */
 struct aml_buf_fbc_info {
@@ -118,14 +118,14 @@ struct aml_buf_fbc {
 };
 
 /*
- * struct aml_buf - aml_buf structure.
+ * struct aml_buf - ambuf structure.
  *
  * @index	: The serial number of the buffer.
- * @state	: Indicates the usage status of the aml_buf.
+ * @state	: Indicates the usage status of the ambuf.
  * @num_planes	: The number of planes used.
  * @planes	: Buffer plane information.
  * @fbc		: AFBC buffer information.
- * @entry	: Buffer entity embedded in aml_buf.
+ * @entry	: Buffer entity embedded in ambuf.
  * @task	: The context of task chain.
  * @vframe	: The video frame struct.
  * @vb		: The vb2 struct defined by v4l2.
@@ -149,7 +149,7 @@ struct aml_buf {
 };
 
 /*
- * struct aml_buf_mgr_s - aml_buf manager context.
+ * struct aml_buf_mgr_s - ambuf manager context.
  *
  * @bc		: The buffer core manager context.
  * @ref		: The reference count of buffer manager.
@@ -189,15 +189,15 @@ static inline struct aml_buf_mgr_s *bc_to_bm(struct buf_core_mgr_s *bc)
 }
 
 /*
- * entry_to_aml_buf() - Used for entry to aml_buf.
+ * entry_to_ambuf() - Used for entry to ambuf.
  *
  * @bc		: Pointer to &struct buf_core_mgr_s buffer core manager context.
  *
- * It is easy to convert entry to aml_buf.
+ * It is easy to convert entry to ambuf.
  *
- * Return	: returns aml_buf
+ * Return	: returns ambuf
  */
-static inline struct aml_buf *entry_to_aml_buf(void *entry)
+static inline struct aml_buf *entry_to_ambuf(void *entry)
 {
 	return container_of(entry, struct aml_buf, entry);
 }

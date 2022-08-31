@@ -244,7 +244,7 @@ struct vdec_mjpeg_hw_s {
 	u32 res_ch_flag;
 	u32 canvas_mode;
 	u32 canvas_endian;
-	struct aml_buf *aml_buf;
+	struct aml_buf *ambuf;
 	char vdec_name[32];
 	char pts_name[32];
 	char new_q_name[32];
@@ -379,7 +379,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 {
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)(vdec->private);
 	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	u32 reg;
 	struct vframe_s *vf = NULL;
 	u32 index, offset = 0, pts;
@@ -450,7 +450,7 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 	vf->v4l_mem_handle
 		= hw->buffer_spec[index].v4l_ref_buf_addr;
-	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+	ambuf = (struct aml_buf *)vf->v4l_mem_handle;
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 		"[%d] %s(), v4l mem handle: 0x%lx\n",
 		((struct aml_vcodec_ctx *)(hw->v4l2_ctx))->id,
@@ -504,8 +504,8 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 		if (v4l2_ctx->is_stream_off) {
 			vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
 		} else {
-			ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
-			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+			ATRACE_COUNTER("VC_OUT_DEC-submit", ambuf->index);
+			aml_buf_done(&v4l2_ctx->bm, ambuf, BUF_USER_DEC);
 		}
 	} else
 		vmjpeg_vf_put(vmjpeg_vf_get(vdec), vdec);
@@ -915,11 +915,11 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	int decbuf_y_size = 0, decbuf_u_size = 0, decbuf_v_size = 0;
 	u32 canvas_width = 0, canvas_height = 0;
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct aml_buf *aml_buf = hw->aml_buf;
+	struct aml_buf *ambuf = hw->ambuf;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (!aml_buf)
+	if (!ambuf)
 		return -1;
 
 	if (!hw->frame_width || !hw->frame_height) {
@@ -932,45 +932,45 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 				hw->frame_width, hw->frame_height);
 	}
 
-	hw->buffer_spec[i].v4l_ref_buf_addr = (ulong)aml_buf;
-	hw->buffer_spec[i].cma_alloc_addr = aml_buf->planes[0].addr;
-	if (aml_buf->num_planes == 1) {
-		decbuf_start	= aml_buf->planes[0].addr;
-		decbuf_y_size	= aml_buf->planes[0].offset;
+	hw->buffer_spec[i].v4l_ref_buf_addr = (ulong)ambuf;
+	hw->buffer_spec[i].cma_alloc_addr = ambuf->planes[0].addr;
+	if (ambuf->num_planes == 1) {
+		decbuf_start	= ambuf->planes[0].addr;
+		decbuf_y_size	= ambuf->planes[0].offset;
 		decbuf_u_start	= decbuf_start + decbuf_y_size;
 		decbuf_u_size	= decbuf_y_size / 4;
 		decbuf_v_start	= decbuf_u_start + decbuf_u_size;
 		decbuf_v_size	= decbuf_u_size;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		aml_buf->planes[0].bytes_used = aml_buf->planes[0].length;
-	} else if (aml_buf->num_planes == 2) {
-		decbuf_start	= aml_buf->planes[0].addr;
-		decbuf_y_size	= aml_buf->planes[0].length;
-		decbuf_u_start	= aml_buf->planes[1].addr;
-		decbuf_u_size	= aml_buf->planes[1].length >> 1;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+	} else if (ambuf->num_planes == 2) {
+		decbuf_start	= ambuf->planes[0].addr;
+		decbuf_y_size	= ambuf->planes[0].length;
+		decbuf_u_start	= ambuf->planes[1].addr;
+		decbuf_u_size	= ambuf->planes[1].length >> 1;
 		decbuf_v_start	= decbuf_u_start + decbuf_u_size;
 		decbuf_v_size	= decbuf_u_size;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		aml_buf->planes[0].bytes_used = aml_buf->planes[0].length;
-		aml_buf->planes[1].bytes_used = aml_buf->planes[1].length;
-	} else if (aml_buf->num_planes == 3) {
-		decbuf_start	= aml_buf->planes[0].addr;
-		decbuf_y_size	= aml_buf->planes[0].length;
-		decbuf_u_start	= aml_buf->planes[1].addr;
-		decbuf_u_size	= aml_buf->planes[1].length;
-		decbuf_v_start	= aml_buf->planes[2].addr;
-		decbuf_v_size	= aml_buf->planes[2].length;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+		ambuf->planes[1].bytes_used = ambuf->planes[1].length;
+	} else if (ambuf->num_planes == 3) {
+		decbuf_start	= ambuf->planes[0].addr;
+		decbuf_y_size	= ambuf->planes[0].length;
+		decbuf_u_start	= ambuf->planes[1].addr;
+		decbuf_u_size	= ambuf->planes[1].length;
+		decbuf_v_start	= ambuf->planes[2].addr;
+		decbuf_v_size	= ambuf->planes[2].length;
 		canvas_width	= ALIGN(hw->frame_width, 64);
 		canvas_height	= ALIGN(hw->frame_height, 64);
-		aml_buf->planes[0].bytes_used = aml_buf->planes[0].length;
-		aml_buf->planes[1].bytes_used = aml_buf->planes[1].length;
-		aml_buf->planes[2].bytes_used = aml_buf->planes[2].length;
+		ambuf->planes[0].bytes_used = ambuf->planes[0].length;
+		ambuf->planes[1].bytes_used = ambuf->planes[1].length;
+		ambuf->planes[2].bytes_used = ambuf->planes[2].length;
 	}
 
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
-		"[%d] v4l ref buf addr: 0x%x\n", ctx->id, aml_buf);
+		"[%d] v4l ref buf addr: 0x%x\n", ctx->id, ambuf);
 
 	if (vdec->parallel_dec == 1) {
 		if (hw->buffer_spec[i].y_canvas_index == -1)
@@ -1031,7 +1031,7 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	config_cav_lut(hw->buffer_spec[i].v_canvas_index,
 			&hw->buffer_spec[i].canvas_config[2], VDEC_1);
 
-	hw->aml_buf = NULL;
+	hw->ambuf = NULL;
 
 	return 0;
 }
@@ -1202,22 +1202,22 @@ static int mjpeg_recycle_frame_buffer(struct vdec_mjpeg_hw_s *hw, int force_recy
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	struct aml_buf *aml_buf;
+	struct aml_buf *ambuf;
 	int i;
 
 	for (i = 0; i < hw->buf_num; ++i) {
 		if ((force_recycle || (hw->vfbuf_use[i])) &&
 			hw->buffer_spec[i].cma_alloc_addr) {
-			aml_buf = (struct aml_buf *)hw->buffer_spec[i].v4l_ref_buf_addr;
+			ambuf = (struct aml_buf *)hw->buffer_spec[i].v4l_ref_buf_addr;
 
 			mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 				"recycled buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d \n",
 				i, hw->buffer_spec[i].cma_alloc_addr,
-				aml_buf->index,
+				ambuf->index,
 				hw->vfbuf_use[i]);
 
 			if (force_recycle)
-				aml_buf_put_ref(&ctx->bm, aml_buf);
+				aml_buf_put_ref(&ctx->bm, ambuf);
 
 			hw->buffer_spec[i].v4l_ref_buf_addr = 0;
 			hw->buffer_spec[i].cma_alloc_addr = 0;
@@ -1254,14 +1254,14 @@ static int mjpeg_reset_frame_buffer(struct vdec_mjpeg_hw_s *hw)
 	return 0;
 }
 
-static bool is_available_buffer(struct vdec_mjpeg_hw_s *hw)
+static bool is_avaliable_buffer(struct vdec_mjpeg_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int i, free_count = 0;
 	int free_slot = 0;
 
-	/* Ignore the buffer available check until the head parse done. */
+	/* Ignore the buffer avaliable check until the head parse done. */
 	if (!hw->v4l_params_parsed) {
 		/*
 		 * If a resolution change and eos are detected, decoding will
@@ -1335,20 +1335,20 @@ static bool is_available_buffer(struct vdec_mjpeg_hw_s *hw)
 	}
 
 
-	if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
-		hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-		if (!hw->aml_buf) {
+	if (!hw->ambuf && !aml_buf_empty(&ctx->bm)) {
+		hw->ambuf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+		if (!hw->ambuf) {
 			return false;
 		}
-		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
-		hw->aml_buf->state = FB_ST_DECODER;
+		hw->ambuf->task->attach(hw->ambuf->task, &task_dec_ops, hw_to_vdec(hw));
+		hw->ambuf->state = FB_ST_DECODER;
 	}
 
-	if (hw->aml_buf) {
+	if (hw->ambuf) {
 		free_count++;
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"%s get fb: 0x%lx fb idx: %d\n",
-		__func__, hw->aml_buf, hw->aml_buf->index);
+		__func__, hw->ambuf, hw->ambuf->index);
 	} else {
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"no frame buffer!\n");
@@ -1386,7 +1386,7 @@ static unsigned long run_ready(struct vdec_s *vdec,
 			return 0;
 	}
 
-	ret = is_available_buffer(hw) ? CORE_MASK_VDEC_1 : 0;
+	ret = is_avaliable_buffer(hw) ? CORE_MASK_VDEC_1 : 0;
 	if (ret) {
 		hw->not_run_ready = 0;
 		hw->buffer_not_ready = 0;
@@ -1505,12 +1505,12 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct vframe_s *vf = &hw->vframe_dummy;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	int index = INVALID_IDX;
 	ulong expires;
 
 	expires = jiffies + msecs_to_jiffies(2000);
-	while (!is_available_buffer(hw)) {
+	while (!is_avaliable_buffer(hw)) {
 		if (time_after(jiffies, expires)) {
 			pr_err("[%d] MJPEG isn't enough buff for notify eos.\n", ctx->id);
 			return 0;
@@ -1523,19 +1523,19 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		return 0;
 	}
 
-	aml_buf = (struct aml_buf *)
+	ambuf = (struct aml_buf *)
 		hw->buffer_spec[index].v4l_ref_buf_addr;
 
 	vf->type		|= VIDTYPE_V4L_EOS;
 	vf->timestamp		= ULONG_MAX;
-	vf->v4l_mem_handle	= (ulong)aml_buf;
+	vf->v4l_mem_handle	= (ulong)ambuf;
 	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-	ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
-	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
+	ATRACE_COUNTER("VC_OUT_DEC-submit", ambuf->index);
+	aml_buf_done(&ctx->bm, ambuf, BUF_USER_DEC);
 
 	hw->eos = false;
 
@@ -1700,7 +1700,7 @@ static void reset(struct vdec_s *vdec)
 	hw->frame_width		= 0;
 	hw->frame_height	= 0;
 	hw->eos 		= false;
-	hw->aml_buf		= NULL;
+	hw->ambuf		= NULL;
 
 	atomic_set(&hw->peek_num, 0);
 	atomic_set(&hw->get_num, 0);

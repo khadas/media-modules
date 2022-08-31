@@ -70,7 +70,7 @@ static inline int tee_load_video_fw(u32 index, u32 vdec)
 #define CLASS_NAME	"firmware_codec"
 #define DEV_NAME	"firmware_vdec"
 #define DIR		"video"
-#define FIRMWARE_SIZE	(64 * 1024) /*64k*/
+#define FRIMWARE_SIZE	(64 * 1024) /*64k*/
 #define BUFF_SIZE	(1024 * 1024 * 2)
 
 #define FW_LOAD_FORCE	(0x1)
@@ -679,7 +679,7 @@ static int fw_package_parse(struct fw_files_s *files,
 			goto out;
 		}
 
-		data = kzalloc(FIRMWARE_SIZE, GFP_KERNEL);
+		data = kzalloc(FRIMWARE_SIZE, GFP_KERNEL);
 		if (data == NULL) {
 			kfree(info);
 			ret = -ENOMEM;
@@ -738,7 +738,7 @@ static int fw_code_parse(struct fw_files_s *files,
 	if (info == NULL)
 		return -ENOMEM;
 
-	info->data = kzalloc(FIRMWARE_SIZE, GFP_KERNEL);
+	info->data = kzalloc(FRIMWARE_SIZE, GFP_KERNEL);
 	if (info->data == NULL) {
 		kfree(info);
 		return -ENOMEM;
@@ -808,7 +808,7 @@ static int fw_data_binding(void)
 		} else {
 			list_del(&files->node);
 			kfree(files);
-			pr_info("invalid file type.\n");
+			pr_info("invaild file type.\n");
 		}
 
 		memset(buf, 0, BUFF_SIZE);

@@ -123,7 +123,7 @@ static int pm_vdec_power_domain_init(struct device *dev)
 	return 0;
 }
 
-static void pm_vdec_power_domain_release(struct device *dev)
+static void pm_vdec_power_domain_relese(struct device *dev)
 {
 	int i;
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
@@ -797,7 +797,7 @@ static const struct power_manager_s pm_pd_data = {
 	.pm_type	= PM_POWER_DOMAIN,
 	.pd_data	= pm_domain_data,
 	.init		= pm_vdec_power_domain_init,
-	.release	= pm_vdec_power_domain_release,
+	.release	= pm_vdec_power_domain_relese,
 	.power_on	= pm_vdec_power_domain_power_on,
 	.power_off	= pm_vdec_power_domain_power_off,
 	.power_state	= pm_vdec_power_domain_power_state,

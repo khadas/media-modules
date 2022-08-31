@@ -417,7 +417,7 @@ static struct vframe_s *vmjpeg_vf_peek(void *op_arg)
 
 	if (kfifo_len(&hw->display_q) > VF_POOL_SIZE) {
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
-			"kfifo len:%d invalid, peek error\n",
+			"kfifo len:%d invaild, peek error\n",
 			kfifo_len(&hw->display_q));
 		return NULL;
 	}
@@ -732,7 +732,7 @@ static void vmjpeg_dump_state(struct vdec_s *vdec)
 		hw->input_empty
 		);
 	if (vf_get_receiver(vdec->vf_provider_name)) {
-		enum receiver_start_e state =
+		enum receviver_start_e state =
 		vf_notify_receiver(vdec->vf_provider_name,
 			VFRAME_EVENT_PROVIDER_QUREY_STATE,
 			NULL);
@@ -1206,7 +1206,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	struct vdec_mjpeg_hw_s *hw = (struct vdec_mjpeg_hw_s *)vdec->private;
 
 	struct vframe_s *vf = NULL;
-	struct aml_buf *aml_buf = NULL;
+	struct aml_buf *ambuf = NULL;
 	int index = -1;
 
 	if (hw->eos) {
@@ -1219,10 +1219,10 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 		vf->type |= VIDTYPE_V4L_EOS;
 		vf->timestamp = ULONG_MAX;
-		vf->v4l_mem_handle = (index == -1) ? (ulong)aml_buf :
+		vf->v4l_mem_handle = (index == -1) ? (ulong)ambuf :
 			hw->buffer_spec[index].v4l_ref_buf_addr;
 		vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
-		aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+		ambuf = (struct aml_buf *)vf->v4l_mem_handle;
 
 		vdec_vframe_ready(vdec, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);

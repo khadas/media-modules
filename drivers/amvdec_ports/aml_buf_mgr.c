@@ -205,7 +205,7 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 }
 
 static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
-				   struct aml_buf *aml_buf,
+				   struct aml_buf *ambuf,
 				   void *priv)
 {
 	struct vb2_buffer *vb = (struct vb2_buffer *)priv;
@@ -215,40 +215,40 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 	char plane_n[3] = {'Y','U','V'};
 	int i;
 
-	aml_buf->vb		= vb;
-	aml_buf->num_planes	= vb->num_planes;
-	aml_vb->aml_buf		= aml_buf;
+	ambuf->vb		= vb;
+	ambuf->num_planes	= vb->num_planes;
+	aml_vb->ambuf		= ambuf;
 
 	for (i = 0 ; i < vb->num_planes ; i++) {
 		if (i == 0) {
 			//Y
 			if (vb->num_planes == 1) {
-				aml_buf->planes[0].length	= cfg->luma_length + cfg->chroma_length;
-				aml_buf->planes[0].offset	= cfg->luma_length;
+				ambuf->planes[0].length	= cfg->luma_length + cfg->chroma_length;
+				ambuf->planes[0].offset	= cfg->luma_length;
 			} else {
-				aml_buf->planes[0].length	= cfg->luma_length;
-				aml_buf->planes[0].offset	= 0;
+				ambuf->planes[0].length	= cfg->luma_length;
+				ambuf->planes[0].offset	= 0;
 			}
 		} else {
 			if (vb->num_planes == 2) {
 				//UV
-				aml_buf->planes[1].length	= cfg->chroma_length;
-				aml_buf->planes[1].offset	= cfg->chroma_length >> 1;
+				ambuf->planes[1].length	= cfg->chroma_length;
+				ambuf->planes[1].offset	= cfg->chroma_length >> 1;
 			} else {
-				aml_buf->planes[i].length	= cfg->chroma_length >> 1;
-				aml_buf->planes[i].offset	= 0;
+				ambuf->planes[i].length	= cfg->chroma_length >> 1;
+				ambuf->planes[i].offset	= 0;
 			}
 		}
 
-		aml_buf->planes[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
-		aml_buf->planes[i].dbuf	= vb->planes[i].dbuf;
+		ambuf->planes[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
+		ambuf->planes[i].dbuf	= vb->planes[i].dbuf;
 
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 			"idx: %u, %c:(0x%lx, %d)\n",
 			vb->index,
 			plane_n[i],
-			aml_buf->planes[i].addr,
-			aml_buf->planes[i].length);
+			ambuf->planes[i].addr,
+			ambuf->planes[i].length);
 	}
 }
 
@@ -339,7 +339,7 @@ static void aml_buf_free(struct buf_core_mgr_s *bc,
 			struct buf_core_entry *entry)
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
-	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct aml_buf *buf = entry_to_ambuf(entry);
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, entry:%px, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d)\n",
@@ -378,21 +378,21 @@ static void aml_buf_configure(struct buf_core_mgr_s *bc, void *cfg)
 	bm->config = *(struct aml_buf_config *)cfg;
 }
 
-static void aml_external_process(struct buf_core_mgr_s *bc,
+static void aml_externel_process(struct buf_core_mgr_s *bc,
 				struct buf_core_entry *entry)
 {
-	struct aml_buf *aml_buf = entry_to_aml_buf(entry);
+	struct aml_buf *ambuf = entry_to_ambuf(entry);
 	struct aml_buf_mgr_s *bm =
 			container_of(bc, struct aml_buf_mgr_s, bc);
 
-	aml_vdec_recycle_dec_resource(bm->priv, aml_buf);
+	aml_vdec_recycle_dec_resource(bm->priv, ambuf);
 }
 
 static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 				struct buf_core_entry *entry)
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
-	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct aml_buf *buf = entry_to_ambuf(entry);
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -437,7 +437,7 @@ static void aml_buf_output(struct buf_core_mgr_s *bc,
 			  enum buf_core_user user)
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
-	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct aml_buf *buf = entry_to_ambuf(entry);
 
 	if (task_chain_empty(buf->task))
 		return;
@@ -461,7 +461,7 @@ static void aml_buf_input(struct buf_core_mgr_s *bc,
 		   enum buf_core_user user)
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
-	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct aml_buf *buf = entry_to_ambuf(entry);
 
 	if (task_chain_empty(buf->task))
 		return;
@@ -493,7 +493,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 	bm->bc.prepare		= aml_buf_prepare;
 	bm->bc.input		= aml_buf_input;
 	bm->bc.output		= aml_buf_output;
-	bm->bc.external_process	= aml_external_process;
+	bm->bc.externel_process	= aml_externel_process;
 	bm->bc.mem_ops.alloc	= aml_buf_alloc;
 	bm->bc.mem_ops.free	= aml_buf_free;
 

@@ -96,7 +96,7 @@ typedef struct videoinfo{
 	int cacheDuration;
 }mediasync_videoinfo;
 
-typedef struct audio_format{
+typedef struct audioforamt{
 	int samplerate;
 	int datawidth;
 	int channels;
@@ -225,8 +225,8 @@ long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state 
 long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state* state);
 long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold);
 long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold);
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adjust_pts);
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adjust_pts);
+long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adujstpts);
+long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adujstpts);
 long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode);
 long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode);
 long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable);
@@ -244,13 +244,13 @@ long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope);
 long mediasync_ins_reset(s32 sSyncInsId);
 long mediasync_ins_update_avref(s32 sSyncInsId, int flag);
 long mediasync_ins_get_avref(s32 sSyncInsId, int *ref);
-long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_queueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_queuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstqueueaudioinfo(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_firstqueuevideoinfo(s32 sSyncInsId, mediasync_frameinfo* info);
 
 #endif

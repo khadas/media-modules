@@ -113,7 +113,7 @@ struct aml_buf {
  *			codec data structure
  * @lastframe:		Intput buffer is last buffer - EOS
  * @error:		An unrecoverable error occurs on this buffer.
- * @aml_buf:	Decode status, and buffer information of Capture buffer
+ * @ambuf:	Decode status, and buffer information of Capture buffer
  *
  * Note : These status information help us track and debug buffer state
  */
@@ -121,10 +121,10 @@ struct aml_v4l2_buf {
 	struct vb2_v4l2_buffer vb;
 	struct list_head list;
 
-	struct aml_buf *aml_buf;
+	struct aml_buf *ambuf;
 	struct file_private_data privdata;
 	struct codec_mm_s *mem[2];
-	char mem_owner[32];
+	char mem_onwer[32];
 	bool used;
 	bool attached;
 	bool lastframe;
@@ -165,7 +165,7 @@ void dmabuff_recycle_worker(struct work_struct *work);
 void aml_buffer_status(struct aml_vcodec_ctx *ctx);
 void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx);
 void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
-		       struct aml_buf *aml_buf,
+		       struct aml_buf *ambuf,
 		       u32 requester);
 
 void aml_alloc_buffer(struct aml_vcodec_ctx *ctx, int flag);

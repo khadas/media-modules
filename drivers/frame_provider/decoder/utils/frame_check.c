@@ -128,7 +128,7 @@ static const char *get_format_name(int format)
 	if (format < 17 && format >= 0)
 		return format_name[format];
 	else
-		return "Unknown";
+		return "Unknow";
 }
 
 static inline void set_enable(struct pic_check_mgr_t *p, int mask)
@@ -1020,7 +1020,7 @@ static int fbc_check_prepare(struct pic_check_t *check,
 		(!check->fbc_planes[1]) ||
 		(!check->fbc_planes[2]) ||
 		(!check->fbc_planes[3])) {
-		dbg_print(0, "vmalloc static_planes failed %lx %lx %lx %lx\n",
+		dbg_print(0, "vmalloc staicplanes failed %lx %lx %lx %lx\n",
 			(ulong)check->fbc_planes[0],
 			(ulong)check->fbc_planes[1],
 			(ulong)check->fbc_planes[2],
@@ -1033,7 +1033,7 @@ static int fbc_check_prepare(struct pic_check_t *check,
 		}
 		return -1;
 	} else
-		dbg_print(FC_CRC_DEBUG, "vmalloc static_planes successed\n");
+		dbg_print(FC_CRC_DEBUG, "vmalloc staicplanes sucessed\n");
 
 	return 0;
 }
@@ -1641,7 +1641,7 @@ ssize_t dump_yuv_store(struct class *class,
 		return size;
 	}
 	if ((num == 0) || (num > YUV_MAX_DUMP_NUM)) {
-		pr_info("required yuv num %d, max %d\n",
+		pr_info("requred yuv num %d, max %d\n",
 			num, YUV_MAX_DUMP_NUM);
 		return size;
 	}
