@@ -122,6 +122,10 @@ module_param(enable_sec_monitor, int, 0644);
 #define MESON_CPU_MAJOR_ID_GXL	0x21
 #endif
 
+MODULE_PARM_DESC(keep_duplicate_packet, "\n\t\t Set duplicate package");
+static int keep_duplicate_packet = 1;
+module_param(keep_duplicate_packet, int, 0644);
+
 static int npidtypes = CHANNEL_COUNT;
 #define MOD_PARAM_DECLARE_CHANPIDS_TYPES(_dmx) \
 MODULE_PARM_DESC(debug_dmx##_dmx##_chanpids_types, "\n\t\t pids types of dmx channels"); \
@@ -3347,7 +3351,7 @@ static int dmx_enable(struct aml_dmx *dmx)
 			      (0 << DISCARD_AV_PACKAGE) |
 			      ((!!dmx->dump_ts_select) << TS_RECORDER_SELECT) |
 			      (record << TS_RECORDER_ENABLE) |
-			      (1 << KEEP_DUPLICATE_PACKAGE) |
+			      (keep_duplicate_packet << KEEP_DUPLICATE_PACKAGE) |
 			      (1 << SECTION_END_WITH_TABLE_ID) |
 			      (1 << ENABLE_FREE_CLK_FEC_DATA_VALID) |
 			      (1 << ENABLE_FREE_CLK_STB_REG) |
