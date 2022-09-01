@@ -1273,9 +1273,9 @@ static void set_param_ps_info(struct vdec_av1_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d)\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), bitdepth(%d)\n",
 		ps->visible_width, ps->visible_height,
-		ps->coded_width, ps->coded_height);
+		ps->coded_width, ps->coded_height, ps->bitdepth);
 }
 
 static void set_param_comp_buf_info(struct vdec_av1_inst *inst,

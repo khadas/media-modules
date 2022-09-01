@@ -752,10 +752,12 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d), scan:%s\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), "
+		"scan:%s, bitdepth(%d)\n",
 		pic->visible_width, pic->visible_height,
 		pic->coded_width, pic->coded_height,
-		pic->field == V4L2_FIELD_NONE ? "P" : "I");
+		pic->field == V4L2_FIELD_NONE ? "P" : "I",
+		ps->bitdepth);
 }
 
 static void set_cfg_info(struct vdec_hevc_inst *inst,

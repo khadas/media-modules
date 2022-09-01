@@ -357,6 +357,8 @@ static void aml_buf_free(struct buf_core_mgr_s *bc,
 		aml_buf_fbc_release(bm, buf);
 	}
 
+	/* task chain clean */
+	task_chain_clean(buf->task);
 	/* task chain release */
 	task_chain_release(buf->task);
 

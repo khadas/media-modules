@@ -3648,6 +3648,8 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case AML_V4L2_GET_BITDEPTH:
 		ctrl->val = ctx->picinfo.bitdepth;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"bitdepth: %d\n", ctrl->val);
 		break;
 	default:
 		ret = -EINVAL;

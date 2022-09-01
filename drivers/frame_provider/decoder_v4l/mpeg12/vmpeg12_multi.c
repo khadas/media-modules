@@ -352,6 +352,7 @@ struct vdec_mpeg12_hw_s {
 	u64 first_field_timestamp_valid;
 	u32 report_field;
 	s32 cur_idx;
+	bool process_busy;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1913,7 +1914,7 @@ static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 	hw->cur_idx = INVALID_IDX;
 }
 
-static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
+static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp_h, tmp_w;
 	u64 pts_us64 = 0;
@@ -2197,6 +2198,20 @@ static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 	return IRQ_HANDLED;
 }
+
+static irqreturn_t vmpeg12_isr_thread_fn(struct vdec_s *vdec, int irq)
+{
+	irqreturn_t ret;
+	struct vdec_mpeg12_hw_s *hw =
+		(struct vdec_mpeg12_hw_s *)(vdec->private);
+
+	ret = vmpeg12_isr_thread_handler(vdec, irq);
+
+	hw->process_busy = false;
+
+	return ret;
+}
+
 static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 {
 	u32 info, offset;
@@ -2204,6 +2219,13 @@ static irqreturn_t vmpeg12_isr(struct vdec_s *vdec, int irq)
 	(struct vdec_mpeg12_hw_s *)(vdec->private);
 	if (hw->eos)
 		return IRQ_HANDLED;
+
+	if (hw->process_busy) {
+		pr_info("%s process_busy\n", __func__);
+		return IRQ_HANDLED;
+	}
+	hw->process_busy = true;
+
 	info = READ_VREG(MREG_PIC_INFO);
 	offset = READ_VREG(MREG_FRAME_OFFSET);
 
@@ -2817,6 +2839,11 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
+	if (hw->process_busy) {
+		pr_debug("%s, process busy\n", __func__);
+		return;
+	}
+
 	if (work_pending(&hw->work) ||
 	    work_busy(&hw->work) ||
 	    work_busy(&hw->timeout_work) ||
@@ -3085,6 +3112,7 @@ static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw)
 	hw->dec_again_cnt = 0;
 	hw->error_frame_skip_level = error_frame_skip_level;
 	hw->cur_idx = INVALID_IDX;
+	hw->process_busy = false;
 	atomic_set(&hw->disp_num, 0);
 	atomic_set(&hw->put_num, 0);
 	atomic_set(&hw->get_num, 0);
