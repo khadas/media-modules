@@ -93,7 +93,7 @@
 #define CLASS_NAME "jpegenc"
 #define DEVICE_NAME "jpegenc"
 
-/* #define EXTEAN_QUANT_TABLE */
+/* #define EXTERN_QUANT_TABLE */
 
 /*######### DEBUG-BRINGUP#########*/
 static u32 manual_clock;
@@ -117,7 +117,7 @@ static u32 pointer = 0;
 
 static u32 clock_level = 1;
 static u16 gQuantTable[2][DCTSIZE2];
-#ifdef EXTEAN_QUANT_TABLE
+#ifdef EXTERN_QUANT_TABLE
 static u16 *gExternalQuantTablePtr;
 static bool external_quant_table_available;
 #endif
@@ -2128,7 +2128,7 @@ static void prepare_jpeg_header(struct jpegenc_wq_s *wq)
         /* data: V0 -- Comp0 vertical sampling factor */
         ((v_factor_comp0 + 1) << 0));
 
-    /* data: Tq0 -- Comp0 quantization table seletor */
+    /* data: Tq0 -- Comp0 quantization table selector */
     push_word(assitbuf,
         &header_bytes, (1 << 24) | (0 << 0));
     /* data: C1 -- Comp1 identifier */
@@ -2140,7 +2140,7 @@ static void prepare_jpeg_header(struct jpegenc_wq_s *wq)
         ((h_factor_comp1 + 1) << 4) |
         /* data: V1 -- Comp1 vertical sampling factor */
         ((v_factor_comp1 + 1) << 0));
-    /* data: Tq1 -- Comp1 quantization table seletor */
+    /* data: Tq1 -- Comp1 quantization table selector */
     push_word(assitbuf,
         &header_bytes, (1 << 24) |
         (((q_sel_comp0 != q_sel_comp1) ? 1 : 0) << 0));
@@ -2153,7 +2153,7 @@ static void prepare_jpeg_header(struct jpegenc_wq_s *wq)
         ((h_factor_comp2 + 1) << 4) |
         /* data: V2 -- Comp2 vertical sampling factor */
         ((v_factor_comp2 + 1) << 0));
-    /* data: Tq2 -- Comp2 quantization table seletor */
+    /* data: Tq2 -- Comp2 quantization table selector */
     push_word(assitbuf,
         &header_bytes, (1 << 24) |
         (((q_sel_comp0 != q_sel_comp2) ? 1 : 0) << 0));
@@ -2323,7 +2323,7 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
            ((pic_y_end << 16) | (pic_y_start << 0)));
 
     /* Configure quantization tables */
-#ifdef EXTEAN_QUANT_TABLE
+#ifdef EXTERN_QUANT_TABLE
     if (external_quant_table_available) {
         convert_quant_table(&gQuantTable[0][0],
             &gExternalQuantTablePtr[0],
@@ -3841,7 +3841,7 @@ static s32 convert_cmd(struct jpegenc_wq_s *wq, u32 *cmd_info)
     } else {
         wq->cmd.QuantTable_id = 0;
         jenc_pr(LOG_ERROR,
-            "JPEGENC_SEL_QUANT_TABLE invaild. target value: %d.\n",
+            "JPEGENC_SEL_QUANT_TABLE invalid. target value: %d.\n",
             cmd_info[8]);
     }
     jenc_pr(LOG_INFO,
@@ -3974,7 +3974,7 @@ static s32 jpegenc_open(struct inode *inode, struct file *file)
     wq->max_height = gJpegenc.mem.bufspec->max_height;
     wq->headbytes = 0;
     file->private_data = (void *)wq;
-#ifdef EXTEAN_QUANT_TABLE
+#ifdef EXTERN_QUANT_TABLE
     gExternalQuantTablePtr = NULL;
     external_quant_table_available = false;
 #endif
@@ -4010,7 +4010,7 @@ static s32 jpegenc_release(struct inode *inode, struct file *file)
 #endif
     wq->buf_start = 0;
     wq->buf_size = 0;
-#ifdef EXTEAN_QUANT_TABLE
+#ifdef EXTERN_QUANT_TABLE
     kfree(gExternalQuantTablePtr);
     gExternalQuantTablePtr = NULL;
     external_quant_table_available = false;
@@ -4154,7 +4154,7 @@ static long jpegenc_ioctl(struct file *file, u32 cmd, ulong arg)
             jenc_pr(LOG_INFO, "JPEGENC_SEL_QUANT_TABLE: %d\n", wq->cmd.QuantTable_id);
         } else {
             wq->cmd.QuantTable_id = 0;
-            jenc_pr(LOG_ERROR, "JPEGENC_SEL_QUANT_TABLE invaild, use 0 instead\n");
+            jenc_pr(LOG_ERROR, "JPEGENC_SEL_QUANT_TABLE invalid, use 0 instead\n");
         }
 
         jenc_pr(LOG_INFO, "scaled jpeg_quality: %d\n", wq->cmd.jpeg_quality);
@@ -4242,7 +4242,7 @@ static long jpegenc_ioctl(struct file *file, u32 cmd, ulong arg)
         break;
     case JPEGENC_IOC_SET_EXT_QUANT_TABLE:
         jenc_pr(LOG_DEBUG, "ioctl JPEGENC_IOC_SET_EXT_QUANT_TABLE\n");
-#ifdef EXTEAN_QUANT_TABLE
+#ifdef EXTERN_QUANT_TABLE
         if (arg == 0) {
             kfree(gExternalQuantTablePtr);
             gExternalQuantTablePtr = NULL;
@@ -4788,7 +4788,7 @@ static s32 jpegenc_probe(struct platform_device *pdev)
     if (gJpegenc.use_reserve == false) {
 #ifndef CONFIG_CMA
         jenc_pr(LOG_ERROR,
-            "jpegenc memory is invaild, probe fail!\n");
+            "jpegenc memory is invalid, probe fail!\n");
         return -EFAULT;
 #else
         struct device_node *mem_node;
@@ -4910,7 +4910,7 @@ static s32 jpegenc_probe(struct platform_device *pdev)
     gJpegenc.irq_num = res_irq;
 
     jenc_pr(LOG_DEBUG,
-        "jpegenc memory config sucess, buff size is 0x%x, level: %s\n",
+        "jpegenc memory config success, buff size is 0x%x, level: %s\n",
         gJpegenc.mem.buf_size,
         glevel_str[gJpegenc.mem.cur_buf_lev]);
 
