@@ -116,11 +116,11 @@ static int aml_init_send_buf(u8 cmd, u8 data, u16 addr)
 	sendbuf[7] = DATAEND;
 	return 0;
 }
-/**\brief aml_ci_spi_reciver
+/**\brief aml_ci_spi_receiver
 * \param[out] None
 * \param[in] value,get from spi
 * \return
-*   - 0:reciver end,-1:reciver
+*   - 0:receiver end,-1:receiver
 *   -
 */
 /*
@@ -141,7 +141,7 @@ int aml_ci_spi_paser_bit(uint8_t value)
 			G_rec_flag = AM_SPI_STEP_START1;
 		}
 	} else if (G_rec_flag == AM_SPI_STEP_START1) {
-		/* start2 type seccond */
+		/* start2 type second */
 		if (value == DATASTART) {
 			rbuf[1] = value;
 			G_rec_flag = AM_SPI_STEP_START2;
@@ -640,7 +640,7 @@ static int aml_ci_gio_get_irq(void)
 	else if (g_spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI)
 		ret = aml_get_gpio_value(g_spi_dev->mcu_irq_pin);
 	else
-		pr_error("aml_ci_gio_get_irq io type not surport\n");
+		pr_error("aml_ci_gio_get_irq io type not support\n");
 	return ret;
 }
 #endif
@@ -776,7 +776,7 @@ static int aml_gio_get_cd1(struct aml_pcmcia *pc)
 	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
 		ret = aml_ci_getcd12_by_spi((struct aml_ci *)spi_dev->priv, 0, 0);
 	} else {
-		pr_dbg("aml_gio_get_cd1 not surport type [%d] \r\n", spi_dev->io_device_type);
+		pr_dbg("aml_gio_get_cd1 not support type [%d] \r\n", spi_dev->io_device_type);
 	}
 	return ret;
 }
@@ -795,7 +795,7 @@ static int aml_gio_get_cd2(struct aml_pcmcia *pc)
 	} else if (spi_dev->io_device_type == AML_DVB_IO_TYPE_SPI_T312) {
 		ret = aml_ci_getcd12_by_spi((struct aml_ci *)spi_dev->priv, 0, 1);
 	} else {
-		pr_dbg("aml_gio_get_cd2 not surport type [%d] \r\n", spi_dev->io_device_type);
+		pr_dbg("aml_gio_get_cd2 not support type [%d] \r\n", spi_dev->io_device_type);
 	}
 	return ret;
 }
@@ -1254,18 +1254,18 @@ end:
 
 			reg = aml_ci_io_read_by_spi(ci_dev, 0, COM_STA_REG);
 			if ((reg & DA) == DA) {
-				pr_dbg("Buffer negotiate size date avalible.\r\n");
+				pr_dbg("Buffer negotiate size date available.\r\n");
 				break;
 			} else {
 				/*pr_dbg("Buffer negotiate
-				size date NOT avalible\r\n");*/
+				size date NOT available\r\n");*/
 				continue;
 			}
 			mdelay(100);
 		}
 		cnt = (aml_ci_io_read_by_spi(ci_dev, 0, SIZE_REG_L)) +
 		((aml_ci_io_read_by_spi(ci_dev, 0, SIZE_REG_M)) * 256);
-		pr_dbg("Moudle have <%d> Bytes send to host.\r\n", cnt);
+		pr_dbg("Module have <%d> Bytes send to host.\r\n", cnt);
 		if (cnt != 2) {
 			pr_dbg("The Bytes will be tx is ERR!\r\n");
 			return;

@@ -516,7 +516,7 @@ static void parseCiplusCompatibility(char *tuple, int len, int *ci_plus_enabled)
 }
 
 /**
- * @brief   Handle "ciprof" compatibilty item in compatiblity string
+ * @brief   Handle "ciprof" compatibility item in compatibility string
  * @param   identity - item's identity
  * @param   flag - compatibility flag
  * @param   ci_plus_profile - the value of ciprof
@@ -935,7 +935,7 @@ static int dvb_ca_en50221_read_data(struct dvb_ca_private *ca, int slot, u8 * eb
 		memcpy(ebuf, buf, bytes_read);
 	}
 
-	dprintk("Received CA packet for slot %i connection id 0x%x last_frag:%i size:0x%x\n", slot,
+	dprintk("Received CA packet for slot %i connection id 0x%x last_flag:%i size:0x%x\n", slot,
 		buf[0], (buf[1] & 0x80) == 0, bytes_read);
 #ifndef READ_LPDU_PKT
 	/* wake up readers when a last_fragment is received */
@@ -1047,7 +1047,7 @@ static int dvb_ca_en50221_write_data(struct dvb_ca_private *ca, int slot, u8 * b
 	}
 	status = bytes_write;
 
-	dprintk("Wrote CA packet for slot %i, connection id 0x%x last_frag:%i size:0x%x\n", slot,
+	dprintk("Wrote CA packet for slot %i, connection id 0x%x last_flag:%i size:0x%x\n", slot,
 		buf[0], (buf[1] & 0x80) == 0, bytes_write);
 
 exit:

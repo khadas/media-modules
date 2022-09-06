@@ -1976,7 +1976,7 @@ static ssize_t device_read(struct file *file, char __user *buf,
 	dbg("start");
 
 	if (count != sizeof(struct rw_data_s)) {
-		err("try to read uncorrect size %zd", count);
+		err("try to read incorrect size %zd", count);
 		return -EFAULT;
 	} /* if */
 	res = copy_from_user(&data, buf, sizeof(struct rw_data_s));
