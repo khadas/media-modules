@@ -317,7 +317,7 @@ int vdec_input_prepare_bufs(struct vdec_input_s *input,
 	int i;
 	unsigned long flags;
 
-	if (vdec_secure(input->vdec))
+	if (vdec_secure(input->vdec) || vdec_dmabuf(input->vdec))
 		return 0;
 	if (input->size > 0)
 		return 0;

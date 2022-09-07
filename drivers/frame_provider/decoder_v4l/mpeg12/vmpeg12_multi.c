@@ -3530,7 +3530,7 @@ void (*callback)(struct vdec_s *, void *),
 		codec_mm_dma_flush(tail, 4, DMA_TO_DEVICE);
 	}
 
-	if (vdec_frame_based(vdec) && debug_enable && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
+	if (vdec_frame_based(vdec) && debug_enable && !(vdec_secure(vdec))) {
 		u8 *data = NULL;
 		if (hw->chunk)
 			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,

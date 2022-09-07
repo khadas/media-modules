@@ -496,7 +496,7 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->buf_ops.ready_num	= buf_core_ready_num;
 	bc->buf_ops.empty	= buf_core_empty;
 
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO, "%s\n", __func__);
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 
 	return 0;
 }
@@ -504,7 +504,7 @@ EXPORT_SYMBOL(buf_core_mgr_init);
 
 void buf_core_mgr_release(struct buf_core_mgr_s *bc)
 {
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO, "%s\n", __func__);
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 
 	kref_put(&bc->core_ref, buf_core_destroy);
 }

@@ -35,6 +35,6 @@ ${MODULE_NAME}-objs += utils/golomb.o
 endif
 ${MODULE_NAME}-objs += utils/common.o
 
-PR_FMT = $(subst amlogic-,,$(MODULE_NAME))
+PR_FMT = "amlv4l"
 PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"
 ccflags-y += $(PR_FMT_DEFINE)

@@ -1333,6 +1333,9 @@ typedef struct PIC_BUFFER_CONFIG_s {
   u32 hw_decode_time;
   u32 frame_size2; // For frame base mode
   int ctx_buf_idx;
+  int v4l_buf_index;
+  int repeat_count;
+  struct PIC_BUFFER_CONFIG_s *repeat_pic;
 } PIC_BUFFER_CONFIG;
 
 /*
@@ -1725,6 +1728,11 @@ typedef struct {
   int frame_refs_short_signaling;
 } CurrentFrame;
 
+struct av1_repeat_buf_t {
+	u32 used_size;
+	struct RefCntBuffer_s *frame_bufs[FRAME_BUFFERS];
+};
+
 typedef struct AV1_Common_s {
   CurrentFrame current_frame;
   struct aom_internal_error_info error;
@@ -2021,6 +2029,7 @@ typedef struct AV1_Common_s {
   struct RefCntBuffer_s frame_refs[INTER_REFS_PER_FRAME];
 
 #endif
+      struct av1_repeat_buf_t repeat_buf;
 } AV1_COMMON;
 
 

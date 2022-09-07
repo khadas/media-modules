@@ -188,7 +188,7 @@ static void aml_buf_get_fbc_info(struct aml_buf_mgr_s *bm,
 
 static void aml_buf_fbc_destroy(struct aml_buf_mgr_s *bm)
 {
-	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_PRINFO, "%s %d\n", __func__, __LINE__);
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR, "%s %d\n", __func__, __LINE__);
 	decoder_bmmu_box_free(bm->bmmu);
 	decoder_mmu_box_free(bm->mmu);
 	vfree(bm->fbc_array);

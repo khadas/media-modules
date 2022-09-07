@@ -695,7 +695,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
-		ctx->ada_ctx->frm_name, aml_buf->state, ctx->out_buff_cnt++,
+		ctx->ada_ctx->frm_name, aml_buf->state, ctx->out_buff_cnt,
 		vb2_buf->index, vb2_buf,
 		vf->index & 0xff, vf,
 		vf->timestamp,
@@ -703,6 +703,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 		aml_buf->planes[0].addr, aml_buf->planes[0].length,
 		aml_buf->planes[1].addr, aml_buf->planes[1].length,
 		aml_buf->planes[2].addr, aml_buf->planes[2].length);
+	ctx->out_buff_cnt++;
 
 	if (dstbuf->aml_buf->num_planes == 1) {
 		vb2_set_plane_payload(vb2_buf, 0, aml_buf->planes[0].bytes_used);
@@ -3201,7 +3202,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"dma addr: %lx Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 			ctx->ada_ctx->frm_name,
 			aml_buf->state,
-			ctx->in_buff_cnt++,
+			ctx->in_buff_cnt,
 			vb->index, vb,
 			vf ? vf->index & 0xff : -1, vf,
 			vf ? vf->timestamp : 0,
@@ -3209,6 +3210,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			aml_buf->planes[0].addr, aml_buf->planes[0].length,
 			aml_buf->planes[1].addr, aml_buf->planes[1].length,
 			aml_buf->planes[2].addr, aml_buf->planes[2].length);
+
+		ctx->in_buff_cnt++;
 
 		ATRACE_COUNTER("VC_IN_VSINK-4.recycle", vb->index);
 
@@ -3227,7 +3230,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		wake_up_interruptible(&ctx->cap_wq);
 		return;
-	} else if (ctx->is_drm_mode) {
+	} else if (ctx->output_dma_mode) {
 		struct dma_buf *dbuf = vb->planes[0].dbuf;
 		struct device *dev = vb->vb2_queue->alloc_devs[0] ? :
 							vb->vb2_queue->dev;

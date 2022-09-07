@@ -602,6 +602,9 @@ struct PIC_BUFFER_CONFIG_s {
 	/* hdr10 plus data */
 	u32 hdr10p_data_size;
 	char *hdr10p_data_buf;
+	int v4l_buf_index;
+	int repeat_count;
+	struct PIC_BUFFER_CONFIG_s *repeat_pic;
 } PIC_BUFFER_CONFIG;
 
 enum BITSTREAM_PROFILE {
@@ -1002,6 +1005,11 @@ struct vp9_fence_vf_t {
 	struct vframe_s *fence_vf[VF_POOL_SIZE];
 };
 
+struct vp9_repeat_buf_t {
+	u32 used_size;
+	struct RefCntBuffer_s *frame_bufs[FRAME_BUFFERS];
+};
+
 struct VP9Decoder_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	unsigned char index;
@@ -1235,6 +1243,7 @@ struct VP9Decoder_s {
 	int cur_idx;
 	struct vdec_ge2d *ge2d;
 	struct afbc_buf  afbc_buf_table[BUF_FBC_NUM_MAX];
+	struct vp9_repeat_buf_t repeat_buf;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -2226,7 +2235,8 @@ static int get_idle_pos(struct VP9Decoder_s *pbi)
 	for (i = 0; i < pbi->used_buf_num; ++i) {
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
-			!frame_bufs[i].buf.cma_alloc_addr)
+			!frame_bufs[i].buf.cma_alloc_addr &&
+			(frame_bufs[i].buf.repeat_count == 0))
 			break;
 	}
 
@@ -2291,6 +2301,29 @@ static int v4l_get_free_fb(struct VP9Decoder_s *pbi)
 	return free_pic ? free_pic->index : INVALID_IDX;
 }
 
+static void force_recycle_repeat_frame(struct VP9Decoder_s *pbi)
+{
+	int i;
+	if (pbi->repeat_buf.used_size &&
+		pbi->repeat_buf.frame_bufs[0]) {
+		pbi->repeat_buf.frame_bufs[0]->buf.repeat_pic = NULL;
+		pbi->repeat_buf.frame_bufs[0]->buf.repeat_count = 0;
+
+		vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+		"force remove the first frame slot! "
+		"frame idx: %d addr: %lx used_size %d\n",
+		pbi->repeat_buf.frame_bufs[0]->buf.index,
+		pbi->repeat_buf.frame_bufs[0]->buf.cma_alloc_addr,
+		pbi->repeat_buf.used_size);
+
+		for (i = 0; i < pbi->repeat_buf.used_size - 1; i++)
+			pbi->repeat_buf.frame_bufs[i] =
+					pbi->repeat_buf.frame_bufs[i + 1];
+		pbi->repeat_buf.frame_bufs[pbi->repeat_buf.used_size - 1] = NULL;
+		pbi->repeat_buf.used_size--;
+	}
+}
+
 static int get_free_buf_count(struct VP9Decoder_s *pbi)
 {
 	struct VP9_Common_s *const cm = &pbi->common;
@@ -2313,10 +2346,9 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 			if ((frame_bufs[i].ref_count == 0) &&
 				(frame_bufs[i].buf.vf_ref == 0) &&
 				!frame_bufs[i].buf.cma_alloc_addr &&
+				(frame_bufs[i].buf.repeat_count == 0) &&
 				(cm->cur_frame != &frame_bufs[i])) {
 				free_slot++;
-				if (free_slot >= pbi->run_ready_min_buf_num)
-					break;
 			}
 		}
 
@@ -2324,9 +2356,11 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 			vp9_print(pbi,
 			PRINT_FLAG_VDEC_DETAIL, "%s not enough free_slot %d!\n",
 			__func__, free_slot);
+			force_recycle_repeat_frame(pbi);
 
 			return false;
-		}
+		} else if (free_slot < 2)
+				force_recycle_repeat_frame(pbi);
 
 		if (!pbi->aml_buf && !aml_buf_empty(&ctx->bm)) {
 			pbi->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
@@ -2510,7 +2544,7 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		pr_info("get_free_fb error\r\n");
 		return -1;
 	}
-
+	frame_bufs[cm->new_fb_idx].buf.v4l_buf_index = cm->new_fb_idx;
 #ifndef MV_USE_FIXED_BUF
 #ifdef SUPPORT_FB_DECODING
 	if (pbi->used_stage_buf_num == 0) {
@@ -2548,7 +2582,6 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 		int frame_to_show;
 		unsigned long flags;
 		struct PIC_BUFFER_CONFIG_s *tmp_pic = NULL;
-		struct PIC_BUFFER_CONFIG_s *src_pic = NULL;
 		if (frame_to_show_idx >= REF_FRAMES) {
 			pr_info("frame_to_show_idx %d exceed max index\r\n",
 					frame_to_show_idx);
@@ -2566,54 +2599,23 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 			return -1;
 		}
 
-		src_pic = &cm->buffer_pool->frame_bufs[frame_to_show].buf;
-
-		if (src_pic->vf_ref > 0)
-			pbi->show_fake_frame = 1;
-
-		vp9_print(pbi, VP9_DEBUG_BUFMGR,
-				"show_fake_frame %d\n", pbi->show_fake_frame);
-
-		if (!pbi->show_fake_frame) {
-			ref_cnt_fb(frame_bufs, &cm->new_fb_idx, frame_to_show);
-		} else {
-			int index, BUF_index;
-			ulong cma_alloc_addr;
-			struct canvas_config_s canvas_config[2];
-
-			tmp_pic = &cm->buffer_pool->frame_bufs[cm->new_fb_idx].buf;
-
-			canvas_config[0] = tmp_pic->canvas_config[0];
-			canvas_config[1] = tmp_pic->canvas_config[1];
-			index = tmp_pic->index;
-			BUF_index = tmp_pic->BUF_index;
-			cma_alloc_addr = tmp_pic->cma_alloc_addr;
-
-			vp9_print(pbi, VP9_DEBUG_BUFMGR,
-				"src(index %d): %lx dst(index %d): %lx\n",
-				frame_to_show,
-				src_pic->cma_alloc_addr,
-				cm->new_fb_idx,
-				tmp_pic->cma_alloc_addr);
-
-			unlock_buffer_pool(pool, flags);
-			memcpy((void *)tmp_pic, (void *)src_pic,
-				sizeof(struct PIC_BUFFER_CONFIG_s));
-			lock_buffer_pool(pool, flags);
-
-			tmp_pic->canvas_config[0] = canvas_config[0];
-			tmp_pic->canvas_config[1] = canvas_config[1];
-			tmp_pic->index = index;
-			tmp_pic->BUF_index = BUF_index;
-			tmp_pic->cma_alloc_addr = cma_alloc_addr;
-			tmp_pic->vf_ref = 0;
-			tmp_pic->frame_to_show = frame_to_show;
-			tmp_pic->ge2d_copy_frame = 1;
-			pbi->show_fake_frame = 0;
-		}
-
-		tmp_pic = &cm->buffer_pool->frame_bufs[cm->new_fb_idx].buf;
+		tmp_pic = &cm->buffer_pool->frame_bufs[frame_to_show].buf;
 		tmp_pic->timestamp = pbi->chunk->timestamp;
+		tmp_pic->v4l_buf_index = frame_to_show;
+
+		if (tmp_pic->vf_ref) {
+			frame_bufs[frame_to_show].buf.repeat_count ++;
+			frame_bufs[frame_to_show].buf.v4l_buf_index = cm->new_fb_idx;
+			frame_bufs[cm->new_fb_idx].buf.repeat_pic = &frame_bufs[frame_to_show].buf;
+			pbi->repeat_buf.frame_bufs[pbi->repeat_buf.used_size] =
+						&frame_bufs[frame_to_show];
+
+			pbi->repeat_buf.used_size++;
+			vp9_print(pbi, 0,
+				"repeat frame_bufs %px used size %d\n",
+				pbi->repeat_buf.frame_bufs[pbi->repeat_buf.used_size], pbi->repeat_buf.used_size);
+		}
+		ref_cnt_fb(frame_bufs, &cm->new_fb_idx, frame_to_show);
 		update_hide_frame_timestamp(pbi);
 		unlock_buffer_pool(pool, flags);
 		pbi->refresh_frame_flags = 0;
@@ -5265,7 +5267,7 @@ static void dump_pic_list(struct VP9Decoder_s *pbi)
 	for (i = 0; i < FRAME_BUFFERS; i++) {
 		pic_config = &cm->buffer_pool->frame_bufs[i].buf;
 		vp9_print(pbi, 0,
-			"Buf(%d) index %d mv_buf_index %d ref_count %d vf_ref %d dec_idx %d slice_type %d w/h %d/%d adr: %x\n",
+			"Buf(%d) index %d mv_buf_index %d ref_count %d vf_ref %d dec_idx %d slice_type %d w/h %d/%d adr: %lx\n",
 			i,
 			pic_config->index,
 #ifndef MV_USE_FIXED_BUF
@@ -7009,14 +7011,6 @@ static void vp9_recycle_dec_resource(void *priv,
 		vf->hdr10p_data_size = 0;
 	}
 
-	vp9_print(pbi, VP9_DEBUG_BUFMGR,
-		"%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
-		__func__, index, vf->type,
-		vf->width, vf->height,
-		vf->pts,
-		vf->pts_us64,
-		vf->timestamp);
-
 	return;
 }
 
@@ -7204,14 +7198,14 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			}
 		}
 
-		aml_buf = index_to_aml_buf(pbi, pic_config->BUF_index);
+		aml_buf = index_to_aml_buf(pbi, pic_config->v4l_buf_index);
 		vf->v4l_mem_handle = (ulong)aml_buf;
 
 		if (!aml_buf) {
 			kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);
 			vp9_print(pbi, 0,
 			"[ERR]: v4l_ref_buf_addr(index: %d) is NULL!\n",
-			__func__, pic_config->BUF_index);
+			__func__, pic_config->v4l_buf_index);
 
 			return -1;
 		}
@@ -7334,7 +7328,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->disp_pts_us64 = 0;
 		}
 
-		vf->index = 0xff00 | pic_config->index;
+		vf->index = 0xff00 | pic_config->v4l_buf_index;
 
 		if (pic_config->double_write_mode & 0x10) {
 			/* double write only */
@@ -7450,20 +7444,31 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		&& (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TXLX))) {
 			struct vdec_info tmp4x;
 
-			inc_vf_ref(pbi, pic_config->index);
-
-			if (pic_config->ge2d_copy_frame)	{
-				struct PIC_BUFFER_CONFIG_s *dst_pic = pic_config;
+			inc_vf_ref(pbi, pic_config->v4l_buf_index);
+			vdec_vframe_ready(pvdec, vf);
+			if (pic_config->v4l_buf_index != pic_config->BUF_index)	{
+				struct PIC_BUFFER_CONFIG_s *dst_pic =
+					&pbi->common.buffer_pool->frame_bufs[pic_config->v4l_buf_index].buf;
 				struct PIC_BUFFER_CONFIG_s *src_pic =
-					&pbi->common.buffer_pool->frame_bufs[pic_config->frame_to_show].buf;
+					&pbi->common.buffer_pool->frame_bufs[pic_config->BUF_index].buf;
 				struct vdec_ge2d_info ge2d_info;
 
 				ge2d_info.dst_vf = vf;
-				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = 0;
+				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas0Addr = 0;
 				if (dst_pic->double_write_mode) {
 #ifdef MULTI_INSTANCE_SUPPORT
 					if (pbi->m_ins_flag) {
-						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = -1;
+						vf->canvas0Addr = vf->canvas1Addr = -1;
+						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas0Addr = -1;
+						vf->plane_num = 2;
+						vf->canvas0_config[0] =
+							dst_pic->canvas_config[0];
+						vf->canvas0_config[1] =
+							dst_pic->canvas_config[1];
+						vf->canvas1_config[0] =
+							dst_pic->canvas_config[0];
+						vf->canvas1_config[1] =
+							dst_pic->canvas_config[1];
 						ge2d_info.src_canvas0_config[0] =
 							src_pic->canvas_config[0];
 						ge2d_info.src_canvas0_config[1] =
@@ -7475,7 +7480,9 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					} else
 #endif
 					{
-						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr =
+						vf->canvas0Addr = vf->canvas1Addr =
+							spec2canvas(dst_pic);
+						ge2d_info.src_canvas0Addr = ge2d_info.src_canvas0Addr =
 							spec2canvas(src_pic);
 					}
 				}
@@ -7486,12 +7493,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					vdec_ge2d_init(&pbi->ge2d, mode);
 				}
 				vdec_ge2d_copy_data(pbi->ge2d, &ge2d_info);
-
-				pic_config->ge2d_copy_frame = 0;
 			}
-
 			decoder_do_frame_check(pvdec, vf);
-			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(pbi->trace.pts_name, vf->timestamp);
 			ATRACE_COUNTER(pbi->trace.new_q_name, kfifo_len(&pbi->newframe_q));
@@ -9609,7 +9612,7 @@ static unsigned char get_data_check_sum
 	int sum = 0;
 	u8 *data = NULL;
 
-	if (vdec_secure(hw_to_vdec(pbi)) || vdec_dmabuf(hw_to_vdec(pbi)))
+	if (vdec_secure(hw_to_vdec(pbi)))
 		return 0;
 
 	if (!pbi->chunk->block->is_mapped)
@@ -10051,9 +10054,14 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 	int i;
 
 	for (i = 0; i < pbi->used_buf_num; ++i) {
-		if ((frame_bufs[i].ref_count == 0) &&
+		if (frame_bufs[i].ref_count == 0 &&
 			frame_bufs[i].buf.cma_alloc_addr &&
+			(frame_bufs[i].buf.repeat_count == 0) &&
 			&frame_bufs[i] != cm->cur_frame) {
+
+			if (!frame_bufs[i].buf.vf_ref && frame_bufs[i].buf.repeat_pic)
+				continue;
+			frame_bufs[i].buf.repeat_pic = NULL;
 
 			aml_buf = (struct aml_buf *)pbi->m_BUF[i].v4l_ref_buf_addr;
 
@@ -10133,10 +10141,9 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 		if ((frame_bufs[i].ref_count == 0) &&
 			(frame_bufs[i].buf.vf_ref == 0) &&
 			!frame_bufs[i].buf.cma_alloc_addr &&
+			(frame_bufs[i].buf.repeat_count == 0) &&
 			(cm->cur_frame != &frame_bufs[i])) {
 			free_slot++;
-			if (free_slot >= pbi->run_ready_min_buf_num)
-				break;
 		}
 	}
 
@@ -10144,9 +10151,11 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 		vp9_print(pbi,
 		PRINT_FLAG_VDEC_DETAIL, "%s not enough free_slot %d!\n",
 		__func__, free_slot);
+		force_recycle_repeat_frame(pbi);
 
 		return false;
-	}
+	} else if (free_slot < 2)
+		force_recycle_repeat_frame(pbi);
 
 	if (!pbi->aml_buf && !aml_buf_empty(&ctx->bm)) {
 		pbi->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
@@ -10323,7 +10332,7 @@ static void run_front(struct vdec_s *vdec)
 		READ_VREG(HEVC_STREAM_RD_PTR),
 		pbi->start_shift_bytes);
 
-		if (!(vdec_secure(hw_to_vdec(pbi)) || vdec_dmabuf(vdec)) &&
+		if (!(vdec_secure(hw_to_vdec(pbi))) &&
 			vdec_frame_based(vdec) && pbi->chunk) {
 			u8 *data = NULL;
 
@@ -10589,7 +10598,12 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 		frame_bufs[i].buf.cma_alloc_addr = 0;
 		frame_bufs[i].buf.BUF_index	= -1;
 		frame_bufs[i].buf.slice_type	= 0;
+		frame_bufs[i].buf.repeat_pic = NULL;
+		frame_bufs[i].buf.repeat_count = 0;
+		pbi->repeat_buf.frame_bufs[i] = NULL;
 	}
+
+	pbi->repeat_buf.used_size = 0;
 
 	for (i = 0; i < MV_BUFFER_NUM; ++i) {
 		pbi->m_mv_BUF[i].used_flag = 0;
@@ -10621,7 +10635,6 @@ static void  vp9_decoder_ctx_reset(struct VP9Decoder_s *pbi)
 	pbi->show_frame_num	= 0;
 	pbi->postproc_done	= 0;
 	pbi->process_busy	= 0;
-	pbi->show_fake_frame    = 0;
 	pbi->eos		= false;
 	pbi->aml_buf		= NULL;
 }
