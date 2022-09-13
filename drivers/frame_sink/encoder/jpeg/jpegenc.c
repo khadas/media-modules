@@ -553,7 +553,7 @@ static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
         struct file *filp);
 static s32 enc_free_buffers(struct file *filp);
 
-static void dump_requst(struct jpegenc_request_s *request) {
+static void dump_request(struct jpegenc_request_s *request) {
     jenc_pr(LOG_DEBUG, "jpegenc: dump request start\n");
     jenc_pr(LOG_DEBUG, "src=%u\n", request->src);
     jenc_pr(LOG_DEBUG, "encoder_width=%u\n", request->encoder_width);
@@ -4134,7 +4134,7 @@ static long jpegenc_ioctl(struct file *file, u32 cmd, ulong arg)
             return -1;
         }
 
-        dump_requst(&(wq->cmd));
+        dump_request(&(wq->cmd));
 
         if (is_oversize(wq->cmd.encoder_width,
             wq->cmd.encoder_height,
