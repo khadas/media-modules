@@ -1821,7 +1821,7 @@ static struct class aml_spi_class = {
 
 /**\brief aml_con_gpio_by_spi:control gpio by spi
 * \param gpio: the value is from AM_CON_GPIO def
-* \param level: 0: set low,1:set hight
+* \param level: 0: set low,1:set high
 * \return
 *   - 0:ok
 *   - -EINVAL : error
