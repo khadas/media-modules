@@ -5905,7 +5905,7 @@ static int vdec_probe(struct platform_device *pdev)
 			pr_err("vdec power manager init failed\n");
 			return r;
 		}
-		pr_err("vdec power init success!\n");
+		pr_debug("vdec power init success!\n");
 	}
 
 	return 0;
