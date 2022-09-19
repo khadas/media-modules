@@ -2356,9 +2356,9 @@ static long amstream_ioctl_set_ex(struct port_priv_s *priv, ulong arg)
 	return r;
 }
 static inline unsigned long
-amstream_copy_compat(void *des, void *src, unsigned long size, bool flag)
+amstream_copy_from_compat(void *des, void *src, unsigned long size)
 {
-	if (flag)
+	if (access_ok((void *)src, size))
 		return copy_from_user(des, src, size);
 	else
 		memcpy(des, src, size);
@@ -2370,14 +2370,8 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 	struct stream_port_s *this = priv->port;
 	struct am_ioctl_parm_ptr parm;
 	long r = 0;
-	bool user_space_flag = false;
 
-	if (access_ok((void *)arg, sizeof(struct am_ioctl_parm_ptr))) {
-		user_space_flag = true;
-	}
-	if (amstream_copy_compat
-		((void *)&parm, (void *)arg,
-		 sizeof(parm), user_space_flag)) {
+	if (amstream_copy_from_compat((void *)&parm, (void *)arg, sizeof(parm))) {
 		pr_err("[%s]%d, arg err\n", __func__, __LINE__);
 		r = -EFAULT;
 	}
@@ -2387,9 +2381,8 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 		if ((this->type & PORT_TYPE_VIDEO)
 			|| (this->type & PORT_TYPE_AUDIO)) {
 			if (parm.pdata_audio_info != NULL) {
-				if (amstream_copy_compat(
-					(void *)&audio_dec_info, (void *)parm.pdata_audio_info,
-					 sizeof(audio_dec_info), user_space_flag)) {
+				if (amstream_copy_from_compat((void *)&audio_dec_info,
+					(void *)parm.pdata_audio_info, sizeof(audio_dec_info))) {
 					pr_err("[%s]%d, arg err\n", __func__, __LINE__);
 					r = -EFAULT;
 				}
@@ -2403,8 +2396,8 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 				(parm.len > PAGE_SIZE)) {
 				r = -EINVAL;
 			} else {
-				r = amstream_copy_compat(priv->vdec->config,
-						parm.pointer, parm.len, user_space_flag);
+				r = amstream_copy_from_compat(priv->vdec->config,
+						parm.pointer, parm.len);
 				if (r)
 					r = -EINVAL;
 				else
@@ -2419,8 +2412,8 @@ static long amstream_ioctl_set_ptr(struct port_priv_s *priv, ulong arg)
 				(parm.len > PAGE_SIZE)) {
 				r = -EINVAL;
 			} else {
-				r = amstream_copy_compat(priv->vdec->hdr10p_data_buf,
-						parm.pointer, parm.len, user_space_flag);
+				r = amstream_copy_from_compat(priv->vdec->hdr10p_data_buf,
+						parm.pointer, parm.len);
 				if (r) {
 					priv->vdec->hdr10p_data_size = 0;
 					priv->vdec->hdr10p_data_valid = false;
