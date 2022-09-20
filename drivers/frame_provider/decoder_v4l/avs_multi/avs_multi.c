@@ -376,6 +376,7 @@ struct vdec_avs_hw_s {
 	DECLARE_KFIFO(recycle_q, struct vframe_s *, VF_POOL_SIZE);
 	struct buf_pool_s vfpool[VF_POOL_SIZE];
 	s32 vfbuf_use[VF_BUF_NUM_MAX];
+	s32 vf_ref[VF_BUF_NUM_MAX];
 	unsigned char again_flag;
 	unsigned char recover_flag;
 	u32 frame_width;
@@ -660,13 +661,7 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
-				"%s buf idx %d ref_count: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i,hw->ref_use[i],
-				hw->pics[i].cma_alloc_addr,
-				hw->vfbuf_use[i]);
-
-		if ((hw->vfbuf_use[i]) &&
+		if ((hw->vf_ref[i]) &&
 			!(hw->ref_use[i]) &&
 			hw->pics[i].v4l_ref_buf_addr){
 			aml_buf = (struct aml_buf *)hw->pics[i].v4l_ref_buf_addr;
@@ -675,18 +670,18 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 				"%s buf idx: %d dma addr: 0x%lx fb idx: %d vf_ref %d\n",
 				__func__, i, hw->pics[i].cma_alloc_addr,
 				aml_buf->index,
-				hw->vfbuf_use[i]);
-			if (hw->interlace_flag &&
-				hw->vfbuf_use[i] < 2)
+				hw->vf_ref[i]);
+			if (ctx->vpp_is_need && hw->interlace_flag &&
+				hw->vf_ref[i] < 2)
 				continue;
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			spin_lock_irqsave(&hw->lock, flags);
 
 			hw->pics[i].v4l_ref_buf_addr = 0;
 			hw->pics[i].cma_alloc_addr = 0;
-			while (hw->vfbuf_use[i]) {
+			while (hw->vf_ref[i]) {
 				atomic_add(1, &hw->put_num);
-				hw->vfbuf_use[i]--;
+				hw->vf_ref[i]--;
 			}
 			spin_unlock_irqrestore(&hw->lock, flags);
 
@@ -741,12 +736,8 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 	avs_recycle_frame_buffer(hw);
 
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
-		"%s idx %d ref_count %d vf_ref %d cma_alloc_addr = 0x%lx\n",
-		__func__, i, hw->ref_use[i],
-		hw->vfbuf_use[i],
-		hw->pics[i].v4l_ref_buf_addr);
-		if ((hw->vfbuf_use[i] == 0) &&
+		if (hw->vf_ref[i] == 0 &&
+			(hw->vfbuf_use[i] == 0) &&
 			(hw->ref_use[i] == 0) &&
 			!hw->pics[i].v4l_ref_buf_addr) {
 			free_slot++;
@@ -771,6 +762,14 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 	}
 
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
+		if ((hw->interlace_flag) &&
+			atomic_read(&ctx->vpp_cache_num) > 1) {
+			debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
+				"%s vpp cache: %d full!\n",
+				__func__, atomic_read(&ctx->vpp_cache_num));
+
+			return false;
+		}
 		if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
 			hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
 			if (!hw->aml_buf) {
@@ -785,7 +784,7 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 		free_count++;
 		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
 		"%s get fb: 0x%lx fb idx: %d\n",
-		__func__, hw->pics[i].v4l_ref_buf_addr, hw->aml_buf->index);
+		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
@@ -910,8 +909,9 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 		canvas_width, canvas_height);
 
 	aml_buf_get_ref(&ctx->bm, aml_buf);
-	if (hw->interlace_flag)
+	if (ctx->vpp_is_need && hw->interlace_flag) {
 		aml_buf_get_ref(&ctx->bm, aml_buf);
+	}
 
 	hw->aml_buf = NULL;
 
@@ -923,7 +923,8 @@ static int find_free_buffer(struct vdec_avs_hw_s *hw)
 	int i;
 
 	for (i = 0; i < hw->vf_buf_num_used; i++) {
-		if ((hw->vfbuf_use[i] == 0) &&
+		if (hw->vf_ref[i] == 0 &&
+			(hw->vfbuf_use[i] == 0) &&
 			(hw->ref_use[i] == 0) &&
 			(hw->buf_use[i] == 0)  &&
 			!hw->pics[i].v4l_ref_buf_addr)
@@ -1273,9 +1274,10 @@ static struct vframe_s *vavs_vf_peek(void *op_arg)
 
 static struct vframe_s *vavs_vf_get(void *op_arg)
 {
-	struct vframe_s *vf;
+	struct vframe_s *vf = NULL;
+	struct vdec_s *vdec = op_arg;
 	struct vdec_avs_hw_s *hw =
-	(struct vdec_avs_hw_s *)op_arg;
+	(struct vdec_avs_hw_s *)vdec->private;
 	unsigned long flags;
 
 	if (hw->recover_flag)
@@ -1322,43 +1324,22 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 
 static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 {
-	int i;
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 
-	if (vf) {
-		if (vf->v4l_mem_handle !=
-			hw->pics[vf->index].v4l_ref_buf_addr) {
-			hw->pics[vf->index].v4l_ref_buf_addr
-				= vf->v4l_mem_handle;
-
-			debug_print(hw, PRINT_FLAG_V4L_DETAIL,
-				"avs update fb handle, old:%llx, new:%llx\n",
-				hw->pics[vf->index].v4l_ref_buf_addr,
-				vf->v4l_mem_handle);
-		}
-
-		//atomic_add(1, &hw->put_num);
-		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
-			"%s, index = %d, w %d h %d, type 0x%x detached 0x%x\n",
-			__func__,
-			vf->index,
-			vf->width,
-			vf->height,
-			vf->type,
-			buf_of_vf(vf)->detached);
+	if (!aml_buf) {
+		debug_print(hw, 0,
+			"[ERR]invalid fb, vf: %lx\n", (ulong)vf);
+		return;
 	}
+
 	if (hw->recover_flag)
 		return;
 
-	for (i = 0; i < VF_POOL_SIZE; i++) {
-		if (vf == &hw->vfpool[i].vf)
-			break;
-	}
-	//if (i < VF_POOL_SIZE)
-
-		//kfifo_put(&hw->recycle_q, (const struct vframe_s *)vf);
-
+	aml_buf_put_ref(&ctx->bm, aml_buf);
 }
 
 static int vavs_event_cb(int type, void *data, void *private_data)
@@ -1775,9 +1756,9 @@ static void vavs_restore_regs(struct vdec_avs_hw_s *hw)
 
 static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 {
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int r = 0;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
 #if DEBUG_MULTI_FLAG > 0
 	if (hw->decode_pic_count == 0) {
 #endif
@@ -1968,8 +1949,10 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 		hw->vfpool[i].detached = 0;
 		kfifo_put(&hw->newframe_q, vf);
 	}
-	for (i = 0; i < hw->vf_buf_num_used; i++)
+	for (i = 0; i < hw->vf_buf_num_used; i++) {
 		hw->vfbuf_use[i] = 0;
+		hw->vf_ref[i] = 0;
+	}
 
 	/*cur_vfpool = vfpool;*/
 
@@ -3203,6 +3186,10 @@ void (*callback)(struct vdec_s *, void *),
 		vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_AVS;
 	}
+	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "vf_ref:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "%d: vf_ref %d\n",
+			i, hw->vf_ref[i]);
 	debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "vfbuf_use:\n");
 	for (i = 0; i < hw->vf_buf_num_used; i++)
 		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL, "%d: vf_buf_use %d\n",
@@ -3316,6 +3303,7 @@ static void reset(struct vdec_s *vdec)
 	for (i = 0; i < hw->vf_buf_num_used; i++) {
 		hw->pics[i].v4l_ref_buf_addr = 0;
 		hw->pics[i].cma_alloc_addr = 0;
+		hw->vf_ref[i] = 0;
 		hw->vfbuf_use[i] = 0;
 		hw->ref_use[i] = 0;
 		hw->buf_use[i] = 0;
@@ -3458,6 +3446,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			buffer_index, vf->canvas0Addr);
 		vf->pts = (pts_valid)?pts:0;
 		hw->vfbuf_use[buffer_index]++;
+		hw->vf_ref[buffer_index]++;
 
 		if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 			set_vframe_pts(hw, decode_pic_count, vf);
@@ -3551,6 +3540,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		vf->type_original = vf->type;
 		vf->pts_us64 = 0;
 		hw->vfbuf_use[buffer_index]++;
+		hw->vf_ref[buffer_index]++;
 
 		if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 			set_vframe_pts(hw, decode_pic_count, vf);
@@ -3656,6 +3646,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		debug_print(hw, PRINT_FLAG_PTS,
 			"progressive vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
 		hw->vfbuf_use[buffer_index]++;
+		hw->vf_ref[buffer_index]++;
 
 		if (hw->m_ins_flag && vdec_frame_based(hw_to_vdec(hw)))
 			set_vframe_pts(hw, decode_pic_count, vf);
@@ -4189,6 +4180,10 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 		hw->get_num,
 		hw->put_num);
 
+	debug_print(hw, 0, "vf_ref:\n");
+	for (i = 0; i < hw->vf_buf_num_used; i++)
+		debug_print(hw, 0, "%d: vf_ref %d\n",
+			i, hw->vf_ref[i]);
 	debug_print(hw, 0, "vfbuf_use:\n");
 	for (i = 0; i < hw->vf_buf_num_used; i++)
 		debug_print(hw, 0, "%d: vf_buf_use %d\n",

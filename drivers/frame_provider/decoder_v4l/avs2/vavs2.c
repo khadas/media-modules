@@ -942,12 +942,12 @@ static struct aml_buf *index_to_afbc_aml_buf(struct AVS2Decoder_s *dec, int inde
 {
 	return (struct aml_buf *)dec->afbc_buf_table[index].fb;
 }
-
+#if 0
 static struct aml_buf *index_to_aml_buf(struct AVS2Decoder_s *dec, int index)
 {
 	return (struct aml_buf *)dec->m_BUF[index].v4l_ref_buf_addr;
 }
-
+#endif
 #ifdef AVS2_10B_MMU
 int avs2_alloc_mmu(
 	struct AVS2Decoder_s *dec,
@@ -982,7 +982,7 @@ int avs2_alloc_mmu(
 				aml_buf->fbc->index,
 				aml_buf->fbc->frame_size,
 				mmu_index_adr);
-	avs2_print(dec, AVS2_DBG_BUFMGR, "%s cur fb idx mmu %d dma 0x%lx\n",
+	avs2_print(dec, AVS2_DBG_BUFMGR, "%s afbc_index %d dma 0x%lx\n",
 			__func__, aml_buf->fbc->index, aml_buf->planes[0].addr);
 
 	return ret;
@@ -1011,8 +1011,7 @@ static int get_idle_pos(struct AVS2Decoder_s *dec)
 			(pic->vf_ref == 0) &&
 			(pic->to_prepare_disp == 0) &&
 #endif
-			(pic->cma_alloc_addr) &&
-			!avs2_dec->fref[i]->cma_alloc_addr)
+			(!pic->cma_alloc_addr))
 			break;
 	}
 
@@ -1025,47 +1024,26 @@ static int v4l_get_free_fb(struct AVS2Decoder_s *dec)
 	struct avs2_frame_s *pic = NULL;
 	struct avs2_frame_s *free_pic = NULL;
 	int free_ref_idx;
-	//ulong flags;
-#if 0
-	lock_buffer(dec, flags);
+	int pos = get_idle_pos(dec);
 
-	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
-		pic = avs2_dec->fref[i];
-		if ((pic->imgcoi_ref < -256) &&
-			(pic->index != -1) &&
-			(pic->is_output == -1) &&
-			(pic->bg_flag == 0) &&
-#ifndef NO_DISPLAY
-			(pic->vf_ref == 0) &&
-			(pic->to_prepare_disp == 0) &&
-#endif
-			(pic->cma_alloc_addr)) {
-			free_pic	= pic;
-			free_ref_idx	= i;
-		}
+	if (pos < 0) {
+		avs2_print(dec, 0,
+			"get_idle_pos fail!\n");
+		return INVALID_IDX;
 	}
 
-	unlock_buffer(dec, flags);
-#endif
-	if (free_pic == NULL) {
-		int pos = get_idle_pos(dec);
+	pic = avs2_dec->fref[pos];
+	if (v4l_alloc_and_config_pic(dec, pic))
+		return INVALID_IDX;
 
-		if (pos < 0)
-			return INVALID_IDX;
+	pic->BUF_index	= pic->index;
+	pic->pic_w	= dec->frame_width;
+	pic->pic_h	= dec->frame_height;
+	free_pic	= pic;
+	free_ref_idx	= pos;
 
-		pic = avs2_dec->fref[pos];
-		if (v4l_alloc_and_config_pic(dec, pic))
-			return INVALID_IDX;
-
-		pic->BUF_index	= pos;
-		pic->pic_w	= dec->frame_width;
-		pic->pic_h	= dec->frame_height;
-		free_pic	= pic;
-		free_ref_idx	= pos;
-
-		set_canvas(dec, pic);
-		init_pic_list_hw(dec);
-	}
+	set_canvas(dec, pic);
+	init_pic_list_hw(dec);
 
 	if (free_pic && dec->chunk) {
 		free_pic->timestamp = dec->chunk->timestamp;
@@ -1074,12 +1052,10 @@ static int v4l_get_free_fb(struct AVS2Decoder_s *dec)
 	if (free_pic) {
 		struct aml_vcodec_ctx *ctx =
 			(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
-		struct aml_buf *aml_buf =
-			index_to_aml_buf(dec, free_pic->BUF_index);
 
-		aml_buf->state = FB_ST_DECODER;
+		dec->aml_buf->state = FB_ST_DECODER;
 
-		aml_buf_get_ref(&ctx->bm, aml_buf);
+		aml_buf_get_ref(&ctx->bm, dec->aml_buf);
 		dec->aml_buf = NULL;
 	}
 
@@ -1111,22 +1087,12 @@ static int get_free_buf_count(struct AVS2Decoder_s *dec)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
-	int i, free_count = 0, used_count = 0;
+	int i, free_count = 0;
 	int free_slot = 0;
 
 	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
 		if (avs2_dec->fref[i] == NULL)
 			continue;
-
-		avs2_print(dec,
-		PRINT_FLAG_VDEC_DETAIL, "%s idx %d is_output %d bg_flag %d vf_ref %d "
-		"to_prepare_disp %d index %d cma_alloc_addr = 0x%lx\n",
-		__func__, i, avs2_dec->fref[i]->is_output,
-		avs2_dec->fref[i]->bg_flag,
-		avs2_dec->fref[i]->vf_ref,
-		avs2_dec->fref[i]->to_prepare_disp,
-		avs2_dec->fref[i]->index,
-		avs2_dec->fref[i]->cma_alloc_addr);
 		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
 				(avs2_dec->fref[i]->is_output == -1) &&
 				(avs2_dec->fref[i]->bg_flag == 0) &&
@@ -1175,11 +1141,9 @@ static int get_free_buf_count(struct AVS2Decoder_s *dec)
 				if (!dec->aml_buf) {
 					return false;
 				}
-				dec->aml_buf->task->attach(dec->aml_buf->task, &task_dec_ops, dec);
+				dec->aml_buf->task->attach(dec->aml_buf->task, &task_dec_ops, hw_to_vdec(dec));
 				dec->aml_buf->state = FB_ST_DECODER;
 			}
-		} else if (avs2_dec->fref[i]->cma_alloc_addr) {
-			used_count++;
 		}
 	}
 
@@ -1187,38 +1151,8 @@ static int get_free_buf_count(struct AVS2Decoder_s *dec)
 		free_count++;
 		avs2_print(dec,
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
-		__func__, avs2_dec->fref[i]->cma_alloc_addr, dec->aml_buf->index);
+		__func__, dec->aml_buf, dec->aml_buf->index);
 	}
-#if 0
-
-	for (i = 0; i < avs2_dec->ref_maxbuffer; i++) {
-		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
-			(avs2_dec->fref[i]->is_output == -1) &&
-			(avs2_dec->fref[i]->bg_flag == 0) &&
-#ifndef NO_DISPLAY
-			(avs2_dec->fref[i]->vf_ref == 0) &&
-			(avs2_dec->fref[i]->to_prepare_disp == 0) &&
-#endif
-			(avs2_dec->fref[i]->index != -1) &&
-			(avs2_dec->fref[i]->cma_alloc_addr)) {
-			free_count++;
-		} else if (!avs2_dec->fref[i]->cma_alloc_addr){
-			if (!dec->aml_buf && !aml_buf_empty(&ctx->bm)) {
-				dec->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, true);
-				if (!dec->aml_buf) {
-					return 0;
-				}
-				dec->aml_buf->task->attach(dec->aml_buf->task, &task_dec_ops, dec);
-				dec->aml_buf->state = FB_ST_DECODER;
-			}
-		} else if (avs2_dec->fref[i]->cma_alloc_addr) {
-			used_count++;
-		}
-	}
-
-	if (dec->aml_buf)
-		free_count++;
-#endif
 	/* trigger to parse head data. */
 	if (!dec->v4l_params_parsed) {
 		free_count = dec->run_ready_min_buf_num;
@@ -2200,7 +2134,8 @@ static void init_buff_spec(struct AVS2Decoder_s *dec,
 
 static void uninit_mmu_buffers(struct AVS2Decoder_s *dec)
 {
-	decoder_mmu_box_free(dec->mmu_box);
+	if (dec->mmu_box)
+		decoder_mmu_box_free(dec->mmu_box);
 	dec->mmu_box = NULL;
 
 	if (dec->bmmu_box)
@@ -2367,15 +2302,15 @@ static int v4l_alloc_and_config_pic(struct AVS2Decoder_s *dec,
 	dec->m_BUF[i].v4l_ref_buf_addr = (ulong)aml_buf;
 	pic->cma_alloc_addr = aml_buf->planes[0].addr;
 
-	if (dec->mmu_enable) {
-		if (!dec->afbc_buf_table[aml_buf->fbc->index].used) {
-			dec->afbc_buf_table[aml_buf->fbc->index].fb = dec->m_BUF[i].v4l_ref_buf_addr;
-			dec->afbc_buf_table[aml_buf->fbc->index].used = 1;
-		} else {
-			avs2_print(dec, 0,
-				"[ERR] fb(afbc idx: %d) 0x%lx is occupied!\n",
-				aml_buf->fbc->index, dec->m_BUF[i].v4l_ref_buf_addr);
-		}
+	if (dec->mmu_enable &&
+		(!dec->afbc_buf_table[aml_buf->fbc->index].used)) {
+		dec->afbc_buf_table[aml_buf->fbc->index].fb = dec->m_BUF[i].v4l_ref_buf_addr;
+		dec->afbc_buf_table[aml_buf->fbc->index].used = 1;
+
+		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+			"%s afbc_index %d, i: %d, fb 0x%lx\n",
+			__func__, aml_buf->fbc->index, i,
+			dec->afbc_buf_table[aml_buf->fbc->index].fb);
 	}
 
 	if (aml_buf->num_planes == 1) {
@@ -2506,7 +2441,7 @@ static void dump_pic_list(struct AVS2Decoder_s *dec)
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
 		avs2_print(dec, 0,
-			"fref[%d]: index %d decode_id %d mvbuf %d imgcoi_ref %d imgtr_fwRefDistance %d referred %d, pre %d is_out %d, bg %d, vf_ref %d, error %d, lcu %d, aml_buf:%px, ref_pos(%d,%d,%d,%d,%d,%d,%d)\n",
+			"fref[%d]: index %d decode_id %d mvbuf %d imgcoi_ref %d imgtr_fwRefDistance %d refered %d, pre %d is_out %d, bg %d, vf_ref %d, error %d, lcu %d, addr:%lx, ref_pos(%d,%d,%d,%d,%d,%d,%d)\n",
 			ii, avs2_dec->fref[ii]->index,
 			avs2_dec->fref[ii]->decode_idx,
 			avs2_dec->fref[ii]->mv_buf_index,
@@ -4175,7 +4110,8 @@ static struct avs2_frame_s *get_pic_by_index(
 static struct vframe_s *vavs2_vf_get(void *op_arg)
 {
 	struct vframe_s *vf;
-	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
+	struct vdec_s *vdec = op_arg;
+	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)vdec->private;
 	if (step == 2)
 		return NULL;
 	else if (step == 1)
@@ -4243,10 +4179,16 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 	return NULL;
 }
 
+static void avs2_recycle_dec_resource(void *priv,
+						struct aml_buf *ambuf)
+{
+}
+
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
-	uint8_t index;
+	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
+	struct aml_buf *aml_buf;
 
 	if (vf == (&dec->vframe_dummy))
 		return;
@@ -4254,56 +4196,9 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 	if (!vf)
 		return;
 
-	index = vf->index & 0xff;
-
-	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
-	ATRACE_COUNTER(dec->new_q_name, kfifo_len(&dec->newframe_q));
-	atomic_add(1, &dec->vf_put_count);
-	avs2_print(dec, AVS2_DBG_BUFMGR,
-		"%s index putcount 0x%x %d\n",
-		__func__, vf->index,
-		dec->vf_put_count);
-
-	if (index < dec->used_buf_num) {
-		unsigned long flags;
-		struct avs2_frame_s *pic;
-
-		lock_buffer(dec, flags);
-		pic = get_pic_by_index(dec, index);
-		if (pic && pic->vf_ref > 0) {
-			pic->vf_ref--;
-		} else {
-			if (pic)
-				avs2_print(dec, 0,
-					"%s, error pic (index %d) vf_ref is %d\n",
-					__func__, index, pic->vf_ref);
-			else
-				avs2_print(dec, 0,
-					"%s, error pic (index %d) is NULL\n",
-					__func__, index);
-		}
-
-		if (dec->wait_buf)
-			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG, 0x1);
-		dec->last_put_idx = index;
-		dec->new_frame_displayed++;
-		unlock_buffer(dec, flags);
-	}
-
-}
-
-static void avs2_recycle_dec_resource(void *priv,
-						struct aml_buf *aml_buf)
-{
-	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)priv;
-
-	if (dec->mmu_enable) {
-		decoder_mmu_box_free_idx(aml_buf->fbc->mmu, aml_buf->fbc->index);
-		dec->afbc_buf_table[aml_buf->fbc->index].used = 0;
-		dec->afbc_buf_table[aml_buf->fbc->index].fb = 0;
-	}
-
-	return;
+	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+	aml_buf_put_ref(&ctx->bm, aml_buf);
+	avs2_recycle_dec_resource(dec, aml_buf);
 }
 
 static int vavs2_event_cb(int type, void *data, void *private_data)
@@ -6896,19 +6791,13 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 	struct aml_buf *aml_buf;
 	ulong flags;
 	int i;
+	int index;
 
 	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
 		if (avs2_dec->fref[i] == NULL)
 			continue;
 
-		avs2_print(dec,
-		PRINT_FLAG_VDEC_DETAIL, "%s idx %d imgcoi_ref %d bg_flag %d vf_ref %d "
-		"index %d cma_alloc_addr = 0x%lx\n",
-		__func__, i, avs2_dec->fref[i]->imgcoi_ref,
-		avs2_dec->fref[i]->bg_flag,
-		avs2_dec->fref[i]->vf_ref,
-		avs2_dec->fref[i]->index,
-		avs2_dec->fref[i]->cma_alloc_addr);
+		index = avs2_dec->fref[i]->index;
 		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
 				(avs2_dec->fref[i]->bg_flag == 0) &&
 #ifndef NO_DISPLAY
@@ -6917,12 +6806,12 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 				(avs2_dec->fref[i]->index != -1) &&
 				(avs2_dec->fref[i]->cma_alloc_addr)) {
 
-			aml_buf = (struct aml_buf *)dec->m_BUF[i].v4l_ref_buf_addr;
+			aml_buf = (struct aml_buf *)dec->m_BUF[index].v4l_ref_buf_addr;
 
 			avs2_print(dec,
-		PRINT_FLAG_VDEC_DETAIL, "%s idx %d imgcoi_ref %d vf_ref %d "
+		PRINT_FLAG_VDEC_DETAIL, "%s idx %d index %d imgcoi_ref %d vf_ref %d "
 			"index %d cma_alloc_addr = 0x%lx\n",
-			__func__, i, avs2_dec->fref[i]->imgcoi_ref,
+			__func__, i, index, avs2_dec->fref[i]->imgcoi_ref,
 			avs2_dec->fref[i]->vf_ref,
 			avs2_dec->fref[i]->index,
 			avs2_dec->fref[i]->cma_alloc_addr);
@@ -6932,7 +6821,7 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 
 			avs2_dec->fref[i]->cma_alloc_addr = 0;
 			avs2_dec->fref[i]->vf_ref = 0;
-			dec->m_BUF[i].v4l_ref_buf_addr = 0;
+			dec->m_BUF[index].v4l_ref_buf_addr = 0;
 
 			atomic_add(1, &dec->vf_put_count);
 
@@ -6951,7 +6840,6 @@ static bool is_available_buffer(struct AVS2Decoder_s *dec)
 		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	int i, free_count = 0;
-	int used_count = 0;
 	int free_slot = 0;
 
 	/* Ignore the buffer available check until the head parse done. */
@@ -6997,16 +6885,6 @@ static bool is_available_buffer(struct AVS2Decoder_s *dec)
 	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
 		if (avs2_dec->fref[i] == NULL)
 			continue;
-
-		avs2_print(dec,
-		PRINT_FLAG_VDEC_DETAIL, "%s idx %d is_output %d bg_flag %d vf_ref %d "
-		"to_prepare_disp %d index %d cma_alloc_addr = 0x%lx\n",
-		__func__, i, avs2_dec->fref[i]->is_output,
-		avs2_dec->fref[i]->bg_flag,
-		avs2_dec->fref[i]->vf_ref,
-		avs2_dec->fref[i]->to_prepare_disp,
-		avs2_dec->fref[i]->index,
-		avs2_dec->fref[i]->cma_alloc_addr);
 		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
 				(avs2_dec->fref[i]->is_output == -1) &&
 				(avs2_dec->fref[i]->bg_flag == 0) &&
@@ -7017,7 +6895,8 @@ static bool is_available_buffer(struct AVS2Decoder_s *dec)
 				(avs2_dec->fref[i]->index != -1) &&
 				(!avs2_dec->fref[i]->cma_alloc_addr)) {
 				free_slot++;
-				break;
+				if (free_slot >= dec->run_ready_min_buf_num)
+					break;
 		}
 	}
 
@@ -7040,67 +6919,23 @@ static bool is_available_buffer(struct AVS2Decoder_s *dec)
 		return false;
 	}
 
-	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
-		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
-				(avs2_dec->fref[i]->is_output == -1) &&
-				(avs2_dec->fref[i]->bg_flag == 0) &&
-#ifndef NO_DISPLAY
-				(avs2_dec->fref[i]->vf_ref == 0) &&
-				(avs2_dec->fref[i]->to_prepare_disp == 0) &&
-#endif
-				(avs2_dec->fref[i]->index != -1) &&
-				(!avs2_dec->fref[i]->cma_alloc_addr)) {
-			if (!dec->aml_buf && !aml_buf_empty(&ctx->bm)) {
-				dec->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-				if (!dec->aml_buf) {
-					return false;
-				}
-				dec->aml_buf->task->attach(dec->aml_buf->task, &task_dec_ops, dec);
-				dec->aml_buf->state = FB_ST_DECODER;
-			}
-		} else if (avs2_dec->fref[i]->cma_alloc_addr) {
-			used_count++;
+	if (!dec->aml_buf && !aml_buf_empty(&ctx->bm)) {
+		dec->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+		if (!dec->aml_buf) {
+			return false;
 		}
+
+		dec->aml_buf->task->attach(dec->aml_buf->task, &task_dec_ops, hw_to_vdec(dec));
+		dec->aml_buf->state = FB_ST_DECODER;
 	}
 
 	if (dec->aml_buf) {
 		free_count++;
 		avs2_print(dec,
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
-		__func__, avs2_dec->fref[i]->cma_alloc_addr, dec->aml_buf->index);
-	}
-#if 0
-	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
-		if (avs2_dec->fref[i] == NULL)
-			continue;
-
-		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
-				(avs2_dec->fref[i]->is_output == -1) &&
-				(avs2_dec->fref[i]->bg_flag == 0) &&
-#ifndef NO_DISPLAY
-				(avs2_dec->fref[i]->vf_ref == 0) &&
-				(avs2_dec->fref[i]->to_prepare_disp == 0) &&
-#endif
-				(avs2_dec->fref[i]->index != -1) &&
-				(avs2_dec->fref[i]->cma_alloc_addr)) {
-			free_count++;
-		} else if (!avs2_dec->fref[i]->cma_alloc_addr){
-			if (!dec->aml_buf && !aml_buf_empty(&ctx->bm)) {
-				dec->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, true);
-				if (!dec->aml_buf) {
-					return 0;
-				}
-				dec->aml_buf->task->attach(dec->aml_buf->task, &task_dec_ops, dec);
-				dec->aml_buf->state = FB_ST_DECODER;
-			}
-		} else if (avs2_dec->fref[i]->cma_alloc_addr) {
-			used_count++;
-		}
+		__func__, dec->aml_buf, dec->aml_buf->index);
 	}
 
-	if (dec->aml_buf)
-		free_count++;
-#endif
 	return free_count >= dec->run_ready_min_buf_num ? true : false;
 }
 
@@ -7381,6 +7216,33 @@ static irqreturn_t avs2_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	return vavs2_isr_thread_fn(0, dec);
 }
 
+static int check_free_buf_count(struct AVS2Decoder_s *dec)
+{
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	int i;
+	int free_slot = 0;
+
+
+	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
+		if (avs2_dec->fref[i] == NULL)
+			continue;
+		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
+			(avs2_dec->fref[i]->is_output == -1) &&
+			(avs2_dec->fref[i]->bg_flag == 0) &&
+#ifndef NO_DISPLAY
+			(avs2_dec->fref[i]->vf_ref == 0) &&
+			(avs2_dec->fref[i]->to_prepare_disp == 0) &&
+#endif
+			(avs2_dec->fref[i]->index != -1) &&
+			(!avs2_dec->fref[i]->cma_alloc_addr)) {
+			free_slot++;
+			break;
+		}
+	}
+
+	return free_slot;
+}
+
 static void avs2_dump_state(struct vdec_s *vdec)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)vdec->private;
@@ -7416,7 +7278,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 		dec->vf_pre_count,
 		dec->vf_get_count,
 		dec->vf_put_count,
-		get_free_buf_count(dec),
+		check_free_buf_count(dec),
 		dec->run_ready_min_buf_num);
 
 	dump_pic_list(dec);

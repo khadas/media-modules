@@ -3028,6 +3028,19 @@ int aml_canvas_cache_init(struct aml_vcodec_dev *dev)
 	return 0;
 }
 
+void aml_v4l_vpp_release_early(struct aml_vcodec_ctx * ctx)
+{
+	if (ctx->vpp && !ctx->vpp_cfg.enable_nr) {
+		aml_v4l2_vpp_destroy(ctx->vpp);
+		atomic_dec(&ctx->dev->vpp_count);
+		ctx->vpp = NULL;
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"vpp destroy inst count:%d.\n",
+			atomic_read(&ctx->dev->vpp_count));
+	}
+}
+
 void aml_v4l_ctx_release(struct kref *kref)
 {
 	struct aml_vcodec_ctx * ctx;
@@ -3037,6 +3050,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 	if (ctx->vpp) {
 		aml_v4l2_vpp_destroy(ctx->vpp);
 		atomic_dec(&ctx->dev->vpp_count);
+		ctx->vpp = NULL;
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"vpp destroy inst count:%d.\n",

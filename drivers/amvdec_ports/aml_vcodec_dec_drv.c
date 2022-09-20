@@ -213,6 +213,7 @@ static int fops_vcodec_release(struct file *file)
 
 	kfree(ctx->empty_flush_buf);
 	aml_buf_mgr_release(&ctx->bm);
+	aml_v4l_vpp_release_early(ctx);
 	kref_put(&ctx->ctx_ref, aml_v4l_ctx_release);
 	mutex_unlock(&dev->dev_mutex);
 	return 0;

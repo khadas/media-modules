@@ -2672,7 +2672,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
 
-	if (vdec_frame_based(vdec) && !(vdec_secure(vdec))) {
+	if (vdec_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 		/* HW needs padding (NAL start) for frame ending */
 		char* tail = (char *)hw->chunk->block->start_virt;
 
