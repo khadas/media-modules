@@ -201,7 +201,7 @@ static int request_firmware_from_sys(const char *file_name,
 	const struct firmware *fw;
 	int magic, offset = 0;
 
-	pr_info("Try to load %s  ...\n", file_name);
+	pr_debug("Try to load %s  ...\n", file_name);
 
 	ret = request_firmware(&fw, file_name, g_dev->dev);
 	if (ret < 0) {
@@ -233,7 +233,7 @@ static int request_firmware_from_sys(const char *file_name,
 
 	memcpy(buf, (char *)fw->data + offset, fw->size - offset);
 
-	pr_info("load firmware size : %zd, Name : %s.\n",
+	pr_debug("load firmware size : %zd, Name : %s.\n",
 		fw->size, file_name);
 	ret = fw->size;
 release:
@@ -1025,7 +1025,7 @@ static int fw_driver_init(void)
 		goto err;
 	}
 
-	pr_info("Registered firmware driver success.\n");
+	pr_debug("Registered firmware driver success.\n");
 err:
 	return ret;
 }
