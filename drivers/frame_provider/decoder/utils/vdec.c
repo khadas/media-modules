@@ -84,7 +84,6 @@
 #include "vdec_canvas_utils.h"
 #include "../../../amvdec_ports/aml_vcodec_drv.h"
 #include "../../../common/media_utils/media_utils.h"
-#include "../../../common/media_utils/vendor_hooks.h"
 
 #if 0
 #define PXP_DEBUG
@@ -5982,9 +5981,6 @@ int vdec_module_init(void)
 
 	vcodec_profile_register(&amvdec_input_profile);
 
-#if IS_ENABLED(CONFIG_AMLOGIC_V4L2)
-	register_media_modules_vendor_hooks();
-#endif
 	return 0;
 }
 EXPORT_SYMBOL(vdec_module_init);
@@ -5992,9 +5988,6 @@ EXPORT_SYMBOL(vdec_module_init);
 void vdec_module_exit(void)
 {
 	platform_driver_unregister(&vdec_driver);
-#if IS_ENABLED(CONFIG_AMLOGIC_V4L2)
-	unregister_media_modules_vendor_hooks();
-#endif
 }
 EXPORT_SYMBOL(vdec_module_exit);
 

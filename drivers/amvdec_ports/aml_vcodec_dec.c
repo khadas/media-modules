@@ -2539,6 +2539,7 @@ static int vidioc_enum_fmt(struct v4l2_fmtdesc *f, bool output_queue)
 
 		if (j == f->index) {
 			f->pixelformat = fmt->fourcc;
+			strncpy(f->description, fmt->name, sizeof(f->description));
 			return 0;
 		}
 		++j;
@@ -2783,15 +2784,6 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 				i, vb2_plane_size(vb, i),
 				q_data->sizeimage[i]);
 		}
-	}
-
-	if (vb2_v4l2->android_kabi_reserved1 &&
-		(copy_from_user(buf->meta_data,
-		(void *)vb2_v4l2->android_kabi_reserved1,
-		META_DATA_SIZE + 4))) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-			"%s:copy meta data error. ptr: %lx\n", __func__,
-			vb2_v4l2->android_kabi_reserved1);
 	}
 
 	return 0;
