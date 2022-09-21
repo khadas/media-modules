@@ -38,11 +38,6 @@ MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
 u64 last_pcr;
 
-typedef int (*pfun_amldemux_pcrscr_get)(int demux_device_index, int index,
-					u64 *stc);
-static pfun_amldemux_pcrscr_get amldemux_pcrscr_get = NULL;
-//extern int demux_get_stc(int demux_device_index, int index,
-//                  u64 *stc, unsigned int *base);
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
 
 static u64 get_llabs(s64 value){
@@ -80,17 +75,13 @@ static u64 get_stc_time_us(s32 sSyncInsId)
 	pInstance = vMediaSyncInsList[index].pInstance;
 	if (pInstance->mSyncMode != MEDIA_SYNC_PCRMASTER)
 		return 0;
-	if (!amldemux_pcrscr_get)
-		amldemux_pcrscr_get = symbol_request(demux_get_pcr);
-	if (!amldemux_pcrscr_get)
-		return 0;
 	ktime_get_ts64(&ts_monotonic);
 	timeus = ts_monotonic.tv_sec * 1000000LL + div_u64(ts_monotonic.tv_nsec , 1000);
 	if (pInstance->mDemuxId < 0)
 		return timeus;
 
 
-	ret = amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+	ret = demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 
 	if (ret != 0) {
 		stc = timeus;
@@ -950,8 +941,8 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 	}
 
 	if (pInstance->mSyncInfo.firstDmxPcrInfo.framePts == -1) {
-		if (amldemux_pcrscr_get && pInstance->mDemuxId >= 0) {
-			amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+		if (pInstance->mDemuxId >= 0) {
+			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
 		} else {
@@ -1124,8 +1115,8 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 		return -1;
 	}
 
-	if (amldemux_pcrscr_get && pInstance->mDemuxId >= 0) {
-		amldemux_pcrscr_get(pInstance->mDemuxId, 0, &pcr);
+	if (pInstance->mDemuxId >= 0) {
+		demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = pcr;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = get_system_time_us();
 	} else {
