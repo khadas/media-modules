@@ -1759,7 +1759,7 @@ static void  hevc_set_unused_4k_buff_idx(struct vdec_h264_hw_s *hw,
 
 static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 {
-	ulong timeout = jiffies + HZ;
+	ulong timeout = jiffies + HZ / 10;
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_MMU_DETAIL, "hevc_frame_done...set\n");
 	while ((READ_VREG(HEVC_SAO_INT_STATUS) & 0x1) == 0) {
@@ -1769,7 +1769,7 @@ static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 			break;
 		}
 	}
-	timeout = jiffies + HZ;
+	timeout = jiffies + HZ / 10;
 	while (READ_VREG(HEVC_CM_CORE_STATUS) & 0x1) {
 		if (time_after(jiffies, timeout)) {
 			dpb_print(DECODE_ID(hw),
@@ -1791,7 +1791,8 @@ static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 			p_H264_Dpb->mVideo.dec_picture);
 		p_H264_Dpb->mVideo.dec_picture->data_flag &= ~ERROR_FLAG;
 		p_H264_Dpb->mVideo.dec_picture = NULL;
-		if (hw->mmu_enable)
+		if (hw->mmu_enable &&
+			hw->dec_result != DEC_RESULT_TIMEOUT)
 			hevc_set_frame_done(hw);
 	}
 	mutex_unlock(&hw->pic_mutex);
@@ -6654,7 +6655,8 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 		vdec->mvfrm->hw_decode_time =
 		local_clock() - vdec->mvfrm->hw_decode_start;
 
-	if (input_frame_based(vdec) &&
+	if (p_H264_Dpb->dec_dpb_status != H264_DECODE_TIMEOUT &&
+		input_frame_based(vdec) &&
 			(!(hw->i_only & 0x2)) &&
 			frmbase_cont_bitlevel != 0 &&
 			READ_VREG(VIFF_BIT_CNT) >
@@ -7535,6 +7537,11 @@ pic_done_proc:
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 				"%s, mark err_frame\n", __func__);
 		}
+		if (dec_dpb_status == H264_DECODE_TIMEOUT &&
+			hw->mmu_enable) {
+			amhevc_stop();
+			hevc_reset_core(vdec);
+		}
 		vh264_pic_done_proc(vdec);
 
 		if (hw->frmbase_cont_flag) {
@@ -7946,8 +7953,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	amvdec_stop();
 	vdec->mc_loaded = 0;
 	if (hw->mmu_enable) {
-		hevc_set_frame_done(hw);
-		hevc_sao_wait_done(hw);
+		amhevc_stop();
 	}
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout, DPB_STATUS_REG 0x%x\n", __func__, READ_VREG(DPB_STATUS_REG));
@@ -9996,8 +10002,13 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		return;
 	} else if (hw->dec_result == DEC_RESULT_DONE ||
 					hw->dec_result == DEC_RESULT_TIMEOUT) {
-		/* if (!hw->ctx_valid)
-			hw->ctx_valid = 1; */
+
+		if (hw->dec_result == DEC_RESULT_TIMEOUT &&
+			hw->mmu_enable) {
+			hevc_set_frame_done(hw);
+			hevc_sao_wait_done(hw);
+		}
+
 		hw->dec_again_cnt = 0;
 		if ((hw->dec_result == DEC_RESULT_TIMEOUT) &&
 				!hw->i_only && (hw->error_proc_policy & 0x2)) {
