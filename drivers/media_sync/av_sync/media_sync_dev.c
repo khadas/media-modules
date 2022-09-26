@@ -95,11 +95,14 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	mediasync_speed SyncSpeed = {0};
 	mediasync_speed PcrSlope = {0};
 	mediasync_frameinfo FrameInfo = {-1, -1};
+	mediasync_video_packets_info videoPacketsInfo = {-1, -1};
+	mediasync_audio_packets_info audioPacketsInfo = {-1,-1,1,0,-1};
 	mediasync_audioinfo AudioInfo = {0, 0};
 	mediasync_videoinfo VideoInfo = {0, 0};
 	mediasync_audio_format AudioFormat;
 	mediasync_clocktype ClockType = UNKNOWN_CLOCK;
 	mediasync_clockprovider_state state;
+	mediasync_avsync_state_cur_time_us avSyncStatusCurTimeUs;
 	s32 SyncInsId = -1;
 	s32 SyncPaused = 0;
 	s32 SyncMode = -1;
@@ -125,7 +128,7 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	aml_Source_Type sourceType = TS_DEMOD;
 	s64 UpdateTimeThreshold = 0;
 	s64 StartMediaTime = -1;
-
+	s32 PlayerInstanceId = -1;
 
 	switch (cmd) {
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
@@ -167,6 +170,20 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 				return -EFAULT;
 			}
 			ret = mediasync_ins_binder(SyncInsId, &SyncIns);
+			if (SyncIns == NULL) {
+				return -EFAULT;
+			}
+
+			priv->mSyncInsId = SyncInsId;
+			priv->mSyncIns = SyncIns;
+		break;
+		case MEDIASYNC_IOC_INSTANCE_STATIC_BINDER:
+			if (copy_from_user((void *)&SyncInsId,
+						(void *)arg,
+						sizeof(SyncInsId))) {
+				return -EFAULT;
+			}
+			ret = mediasync_static_ins_binder(SyncInsId, &SyncIns);
 			if (SyncIns == NULL) {
 				return -EFAULT;
 			}
@@ -1089,6 +1106,59 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case  MEDIASYNC_IOC_SET_AUDIO_PACKETS_INFO :
+			if (copy_from_user((void *)&audioPacketsInfo,
+					(void *)arg,
+					sizeof(audioPacketsInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+			ret = mediasync_ins_set_audio_packets_info(priv->mSyncInsId,
+								audioPacketsInfo);
+		break;
+
+		case  MEDIASYNC_IOC_GET_AUDIO_CACHE_INFO :
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_audio_cache_info(priv->mSyncInsId,
+								&AudioInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&AudioInfo,
+						sizeof(AudioInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case  MEDIASYNC_IOC_SET_VIDEO_PACKETS_INFO :
+			if (copy_from_user((void *)&videoPacketsInfo,
+					(void *)arg,
+					sizeof(videoPacketsInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+			ret = mediasync_ins_set_video_packets_info(priv->mSyncInsId,
+								videoPacketsInfo);
+		break;
+
+		case  MEDIASYNC_IOC_GET_VIDEO_CACHE_INFO :
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_video_cache_info(priv->mSyncInsId,
+								&VideoInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&VideoInfo,
+						sizeof(VideoInfo)))
+					return -EFAULT;
+			}
+		break;
+
 		case MEDIASYNC_IOC_SET_FIRST_QUEUE_AUDIO_INFO:
 			if (copy_from_user((void *)&FrameInfo,
 					(void *)arg,
@@ -1142,6 +1212,101 @@ static long mediasync_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 		break;
 
+		case MEDIASYNC_IOC_SET_PLAYER_INSTANCE_ID :
+			if (copy_from_user((void *)&PlayerInstanceId,
+					(void *)arg,
+					sizeof(PlayerInstanceId)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_player_instance_id(priv->mSyncInsId,
+								PlayerInstanceId);
+
+		break;
+
+		case MEDIASYNC_IOC_GET_PLAYER_INSTANCE_ID :
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+			ret = mediasync_ins_get_player_instance_id(priv->mSyncInsId,
+								&PlayerInstanceId);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&PlayerInstanceId,
+						sizeof(PlayerInstanceId)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_GET_AVSTATE_CUR_TIME_US :
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+			ret = mediasync_ins_get_avsync_state_cur_time_us(priv->mSyncInsId,
+								&avSyncStatusCurTimeUs);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&avSyncStatusCurTimeUs,
+						sizeof(avSyncStatusCurTimeUs)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_PAUSE_VIDEO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pause_video_info(priv->mSyncInsId,
+								FrameInfo);
+
+		break;
+
+		case MEDIASYNC_IOC_GET_PAUSE_VIDEO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_pause_video_info(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
+		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
+			if (copy_from_user((void *)&FrameInfo,
+					(void *)arg,
+					sizeof(FrameInfo)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_pause_audio_info(priv->mSyncInsId,
+								FrameInfo);
+		break;
+
+		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_get_pause_audio_info(priv->mSyncInsId,
+								&FrameInfo);
+			if (ret == 0) {
+				if (copy_to_user((void *)arg,
+						&FrameInfo,
+						sizeof(FrameInfo)))
+					return -EFAULT;
+			}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1158,6 +1323,7 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_INSTANCE_ALLOC:
 		case MEDIASYNC_IOC_INSTANCE_GET:
 		case MEDIASYNC_IOC_INSTANCE_BINDER:
+		case MEDIASYNC_IOC_INSTANCE_STATIC_BINDER:
 		case MEDIASYNC_IOC_UPDATE_MEDIATIME:
 		case MEDIASYNC_IOC_GET_MEDIATIME:
 		case MEDIASYNC_IOC_GET_SYSTEMTIME:
@@ -1229,7 +1395,17 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_GET_FIRST_QUEUE_AUDIO_INFO:
 		case MEDIASYNC_IOC_SET_FIRST_QUEUE_VIDEO_INFO:
 		case MEDIASYNC_IOC_GET_FIRST_QUEUE_VIDEO_INFO:
-
+		case MEDIASYNC_IOC_SET_AUDIO_PACKETS_INFO :
+		case MEDIASYNC_IOC_GET_AUDIO_CACHE_INFO :
+		case MEDIASYNC_IOC_SET_VIDEO_PACKETS_INFO :
+		case MEDIASYNC_IOC_GET_VIDEO_CACHE_INFO :
+		case MEDIASYNC_IOC_SET_PLAYER_INSTANCE_ID :
+		case MEDIASYNC_IOC_GET_PLAYER_INSTANCE_ID :
+		case MEDIASYNC_IOC_GET_AVSTATE_CUR_TIME_US:
+		case MEDIASYNC_IOC_SET_PAUSE_VIDEO_INFO:
+		case MEDIASYNC_IOC_GET_PAUSE_VIDEO_INFO:
+		case MEDIASYNC_IOC_SET_PAUSE_AUDIO_INFO:
+		case MEDIASYNC_IOC_GET_PAUSE_AUDIO_INFO:
 			return mediasync_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

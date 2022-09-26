@@ -53,7 +53,8 @@ typedef enum {
 	MEDIASYNC_AV_ARRIVED,
 	MEDIASYNC_AV_SYNCED,
 	MEDIASYNC_RUNNING,
-	MEDIASYNC_LOST_SYNC,
+	MEDIASYNC_VIDEO_LOST_SYNC,
+	MEDIASYNC_AUDIO_LOST_SYNC,
 	MEDIASYNC_EXIT,
 } avsync_state;
 
@@ -70,8 +71,35 @@ typedef struct frameinfo{
 	int64_t frameSystemTime;
 }mediasync_frameinfo;
 
+typedef struct video_packets_info{
+	int packetsSize;
+	int64_t packetsPts;
+} mediasync_video_packets_info;
+
+typedef struct audio_packets_info{
+	int packetsSize;
+	int duration;
+	int isworkingchannel;
+	int isneedupdate;
+	int64_t packetsPts;
+} mediasync_audio_packets_info;
+
+
+typedef struct discontinue_frame_info{
+	int64_t discontinuePtsBefore;
+	int64_t discontinuePtsAfter;
+	int isDiscontinue;
+} mediasync_discontinue_frame_info;
+
+
+typedef struct avsync_state_cur_time_us{
+	avsync_state state;
+	int64_t setStateCurTimeUs;
+} mediasync_avsync_state_cur_time_us;
+
 typedef struct syncinfo {
 	avsync_state state;
+	int64_t setStateCurTimeUs;
 	mediasync_frameinfo firstAframeInfo;
 	mediasync_frameinfo firstVframeInfo;
 	mediasync_frameinfo firstDmxPcrInfo;
@@ -81,8 +109,12 @@ typedef struct syncinfo {
 	mediasync_frameinfo curDmxPcrInfo;
 	mediasync_frameinfo queueAudioInfo;
 	mediasync_frameinfo queueVideoInfo;
-	mediasync_frameinfo firstQAudioInfo;
-	mediasync_frameinfo firstQVideoInfo;
+	mediasync_frameinfo firstAudioPacketsInfo;
+	mediasync_frameinfo firstVideoPacketsInfo;
+	mediasync_frameinfo pauseVideoInfo;
+	mediasync_frameinfo pauseAudioInfo;
+	mediasync_video_packets_info videoPacketsInfo;
+	mediasync_audio_packets_info audioPacketsInfo;
 }mediasync_syncinfo;
 
 typedef struct audioinfo{
@@ -134,7 +166,7 @@ typedef struct instance{
 	mediasync_speed mPcrSlope;
 	s32 mSyncModeChange;
 	s64 mUpdateTimeThreshold;
-
+	s32 mPlayerInstanceId;
 	int mHasAudio;
 	int mHasVideo;
 	int mute_flag;
@@ -149,6 +181,8 @@ typedef struct instance{
 	mediasync_audioinfo mAudioInfo;
 	mediasync_videoinfo mVideoInfo;
 	mediasync_syncinfo mSyncInfo;
+	mediasync_discontinue_frame_info mVideoDiscontinueInfo;
+	mediasync_discontinue_frame_info mAudioDiscontinueInfo;
 	aml_Source_Type mSourceType;
 	mediasync_audio_format mAudioFormat;
 	char atrace_video[32];
@@ -169,6 +203,8 @@ long mediasync_ins_alloc(s32 sDemuxId,
 
 long mediasync_ins_delete(s32 sSyncInsId);
 long mediasync_ins_binder(s32 sSyncInsId,
+			mediasync_ins **pIns);
+long mediasync_static_ins_binder(s32 sSyncInsId,
 			mediasync_ins **pIns);
 long mediasync_ins_unbinder(s32 sSyncInsId);
 long mediasync_ins_update_mediatime(s32 sSyncInsId,
@@ -248,9 +284,20 @@ long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info
 long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packets_info info);
+long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* info);
+long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packets_info info);
+long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* info);
 long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId);
+long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId);
+long mediasync_ins_get_avsync_state_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsyncstate);
+long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
+long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
 
 #endif
