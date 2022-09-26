@@ -1,9 +1,4 @@
 MODULE_NAME = amvdec_mmpeg4_v4l
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-amvdec-mmpeg4_v4l
-endif
-endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_MPEG4_MULTI) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vmpeg4_multi.o
 

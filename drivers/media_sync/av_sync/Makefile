@@ -1,4 +1,4 @@
-MODULE_NAME = amlogic-media-sync
+MODULE_NAME = media_sync
 obj-m	+=	 ${MODULE_NAME}.o
 
 ${MODULE_NAME}-objs	+=	media_sync_dev.o

@@ -1,9 +1,4 @@
 MODULE_NAME = amvdec_avs2
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-amvdec-avs2
-endif
-endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_AVS2) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vavs2.o avs2_bufmgr.o
 

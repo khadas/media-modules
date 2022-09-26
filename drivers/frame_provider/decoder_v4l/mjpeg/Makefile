@@ -1,9 +1,4 @@
 MODULE_NAME = amvdec_mmjpeg_v4l
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-amvdec-mmjpeg_v4l
-endif
-endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_MJPEG_MULTI) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vmjpeg_multi.o
 

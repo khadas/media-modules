@@ -1,9 +1,4 @@
 MODULE_NAME = stream_input
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-stream-input
-endif
-endif
 obj-m	+=	 ${MODULE_NAME}.o
 
 ${MODULE_NAME}-objs	+=	amports/amstream.o

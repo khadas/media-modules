@@ -1,9 +1,4 @@
 MODULE_NAME = amvdec_ports
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-amvdec-ports
-endif
-endif
 obj-m += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += aml_vcodec_dec_drv.o
 ${MODULE_NAME}-objs += aml_vcodec_dec.o

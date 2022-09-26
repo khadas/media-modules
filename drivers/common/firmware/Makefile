@@ -1,9 +1,4 @@
 MODULE_NAME = firmware
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-firmware
-endif
-endif
 obj-m = $(MODULE_NAME).o
 $(MODULE_NAME)-y += firmware_drv.o
 $(MODULE_NAME)-y += firmware_type.o

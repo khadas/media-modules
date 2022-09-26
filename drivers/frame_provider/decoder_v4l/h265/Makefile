@@ -1,9 +1,4 @@
 MODULE_NAME = amvdec_h265_v4l
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-amvdec-h265_v4l
-endif
-endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_H265) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vh265.o
 

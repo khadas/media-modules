@@ -1,9 +1,4 @@
 MODULE_NAME = amvdec_vc1
-ifeq (${VERSION},5)
-ifeq (${PATCHLEVEL},15)
-	MODULE_NAME = amlogic-amvdec-vc1
-endif
-endif
 obj-$(CONFIG_AMLOGIC_MEDIA_VDEC_VC1) += ${MODULE_NAME}.o
 ${MODULE_NAME}-objs += vvc1.o
 
