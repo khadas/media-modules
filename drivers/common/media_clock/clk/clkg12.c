@@ -430,16 +430,23 @@ void set_clock_gate(struct gate_switch_node *nodes, int num)
 	do {
 		node = &nodes[num - 1];
 		if (IS_ERR_OR_NULL(node) || (IS_ERR_OR_NULL(node->clk)))
-			pr_info("get mux clk err.\n");
-
-		if (!strcmp(node->name, "clk_vdec_mux"))
+			continue;
+		if (!strcmp(node->name, "clk_vdec_mux")) {
 			gclk.vdec_mux_node = node;
-		else if (!strcmp(node->name, "clk_hcodec_mux"))
+			pr_info("%s get vdec mux\n", __func__);
+		}
+		else if (!strcmp(node->name, "clk_hcodec_mux")) {
 			gclk.hcodec_mux_node = node;
-		else if (!strcmp(node->name, hevc_mux_str))
-				gclk.hevc_mux_node = node;
-		else if (!strcmp(node->name, "clk_hevcb_mux"))
+			pr_info("%s get hcodec mux\n", __func__);
+		}
+		else if (!strcmp(node->name, hevc_mux_str)) {
+			gclk.hevc_mux_node = node;
+			pr_info("%s get hevc_mux_str\n", __func__);
+		}
+		else if (!strcmp(node->name, "clk_hevcb_mux")) {
 			gclk.hevc_back_mux_node = node;
+			pr_info("%s get hevcb mux\n", __func__);
+		}
 	} while(--num);
 }
 EXPORT_SYMBOL(set_clock_gate);

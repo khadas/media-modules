@@ -17,7 +17,7 @@
  *
  * Description:
  */
-#define DEBUG
+//#define DEBUG
 #include <linux/compiler.h>
 #include <linux/clk-provider.h>
 #include <linux/err.h>
@@ -106,7 +106,7 @@ int amports_clock_gate_init(struct device *dev)
 				gates[i].name,
 				gates[i].clk);
 		} else {
-			pr_info("get gate %s control ok %px\n",
+			pr_debug("get gate %s control ok %px\n",
 				gates[i].name,
 				gates[i].clk);
 		}

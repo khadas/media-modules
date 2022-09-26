@@ -328,7 +328,7 @@ static void buf_core_destroy(struct kref *kref)
 	bc->buf_num	= 0;
 	bc->state	= BM_STATE_EXIT;
 
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO, "%s\n", __func__);
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 }
 
 static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)

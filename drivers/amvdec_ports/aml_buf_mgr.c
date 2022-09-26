@@ -506,7 +506,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 		v4l_dbg(priv, V4L_DEBUG_CODEC_ERROR,
 			"%s, init fail.\n", __func__);
 	} else {
-		v4l_dbg(priv, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(priv, V4L_DEBUG_CODEC_BUFMGR,
 			"%s\n", __func__);
 	}
 
@@ -515,7 +515,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 
 void aml_buf_mgr_release(struct aml_buf_mgr_s *bm)
 {
-	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_PRINFO, "%s\n", __func__);
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 
 	kref_put(&bm->ref, aml_buf_mgr_destroy);
 	buf_core_mgr_release(&bm->bc);

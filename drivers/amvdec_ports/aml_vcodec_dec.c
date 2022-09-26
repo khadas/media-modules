@@ -3064,7 +3064,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 	ctx->aux_infos.free_buffer(ctx, SEI_TYPE | DV_TYPE);
 	ctx->aux_infos.free_buffer(ctx, 1);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 		"v4ldec has been destroyed.\n");
 
 	if (ctx->sync) {

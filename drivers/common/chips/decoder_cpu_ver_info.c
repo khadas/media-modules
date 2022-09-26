@@ -292,12 +292,12 @@ struct platform_device *initial_dos_device(void)
 	if ((cpu_ver_id == AM_MESON_CPU_MAJOR_ID_G12B) && (cpu_sub_id == CHIP_REVB))
 		cpu_ver_id = AM_MESON_CPU_MAJOR_ID_TL1;
 
-	pr_info("vdec init cpu id: 0x%x(%d)", cpu_ver_id, cpu_sub_id);
+	pr_debug("vdec init cpu id: 0x%x(%d)", cpu_ver_id, cpu_sub_id);
 
 	if (pdev && of_dev_data)
 		dos_register_probe(pdev, of_dev_data->reg_compat);
 
-	pr_info("initial_dos_device end\n");
+	pr_debug("initial_dos_device end\n");
 
 	return pdev;
 }

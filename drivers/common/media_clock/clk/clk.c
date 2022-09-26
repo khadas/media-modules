@@ -447,7 +447,7 @@ static int register_vdec_clk_setting_per_cpu(int cputype,
 		return -ENOMEM;
 	memcpy(p_setting, setting, size);
 
-	pr_info("register clk_set_setting cpu[%d]\n", cputype);
+	pr_debug("register clk_set_setting cpu[%d]\n", cputype);
 
 	get_current_vdec_chip()->clk_setting_array = p_setting;
 	return 0;
