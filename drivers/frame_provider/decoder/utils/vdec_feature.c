@@ -396,6 +396,38 @@ static int vcodec_feature_ge2d_wrapper(u8 *buf, int size, int vformat, int is_v4
 	return pbuf - buf;
 }
 
+static int vcodec_feature_DMABUF_heap(u8 *buf, int size, int vformat, int is_v4l)
+{
+	u8 *pbuf = buf;
+
+	pbuf += snprintf(pbuf, size, "        \"DMA buffer heap\" : \"true\"\n");
+
+	return pbuf - buf;
+}
+
+static int vcodec_feature_dynamic_buffer_management(u8 *buf, int size, int vformat, int is_v4l)
+{
+	u8 *pbuf = buf;
+
+	if (is_v4l) {
+		pbuf += snprintf(pbuf, size, "        \"Dynamuc buffer management\" : \"true\"\n");
+	}
+
+	return pbuf - buf;
+}
+
+static int vcodec_feature_es_dma_mode(u8 *buf, int size, int vformat, int is_v4l)
+{
+	u8 *pbuf = buf;
+
+	if (is_v4l) {
+		pbuf += snprintf(pbuf, size, "        \"Es dma mode\" : \"true\"\n");
+	}
+
+	return pbuf - buf;
+}
+
+
 
 
 int vcodec_feature_get_feature(u8 *buf, int vformat, int is_v4l)
@@ -466,6 +498,18 @@ int vcodec_feature_get_feature(u8 *buf, int vformat, int is_v4l)
 	pbuf += s;
 
 	s = vcodec_feature_ge2d_wrapper(pbuf, size - tsize, vformat, is_v4l);
+	tsize += s;
+	pbuf += s;
+
+	s = vcodec_feature_DMABUF_heap(pbuf, size - tsize, vformat, is_v4l);
+	tsize += s;
+	pbuf += s;
+
+	s = vcodec_feature_dynamic_buffer_management(pbuf, size - tsize, vformat, is_v4l);
+	tsize += s;
+	pbuf += s;
+
+	s = vcodec_feature_es_dma_mode(pbuf, size - tsize, vformat, is_v4l);
 	tsize += s;
 	pbuf += s;
 
