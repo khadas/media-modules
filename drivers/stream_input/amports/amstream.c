@@ -3093,10 +3093,17 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 						break;
 					}
 
-					if (copy_to_user((void *)arg,
-						p_userdata_param,
-						sizeof(struct userdata_param_t)))
-						r = -EFAULT;
+					if (access_ok((void*)arg, sizeof(struct userdata_param_t))) {
+						if (copy_to_user((void __user *)arg,
+							p_userdata_param,
+							sizeof(struct userdata_param_t))) {
+							r = -EFAULT;
+							break;
+						}
+					} else {
+						memcpy((void*)arg, p_userdata_param,
+							sizeof(struct userdata_param_t));
+					}
 				} else
 					r = -EINVAL;
 				mutex_unlock(&amstream_mutex);
@@ -3603,7 +3610,7 @@ static long amstream_ioc_get_userdata(struct port_priv_s *priv,
 	int ret;
 	compat_uptr_t pbuf_addr;
 
-	if (copy_from_user(&data, &arg, 4 * sizeof(u32)))
+	if (copy_from_user(&data, arg, 4 * sizeof(u32)))
 		return -EFAULT;
 
 	if (copy_from_user(&data.meta_info, &arg->meta_info, sizeof(data.meta_info)))

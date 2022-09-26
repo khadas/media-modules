@@ -2770,7 +2770,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 #endif
 
 		}
-		if (frame->data_flag & ERROR_FLAG) {
+		if (frame->data_flag & ERROR_FLAG ||
+			frame->data_flag & NODISP_FLAG) {
 			vf->frame_type |= V4L2_BUF_FLAG_ERROR;
 		}
 
