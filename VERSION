@@ -1,9 +1,17 @@
 Major_V=6
-Minor_V=0
-BaseChangeId=Ie5dd8015a9663f3be43a0867348b70812bdfb25e
+Minor_V=1
+BaseChangeId=I105b34640d3117394ca3fbfc439378cafbf22d70
 
 
 #history version
+#V6.0 Release Notes
+#Release_ChangeId_V6_0=Ie5dd8015a9663f3be43a0867348b70812bdfb25e
+#Support DMABUF heap Feature
+#Support Decoder new Buffer mamangement for V4Ldec
+#Support  Kernel 5.15
+#Support non-V4ldec  feature of the all V5 version and so on
+#Kernel 5.15 Support Chip SC2
+#Support Codec2 for Android T, all CTS test clean
 #V5.0 Release Notes
 #Release_ChangeId_V5_0=I6053e02900215d9006469c38ca375ace498b849f
 #upgrade Kernel version to 5.4
