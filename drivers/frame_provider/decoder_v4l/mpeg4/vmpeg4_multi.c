@@ -1151,7 +1151,9 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 			"interlace = %d\n", interlace);
 
-		if ((frame_width <= 0) || (frame_height <= 0)) {
+		if ((frame_width < 64) || (frame_height < 64)) {
+			if (vdec_frame_based(hw_to_vdec(hw)))
+				vdec_v4l_post_error_frame_event(ctx);
 			pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
 			hw->dec_result = DEC_RESULT_ERROR_DATA;
 			vdec_schedule_work(&hw->work);
@@ -1197,6 +1199,8 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 	if (!hw->v4l_params_parsed) {
 		reset_process_time(hw);
 		mpeg4_buf_ref_process_for_exception(hw);
+		if (vdec_frame_based(hw_to_vdec(hw)))
+			vdec_v4l_post_error_frame_event(ctx);
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 			"The head was not found, can not to decode\n");
 		hw->dec_result = DEC_RESULT_DONE;
@@ -1292,6 +1296,8 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 				"invalid buffer index %d. rec = %x\n",
 				index, READ_VREG(REC_CANVAS_ADDR));
 			mpeg4_buf_ref_process_for_exception(hw);
+			if (vdec_frame_based(hw_to_vdec(hw)))
+				vdec_v4l_post_error_frame_event(ctx);
 			hw->dec_result = DEC_RESULT_ERROR;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
@@ -2098,6 +2104,8 @@ static void start_process_time(struct vdec_mpeg4_hw_s *hw)
 
 static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 {
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	if (hw->process_busy) {
 		pr_debug("%s, process_busy\n", __func__);
 		return;
@@ -2113,6 +2121,9 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
+	if (vdec_frame_based(hw_to_vdec(hw)))
+		vdec_v4l_post_error_frame_event(ctx);
+
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"%s decoder timeout %d\n", __func__, hw->timeout_cnt);
 	if (debug_enable && vdec_frame_based((hw_to_vdec(hw)))) {
@@ -2640,6 +2651,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		void (*callback)(struct vdec_s *, void *), void *arg)
 {
 	struct vdec_mpeg4_hw_s *hw = (struct vdec_mpeg4_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int size = 0, ret = 0;
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
@@ -2765,6 +2778,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(VIFF_BIT_CNT, size * 8);
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->chunk->size;
+		ctx->current_timestamp = hw->chunk->timestamp;
 	}
 	hw->input_empty = 0;
 	hw->last_vld_level = 0;

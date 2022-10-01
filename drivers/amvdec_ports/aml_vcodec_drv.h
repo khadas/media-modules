@@ -63,6 +63,9 @@
 /* exception handing */
 #define V4L2_EVENT_REQUEST_RESET	(1 << 8)
 #define V4L2_EVENT_REQUEST_EXIT		(1 << 9)
+#define V4L2_EVENT_SEND_ERROR		(1 << 10)
+#define V4L2_EVENT_REPORT_ERROR_FRAME	(1 << 11)
+
 
 /* eos event */
 #define V4L2_EVENT_SEND_EOS		(1 << 16)
@@ -760,6 +763,7 @@ struct aml_vcodec_ctx {
 	int			in_buff_cnt;
 	int			out_buff_cnt;
 	int                     write_frames;
+	u64			current_timestamp;
 };
 
 /**

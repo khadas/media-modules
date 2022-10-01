@@ -2812,6 +2812,8 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 static void timeout_process(struct vdec_avs_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->process_busy) {
 		pr_info("%s, process busy\n", __func__);
@@ -2822,6 +2824,9 @@ static void timeout_process(struct vdec_avs_hw_s *hw)
 		pr_err("avs multi work on busy\n");
 		return;
 	}
+
+	if (vdec_frame_based(hw_to_vdec(hw)))
+		vdec_v4l_post_error_frame_event(ctx);
 
 	amvdec_stop();
 	if (error_handle_policy & 0x1) {
@@ -3063,6 +3068,8 @@ void (*callback)(struct vdec_s *, void *),
 {
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int save_reg;
 	int size, ret;
 	int i;
@@ -3237,6 +3244,7 @@ void (*callback)(struct vdec_s *, void *),
 	if (vdec_frame_based(vdec)) {
 			size = hw->chunk->size +
 				(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+			ctx->current_timestamp = hw->chunk->timestamp;
 		}
 
 
@@ -3824,6 +3832,8 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 		struct vdec_avs_hw_s *hw =
 			(struct vdec_avs_hw_s *)vdec->private;
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 		u32 reg;
 		u32 picture_type;
 		u32 buffer_index;
@@ -4111,6 +4121,8 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					if (reg) {
 						hw->buf_use[hw->decoding_index]++;
 					}
+					if (vdec_frame_based(hw_to_vdec(hw)))
+						vdec_v4l_post_error_frame_event(ctx);
 				} else
 					hw->dec_result = DEC_RESULT_AGAIN;
 

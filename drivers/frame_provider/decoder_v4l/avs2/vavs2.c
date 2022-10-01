@@ -878,8 +878,13 @@ static void timeout_process(struct AVS2Decoder_s *dec)
 {
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
+
 	dec->timeout_num++;
 	amhevc_stop();
+	if (vdec_frame_based(hw_to_vdec(dec)))
+		vdec_v4l_post_error_frame_event(ctx);
 	avs2_print(dec,
 		0, "%s decoder timeout\n", __func__);
 	if (cur_pic)
@@ -5393,6 +5398,8 @@ static int v4l_res_change(struct AVS2Decoder_s *dec)
 static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)data;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 	unsigned int dec_status = dec->dec_status;
 	int i, ret;
 	int32_t start_code = 0;
@@ -5416,6 +5423,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			if (!vdec_frame_based(hw_to_vdec(dec)))
 				dec_again_process(dec);
 			else {
+				if (vdec_frame_based(hw_to_vdec(dec)))
+					vdec_v4l_post_error_frame_event(ctx);
 				dec->dec_result = DEC_RESULT_DONE;
 				reset_process_time(dec);
 				amhevc_stop();
@@ -6982,6 +6991,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 	int r;
 
 	run_count[dec->index]++;
@@ -7080,6 +7091,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			(dec->chunk->offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = dec->chunk->size;
+		ctx->current_timestamp = dec->chunk->timestamp;
 	}
 
 	WRITE_VREG(HEVC_DECODE_SIZE, r);

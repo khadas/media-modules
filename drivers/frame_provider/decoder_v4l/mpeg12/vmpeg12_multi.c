@@ -1921,6 +1921,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 	struct pic_info_t *new_pic, *disp_pic;
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)(vdec->private);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (READ_VREG(AV_SCRATCH_M) != 0 &&
 		(debug_enable & PRINT_FLAG_UCODE_DETAIL)) {
@@ -1950,8 +1952,10 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				__func__);
 		}
 
-		if ((frame_width <= 0) || (frame_height <= 0)) {
+		if ((frame_width < 64) || (frame_height < 64)) {
 			pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
+			if (vdec_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
 			hw->dec_result = DEC_RESULT_ERROR_DATA;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
@@ -2015,6 +2019,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			__func__, READ_VREG(VIFF_BIT_CNT));
 		if (vdec_frame_based(vdec)) {
 			reset_process_time(hw);
+			vdec_v4l_post_error_frame_event(ctx);
 			hw->dec_result = DEC_RESULT_GET_DATA;
 			vdec_schedule_work(&hw->work);
 		}
@@ -2030,6 +2035,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		mpeg2_buf_ref_process_for_exception(hw);
 
 		if (vdec_frame_based(vdec)) {
+			vdec_v4l_post_error_frame_event(ctx);
 			userdata_pushed_drop(hw);
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
@@ -2062,6 +2068,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		if (index >= hw->buf_num) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"mmpeg12: invalid buf index: %d\n", index);
+			if (vdec_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
 			hw->dec_result = DEC_RESULT_ERROR;
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
@@ -2162,6 +2170,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->dec_num, GET_SLICE_TYPE(info), index, offset);
 				hw->dec_result = DEC_RESULT_ERROR;
 			}
+			if (vdec_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}
@@ -2838,6 +2848,8 @@ static void start_process_time_set(struct vdec_mpeg12_hw_s *hw)
 static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->process_busy) {
 		pr_debug("%s, process busy\n", __func__);
@@ -2851,6 +2863,9 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 		pr_err("%s mpeg12[%d] timeout_process return before do anything.\n",__func__, vdec->id);
 		return;
 	}
+	if (vdec_frame_based(vdec))
+		vdec_v4l_post_error_frame_event(ctx);
+
 	reset_process_time(hw);
 	amvdec_stop();
 	debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
@@ -3449,6 +3464,8 @@ void (*callback)(struct vdec_s *, void *),
 {
 	struct vdec_mpeg12_hw_s *hw =
 		(struct vdec_mpeg12_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int save_reg;
 	int size, ret;
 	if (!hw->vdec_pg_enable_flag) {
@@ -3517,6 +3534,7 @@ void (*callback)(struct vdec_s *, void *),
 		WRITE_VREG(VIFF_BIT_CNT, size * 8);
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->chunk->size;
+		ctx->current_timestamp = hw->chunk->timestamp;
 	}
 	if (vdec_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 		/* HW needs padding (NAL start) for frame ending */

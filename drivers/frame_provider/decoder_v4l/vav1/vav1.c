@@ -934,7 +934,7 @@ static int is_oversize(int w, int h)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
 		max = MAX_SIZE_2K;
 
-	if (w <= 0 || h <= 0)
+	if (w < 64 || h < 64)
 		return true;
 
 	if (h != 0 && (w > max / h))
@@ -1006,6 +1006,8 @@ static void start_process_time(struct AV1HW_s *hw)
 
 static void timeout_process(struct AV1HW_s *hw)
 {
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	reset_process_time(hw);
 	if (hw->process_busy) {
 		av1_print(hw,
@@ -1016,6 +1018,8 @@ static void timeout_process(struct AV1HW_s *hw)
 	}
 	hw->timeout_num++;
 	amhevc_stop();
+	if (vdec_frame_based(hw_to_vdec(hw)))
+		vdec_v4l_post_error_frame_event(ctx);
 
 	av1_print(hw, 0, "%s decoder timeout\n", __func__);
 
@@ -8427,8 +8431,10 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	hw->frame_width = hw->common.seq_params.max_frame_width;
 	hw->frame_height = hw->common.seq_params.max_frame_height;
 
-	if (hw->frame_width == 0 || hw->frame_height == 0) {
+	if (is_oversize(hw->frame_width, hw->frame_height)) {
 		av1_buf_ref_process_for_exception(hw);
+		if (vdec_frame_based(hw_to_vdec(hw)))
+			vdec_v4l_post_error_frame_event(ctx);
 		hw->dec_result = DEC_RESULT_DISCARD_DATA;
 		hw->process_busy = 0;
 		amhevc_stop();
@@ -9872,6 +9878,8 @@ static void run_front(struct vdec_s *vdec)
 {
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int ret, size;
 
 	run_count[hw->index]++;
@@ -9992,6 +10000,7 @@ static void run_front(struct vdec_s *vdec)
 			(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->chunk->size;
+		ctx->current_timestamp = hw->chunk->timestamp;
 	}
 	hw->data_size = size;
 	WRITE_VREG(HEVC_DECODE_SIZE, size);

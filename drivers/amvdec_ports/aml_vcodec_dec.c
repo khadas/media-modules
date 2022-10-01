@@ -76,6 +76,11 @@
 #define AML_V4L2_GET_BITDEPTH (V4L2_CID_USER_AMLOGIC_BASE + 6)
 #define AML_V4L2_DEC_PARMS_CONFIG (V4L2_CID_USER_AMLOGIC_BASE + 7)
 
+#define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
+#define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
+#define V4L2_EVENT_PRIVATE_EXT_SEND_ERROR (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 2)
+#define V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 3)
+
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
 
@@ -362,6 +367,12 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 		break;
 	case V4L2_EVENT_SEND_EOS:
 		event.type = V4L2_EVENT_EOS;
+		break;
+	case V4L2_EVENT_REPORT_ERROR_FRAME:
+		event.type = V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME;
+		memcpy(event.u.data, &ctx->current_timestamp, sizeof(u64));
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO, "report error frame timestamp: %llu\n",
+			ctx->current_timestamp);
 		break;
 	default:
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -2004,6 +2015,8 @@ static int vidioc_vdec_subscribe_evt(struct v4l2_fh *fh,
 		return v4l2_event_subscribe(fh, sub, 2, NULL);
 	case V4L2_EVENT_SOURCE_CHANGE:
 		return v4l2_src_change_event_subscribe(fh, sub);
+	case V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME:
+		return v4l2_event_subscribe(fh, sub, 10, NULL);
 	default:
 		return v4l2_ctrl_subscribe_event(fh, sub);
 	}

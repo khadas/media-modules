@@ -297,7 +297,7 @@ static unsigned int i_only_flag;
 */
 static unsigned int error_proc_policy = 0x3fCfb6; /*0x1f14*/
 
-static unsigned int v4l_error_policy = 0x8117C3B5; //default
+static unsigned int v4l_error_policy = 0x813fCfB7; //default
 
 /*
 	error_skip_count:
@@ -997,7 +997,7 @@ static int is_oversize(int w, int h)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
 		max = MAX_SIZE_2K;
 
-	if (w < 0 || h < 0)
+	if (w < 64 || h < 64)
 		return true;
 
 	if (h != 0 && (w > max / h))
@@ -6522,6 +6522,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		if (hw->config_bufmgr_done == 0) {
 			hw->dec_result = DEC_RESULT_DONE;
+			if (input_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
 			vdec_schedule_work(&hw->work);
 			dpb_print(DECODE_ID(hw),
 				PRINT_FLAG_UCODE_EVT,
@@ -6542,6 +6544,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					amvdec_stop();
 					vdec->mc_loaded = 0;
 					hw->dec_result = DEC_RESULT_DONE;
+					if (input_frame_based(vdec))
+						vdec_v4l_post_error_frame_event(ctx);
 					vdec_schedule_work(&hw->work);
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_UCODE_EVT,
@@ -6600,7 +6604,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 			if (p_H264_Dpb->mVideo.dec_picture &&
 				p_H264_Dpb->mVideo.dec_picture->buf_spec_num  != -1)
 				buf_ref_process_for_exception(hw);
-
+			if (input_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
 			amvdec_stop();
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
@@ -6698,6 +6703,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						&& ((hw->dec_flag &
 							NODISP_FLAG) == 0)) ||(hw->reflist_error_count > 50)) {
 						buf_ref_process_for_exception(hw);
+						if (input_frame_based(vdec))
+							vdec_v4l_post_error_frame_event(ctx);
 						hw->reset_bufmgr_flag = 1;
 						hw->reflist_error_count =0;
 						amvdec_stop();
@@ -6719,6 +6726,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				if ((hw->error_proc_policy & 0x80) &&
 					((hw->dec_flag & NODISP_FLAG) == 0)) {
 					buf_ref_process_for_exception(hw);
+					if (input_frame_based(vdec))
+						vdec_v4l_post_error_frame_event(ctx);
 					hw->reset_bufmgr_flag = 1;
 					amvdec_stop();
 					vdec->mc_loaded = 0;
@@ -6736,6 +6745,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					cfg_ret);
 				if (hw->error_proc_policy & 0x2) {
 					buf_ref_process_for_exception(hw);
+					if (input_frame_based(vdec))
+						vdec_v4l_post_error_frame_event(ctx);
 					release_cur_decoding_buf(hw);
 					hw->reset_bufmgr_flag = 1;
 					hw->dec_result = DEC_RESULT_DONE;
@@ -6991,6 +7002,8 @@ send_again:
 			if (hw->get_data_count >= frame_max_data_packet)
 				goto empty_proc;
 			buf_ref_process_for_exception(hw);
+			if (input_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
 			vdec_schedule_work(&hw->work);
 		} else
 			goto empty_proc;
@@ -6998,6 +7011,8 @@ send_again:
 		dpb_print(DECODE_ID(hw), 0,
 			"vmh264 decode oversize !!\n");
 		buf_ref_process_for_exception(hw);
+		if (input_frame_based(vdec))
+			vdec_v4l_post_error_frame_event(ctx);
 		release_cur_decoding_buf(hw);
 		hw->data_flag |= ERROR_FLAG;
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
@@ -7171,6 +7186,8 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 static void timeout_process(struct vdec_h264_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	/*
 	 * In this very timeout point,the vh264_work arrives,
@@ -7192,6 +7209,9 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 		hevc_set_frame_done(hw);
 		hevc_sao_wait_done(hw);
 	}
+
+	vdec_v4l_post_error_frame_event(ctx);
+
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout, DPB_STATUS_REG 0x%x\n", __func__, READ_VREG(DPB_STATUS_REG));
 	release_cur_decoding_buf(hw);
@@ -8956,9 +8976,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		frame_width = mb_width << 4;
 		frame_height = mb_height << 4;
 
-		if (is_oversize(frame_width, frame_height) ||
-			(frame_width == 0) ||
-			(frame_height == 0)) {
+		if (is_oversize(frame_width, frame_height)) {
 			pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
 			hw->dec_result = DEC_RESULT_ERROR_DATA;
 			vdec_schedule_work(&hw->work);
@@ -9529,6 +9547,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		(struct vdec_h264_hw_s *)vdec->private;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	int size, ret = -1;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)hw->v4l2_ctx;
 	if (!hw->vdec_pg_enable_flag) {
 		hw->vdec_pg_enable_flag = 1;
 		amvdec_enable();
@@ -9723,6 +9742,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		WRITE_VREG(VIFF_BIT_CNT, decode_size * 8);
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->chunk->size;
+		ctx->current_timestamp = hw->chunk->timestamp;
 	} else {
 		if (size <= 0)
 			size = 0x7fffffff; /*error happen*/

@@ -848,6 +848,10 @@ static void start_process_time(struct vdec_mjpeg_hw_s *hw)
 
 static void timeout_process(struct vdec_mjpeg_hw_s *hw)
 {
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+	vdec_v4l_post_error_frame_event(ctx);
 	amvdec_stop();
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 		"%s decoder timeout\n", __func__);
@@ -1424,6 +1428,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 {
 	struct vdec_mjpeg_hw_s *hw =
 		(struct vdec_mjpeg_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	int ret;
 
 	hw->run_flag = 1;
@@ -1448,6 +1454,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hw->run_flag = 0;
 		return;
 	}
+	ctx->current_timestamp = hw->chunk->timestamp;
 
 	ATRACE_COUNTER("V_ST_DEC-chunk_size", ret);
 

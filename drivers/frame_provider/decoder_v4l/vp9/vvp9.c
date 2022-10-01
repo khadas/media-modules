@@ -1279,7 +1279,7 @@ static int is_oversize(int w, int h)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
 		max = MAX_SIZE_2K;
 
-	if (w <= 0 || h <= 0)
+	if (w < 64 || h < 64)
 		return true;
 
 	if (h != 0 && (w > max / h))
@@ -1590,6 +1590,8 @@ static void start_process_time(struct VP9Decoder_s *pbi)
 
 static void timeout_process(struct VP9Decoder_s *pbi)
 {
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
+
 	pbi->timeout_num++;
 	if (pbi->process_busy) {
 		vp9_print(pbi,
@@ -1598,6 +1600,8 @@ static void timeout_process(struct VP9Decoder_s *pbi)
 	}
 	amhevc_stop();
 	vp9_print(pbi, 0, "%s decoder timeout\n", __func__);
+	if (vdec_frame_based(hw_to_vdec(pbi)))
+		vdec_v4l_post_error_frame_event(ctx);
 
 	pbi->dec_result = DEC_RESULT_DONE;
 	reset_process_time(pbi);
@@ -8635,6 +8639,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				}
 				else {
 					pbi->dec_result = DEC_RESULT_GET_DATA;
+					if (vdec_frame_based(hw_to_vdec(pbi)))
+						vdec_v4l_post_error_frame_event(ctx);
 					vdec_schedule_work(&pbi->work);
 				}
 			}
@@ -8713,6 +8719,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		debug |= (VP9_DEBUG_DIS_LOC_ERROR_PROC |
 			VP9_DEBUG_DIS_SYS_ERROR_PROC);
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+		if (vdec_frame_based(hw_to_vdec(pbi)))
+			vdec_v4l_post_error_frame_event(ctx);
 #ifdef MULTI_INSTANCE_SUPPORT
 	if (pbi->m_ins_flag)
 		reset_process_time(pbi);
@@ -10279,6 +10287,8 @@ static void run_front(struct vdec_s *vdec)
 {
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int ret, size;
 
 	run_count[pbi->index]++;
@@ -10395,6 +10405,7 @@ static void run_front(struct vdec_s *vdec)
 			(pbi->chunk->offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = pbi->chunk->size;
+		ctx->current_timestamp = pbi->chunk->timestamp;
 	}
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
 	WRITE_VREG(HEVC_DECODE_COUNT, pbi->slice_idx);
