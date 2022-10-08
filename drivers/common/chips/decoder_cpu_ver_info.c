@@ -241,6 +241,7 @@ static const struct of_device_id cpu_sub_id_of_match[] = {
 		.compatible = "amlogic, cpu-major-id-t7c",
 		.data = &dos_dev_sub_table[3],
 	},
+	{}
 };
 
 static struct platform_device *get_dos_dev_from_dtb(void)
