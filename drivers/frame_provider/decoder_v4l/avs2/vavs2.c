@@ -4180,7 +4180,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 }
 
 static void avs2_recycle_dec_resource(void *priv,
-						struct aml_buf *ambuf)
+						struct aml_buf *aml_buf)
 {
 }
 

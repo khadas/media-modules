@@ -410,7 +410,7 @@ static int vcodec_feature_dynamic_buffer_management(u8 *buf, int size, int vform
 	u8 *pbuf = buf;
 
 	if (is_v4l) {
-		pbuf += snprintf(pbuf, size, "        \"Dynamuc buffer management\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"Dynamic buffer management\" : \"true\"\n");
 	}
 
 	return pbuf - buf;
