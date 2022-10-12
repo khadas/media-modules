@@ -1,4 +1,4 @@
-MODULE_NAME = pts_serve
+MODULE_NAME = pts_server
 obj-m	+=	 ${MODULE_NAME}.o
 
 ${MODULE_NAME}-objs	+=	pts_server_dev.o
