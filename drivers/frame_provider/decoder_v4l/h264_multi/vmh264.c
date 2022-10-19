@@ -1093,6 +1093,7 @@ static int  compute_losless_comp_body_size(int width,
 	int height, int bit_depth_10);
 static int  compute_losless_comp_header_size(int width, int height);
 
+#if 0
 static struct aml_buf *index_to_afbc_aml_buf(struct vdec_h264_hw_s *hw, int index)
 {
 	int i;
@@ -1108,12 +1109,13 @@ static struct aml_buf *index_to_afbc_aml_buf(struct vdec_h264_hw_s *hw, int inde
 
 	return (struct aml_buf *)hw->afbc_buf_table[index].fb;
 }
-#if 0
-static struct aml_buf *index_to_aml_buf(struct vdec_h264_hw_s *hw, int index)
+#endif
+
+static struct aml_buf *index_to_afbc_aml_buf(struct vdec_h264_hw_s *hw, int index)
 {
 	return (struct aml_buf *)hw->buffer_spec[index].cma_alloc_addr;
 }
-#endif
+
 static int hevc_alloc_mmu(struct vdec_h264_hw_s *hw,
 			 int pic_idx,
 			 u32 *mmu_index_adr)
@@ -1377,6 +1379,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	u32 mc_buffer_size_u_v;
 	u32 mc_buffer_size_u_v_h;
 	int  dw_mode = hw->double_write_mode;
+	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 
 	// width need to be round to 64 pixel -- case0260 1/10/2020
 	lcu_x_num = (((width + 63) >> 6) << 2);
@@ -1460,6 +1463,16 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	data32 &= (~0xff0);
 	data32 |= endian;	/* Big-Endian per 64-bit */
 
+	/* swap uv */
+	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+		(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+		data32 &= ~(1 << 8); /* NV21 */
+	else
+		data32 |= (1 << 8); /* NV12 */
+
+	data32 &= (~(3 << 14));
+	data32 |= (2 << 14);
+
 	if (hw->mmu_enable && (dw_mode & 0x10))
 		data32 |= ((hw->canvas_mode << 12) |1);
 	else if (hw->mmu_enable && dw_mode)
@@ -1467,6 +1480,18 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 	else
 		data32 |= ((hw->canvas_mode << 12)|2);
 
+	/*
+	*  [31:24] ar_fifo1_axi_thread
+	*  [23:16] ar_fifo0_axi_thread
+	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
+	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
+	*  [11:08] axi_lendian_C
+	*  [07:04] axi_lendian_Y
+	*  [3]	   reserved
+	*  [2]	   clk_forceon
+	*  [1]	   dw_disable:disable double write output
+	*  [0]	   cm_disable:disable compress output
+	*/
 	WRITE_VREG(HEVC_SAO_CTRL1, data32);
 
 #ifdef	H265_DW_NO_SCALE
@@ -1792,6 +1817,7 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	struct canvas_config_s *y_canvas_cfg = NULL;
 	struct canvas_config_s *c_canvas_cfg = NULL;
 	unsigned int y_addr = 0, c_addr = 0;
+	int dw_ratio = get_double_write_ratio(hw->double_write_mode);
 
 	if (!hw->aml_buf) {
 		dpb_print(DECODE_ID(hw), 0,
@@ -1863,8 +1889,8 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	c_canvas_cfg = &bs->canvas_config[1];
 
 	y_canvas_cfg->phy_addr	= y_addr;
-	y_canvas_cfg->width	= hw->mb_width << 4;
-	y_canvas_cfg->height	= hw->mb_height << 4;
+	y_canvas_cfg->width	= ALIGN(hw->frame_width / dw_ratio, 64);
+	y_canvas_cfg->height	= ALIGN(hw->frame_height / dw_ratio, 32);
 	y_canvas_cfg->block_mode = hw->canvas_mode;
 	//aml_buf->planes[0].bytes_used = y_canvas_cfg->width * y_canvas_cfg->height;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
@@ -1872,8 +1898,8 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 		y_canvas_cfg->width,y_canvas_cfg->height);
 
 	c_canvas_cfg->phy_addr	= c_addr;
-	c_canvas_cfg->width	= hw->mb_width << 4;
-	c_canvas_cfg->height	= hw->mb_height << 3;
+	c_canvas_cfg->width	= ALIGN(hw->frame_width / dw_ratio, 64);
+	c_canvas_cfg->height	= ALIGN(hw->frame_height / dw_ratio, 32);
 	c_canvas_cfg->block_mode = hw->canvas_mode;
 	//aml_buf->planes[1].bytes_used = c_canvas_cfg->width * c_canvas_cfg->height;
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
@@ -8986,10 +9012,10 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 						"set parameters error\n");
 				}
 				hw->v4l_params_parsed = false;
-				vdec_v4l_set_ps_infos(ctx, &ps);
 				if (hw->double_write_mode != 0x10) {
 					h264_set_comp_info(ctx, &ps);
 				}
+				vdec_v4l_set_ps_infos(ctx, &ps);
 				vdec_v4l_res_ch_event(ctx);
 				hw->res_ch_flag = 1;
 				ctx->v4l_resolution_change = 1;
@@ -9089,10 +9115,10 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 							"set parameters error\n");
 					}
 					hw->v4l_params_parsed = true;
-					vdec_v4l_set_ps_infos(ctx, &ps);
 					if (hw->double_write_mode != 0x10) {
 						h264_set_comp_info(ctx, &ps);
 					}
+					vdec_v4l_set_ps_infos(ctx, &ps);
 					amvdec_stop();
 					if (hw->mmu_enable) {
 						amhevc_stop();
