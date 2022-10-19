@@ -3147,7 +3147,7 @@ int aml_uvm_buff_attach(struct vb2_buffer * vb)
 	return ret;
 }
 
-static int prepare_get_addr(struct dma_buf *dbuf, struct device	 *dev)
+static ulong prepare_get_addr(struct dma_buf *dbuf, struct device	 *dev)
 {
 	struct dma_buf_attachment *dba;
 	struct sg_table *sgt;
