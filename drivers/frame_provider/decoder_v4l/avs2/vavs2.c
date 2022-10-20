@@ -5403,6 +5403,73 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 	unsigned int dec_status = dec->dec_status;
 	int i, ret;
 	int32_t start_code = 0;
+	uint debug_tag;
+
+	if (debug & AVS2_DBG_IRQ_EVENT)
+		avs2_print(dec, 0,
+			"avs2 isr dec status  = 0x%x, lcu 0x%x shiftbyte 0x%x (%x %x lev %x, wr %x, rd %x)\n",
+			dec_status, READ_VREG(HEVC_PARSER_LCU_START),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_STREAM_START_ADDR),
+			READ_VREG(HEVC_STREAM_END_ADDR),
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR));
+
+	debug_tag = READ_HREG(DEBUG_REG1);
+	if (debug_tag & 0x10000) {
+		dma_sync_single_for_cpu(
+			amports_get_dma_device(),
+			dec->lmem_phy_addr,
+			LMEM_BUF_SIZE,
+			DMA_FROM_DEVICE);
+
+		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
+		for (i = 0; i < 0x400; i += 4) {
+			int ii;
+			if ((i & 0xf) == 0)
+				pr_info("%03x: ", i);
+			for (ii = 0; ii < 4; ii++) {
+				pr_info("%04x ", dec->lmem_ptr[i + 3 - ii]);
+			}
+			if (((i + ii) & 0xf) == 0)
+				pr_info("\n");
+		}
+
+		if (((udebug_pause_pos & 0xffff)
+			== (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == dec->decode_idx) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
+			udebug_pause_pos &= 0xffff;
+			dec->ucode_pause_pos = udebug_pause_pos;
+		} else if (debug_tag & 0x20000)
+			dec->ucode_pause_pos = 0xffffffff;
+		if (dec->ucode_pause_pos)
+			reset_process_time(dec);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+	} else if (debug_tag != 0) {
+		pr_info("dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
+			   READ_HREG(DEBUG_REG2),
+			   READ_VREG(HEVC_PARSER_LCU_START));
+		if (((udebug_pause_pos & 0xffff)
+			== (debug_tag & 0xffff)) &&
+			(udebug_pause_decode_idx == 0 ||
+			udebug_pause_decode_idx == dec->decode_idx) &&
+			(udebug_pause_val == 0 ||
+			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
+			udebug_pause_pos &= 0xffff;
+			dec->ucode_pause_pos = udebug_pause_pos;
+		}
+		if (dec->ucode_pause_pos)
+			reset_process_time(dec);
+		else
+			WRITE_HREG(DEBUG_REG1, 0);
+		dec->process_busy = 0;
+		return IRQ_HANDLED;
+	}
 
 	avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
 		"%s decode_status 0x%x process_state %d lcu 0x%x\n",
@@ -5939,10 +6006,8 @@ irq_handled_exit:
 
 static irqreturn_t vavs2_isr(int irq, void *data)
 {
-	int i;
 	unsigned int dec_status;
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)data;
-	uint debug_tag;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
@@ -5956,71 +6021,6 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	dec->dec_status = dec_status;
 	dec->process_busy = 1;
-	if (debug & AVS2_DBG_IRQ_EVENT)
-		avs2_print(dec, 0,
-			"avs2 isr dec status  = 0x%x, lcu 0x%x shiftbyte 0x%x (%x %x lev %x, wr %x, rd %x)\n",
-			dec_status, READ_VREG(HEVC_PARSER_LCU_START),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_STREAM_START_ADDR),
-			READ_VREG(HEVC_STREAM_END_ADDR),
-			READ_VREG(HEVC_STREAM_LEVEL),
-			READ_VREG(HEVC_STREAM_WR_PTR),
-			READ_VREG(HEVC_STREAM_RD_PTR));
-
-	debug_tag = READ_HREG(DEBUG_REG1);
-	if (debug_tag & 0x10000) {
-		dma_sync_single_for_cpu(
-			amports_get_dma_device(),
-			dec->lmem_phy_addr,
-			LMEM_BUF_SIZE,
-			DMA_FROM_DEVICE);
-
-		pr_info("LMEM<tag %x>:\n", READ_HREG(DEBUG_REG1));
-		for (i = 0; i < 0x400; i += 4) {
-			int ii;
-			if ((i & 0xf) == 0)
-				pr_info("%03x: ", i);
-			for (ii = 0; ii < 4; ii++) {
-				pr_info("%04x ", dec->lmem_ptr[i + 3 - ii]);
-			}
-			if (((i + ii) & 0xf) == 0)
-				pr_info("\n");
-		}
-
-		if (((udebug_pause_pos & 0xffff)
-			== (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == dec->decode_idx) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
-			udebug_pause_pos &= 0xffff;
-			dec->ucode_pause_pos = udebug_pause_pos;
-		} else if (debug_tag & 0x20000)
-			dec->ucode_pause_pos = 0xffffffff;
-		if (dec->ucode_pause_pos)
-			reset_process_time(dec);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-	} else if (debug_tag != 0) {
-		pr_info("dbg%x: %x lcu %x\n", READ_HREG(DEBUG_REG1),
-			   READ_HREG(DEBUG_REG2),
-			   READ_VREG(HEVC_PARSER_LCU_START));
-		if (((udebug_pause_pos & 0xffff)
-			== (debug_tag & 0xffff)) &&
-			(udebug_pause_decode_idx == 0 ||
-			udebug_pause_decode_idx == dec->decode_idx) &&
-			(udebug_pause_val == 0 ||
-			udebug_pause_val == READ_HREG(DEBUG_REG2))) {
-			udebug_pause_pos &= 0xffff;
-			dec->ucode_pause_pos = udebug_pause_pos;
-		}
-		if (dec->ucode_pause_pos)
-			reset_process_time(dec);
-		else
-			WRITE_HREG(DEBUG_REG1, 0);
-		dec->process_busy = 0;
-		return IRQ_HANDLED;
-	}
 
 	if (!dec->m_ins_flag) {
 		if (dec->error_flag == 1) {

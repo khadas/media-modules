@@ -8427,7 +8427,7 @@ static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *
 		pbi->dynamic_buf_num_margin = ps->dpb_margin;
 	}
 	ps->field = V4L2_FIELD_NONE;
-	ps->bitdepth = pbi->param.p.bit_depth;
+	ps->bitdepth = pbi->vp9_param.p.bit_depth;
 
 	return 0;
 }

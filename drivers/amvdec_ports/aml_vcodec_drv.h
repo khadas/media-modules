@@ -769,6 +769,7 @@ struct aml_vcodec_ctx {
 	int			out_buff_cnt;
 	int                     write_frames;
 	u64			current_timestamp;
+	bool			force_recycle;
 };
 
 /**

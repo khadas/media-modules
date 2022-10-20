@@ -8415,7 +8415,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
 			hevc_print(hevc, 0,
 			"[ERR]: v4l_ref_buf_addr(index: %d) is NULL!\n",
-			__func__, pic->index);
+			pic->index);
 
 			return -1;
 		}
@@ -11850,7 +11850,8 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			(pic->vf_ref || pic->error_mark) &&
 			pic->cma_alloc_addr) {
 
-			if (ctx->vpp_is_need && !(pic->error_mark && (hevc->nal_skip_policy & 0x2))) {
+			if (!ctx->force_recycle && ctx->vpp_is_need &&
+				!(pic->error_mark && (hevc->nal_skip_policy & 0x2))) {
 				if (pic->pic_struct == 3 || pic->pic_struct == 4 ||
 					pic->pic_struct == 9 || pic->pic_struct == 10 ||
 					pic->pic_struct == 11 || pic->pic_struct == 12) {
@@ -11861,12 +11862,12 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 						continue;
 				}
 			}
-
+			ctx->force_recycle = false;
 			aml_buf = (struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 			hevc_print(hevc, H265_DEBUG_BUFMGR,
-				"%s buf idx: %d dma addr: 0x%lx vb idx: %d vf_ref %d\n",
-				__func__, i, pic->cma_alloc_addr,
+				"%s buf idx: %d pic index: %d dma addr: 0x%lx vb idx: %d vf_ref %d\n",
+				__func__, i, pic->index, pic->cma_alloc_addr,
 				aml_buf->index,
 				pic->vf_ref);
 			aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -11962,6 +11963,7 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 	}
 
 	if (!free_slot) {
+		ctx->force_recycle = true;
 		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s not enough free_slot %d!\n",
 		__func__, free_slot);
