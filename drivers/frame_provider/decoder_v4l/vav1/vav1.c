@@ -8431,7 +8431,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	hw->frame_width = hw->common.seq_params.max_frame_width;
 	hw->frame_height = hw->common.seq_params.max_frame_height;
 
-	if (is_oversize(hw->frame_width, hw->frame_height)) {
+	if (input_frame_based(hw_to_vdec(hw)) && is_oversize(hw->frame_width, hw->frame_height)) {
 		av1_buf_ref_process_for_exception(hw);
 		if (vdec_frame_based(hw_to_vdec(hw)))
 			vdec_v4l_post_error_frame_event(ctx);

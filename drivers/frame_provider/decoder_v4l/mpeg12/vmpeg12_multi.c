@@ -1952,13 +1952,15 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				__func__);
 		}
 
-		if ((frame_width < 64) || (frame_height < 64)) {
-			pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
-			if (vdec_frame_based(vdec))
-				vdec_v4l_post_error_frame_event(ctx);
-			hw->dec_result = DEC_RESULT_ERROR_DATA;
-			vdec_schedule_work(&hw->work);
-			return IRQ_HANDLED;
+		if (input_frame_based(vdec)) {
+			if ((frame_width < 64) || (frame_height < 64)) {
+				pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
+				if (vdec_frame_based(vdec))
+					vdec_v4l_post_error_frame_event(ctx);
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
 		}
 
 		if (!v4l_res_change(hw, frame_width, frame_height, frame_prog)) {
