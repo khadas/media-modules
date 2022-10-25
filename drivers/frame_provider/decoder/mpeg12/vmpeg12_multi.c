@@ -1727,14 +1727,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	} else {
 		pts_info.offset = (((u64)hw->frame_dur << 32) & 0xffffffff00000000) | pic->offset;
 
-		if (!vdec->ptsserver_peek_pts_offset)
-			vdec->ptsserver_peek_pts_offset = symbol_request(ptsserver_peek_pts_offset);
-
-		if (vdec->ptsserver_peek_pts_offset) {
-			if (!vdec->ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
-				vpts = pts_info.pts;
-				vpts_valid = 1;
-			}
+		if (ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+			vpts = pts_info.pts;
+			vpts_valid = 1;
 		}
 	}
 

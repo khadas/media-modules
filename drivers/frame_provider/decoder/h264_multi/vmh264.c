@@ -6694,16 +6694,10 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 						vpts_valid = 1;
 					}
 				} else {
-
-					if (!vdec->ptsserver_peek_pts_offset)
-						vdec->ptsserver_peek_pts_offset = symbol_request(ptsserver_peek_pts_offset);
-
-					if (vdec->ptsserver_peek_pts_offset) {
-						pts_info.offset = (((u64)hw->frame_dur << 32) & 0xffffffff00000000) | offset;
-						if (!vdec->ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
-							vpts = pts_info.pts;
-							vpts_valid = 1;
-						}
+					pts_info.offset = (((u64)hw->frame_dur << 32) & 0xffffffff00000000) | offset;
+					if (ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+						vpts = pts_info.pts;
+						vpts_valid = 1;
 					}
 				}
 #ifdef MH264_USERDATA_ENABLE
