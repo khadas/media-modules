@@ -1090,7 +1090,7 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 						u32 vpts,
 						u32 vpts_valid);
 static int  compute_losless_comp_body_size(int width,
-	int height, int bit_depth_10);
+	int height, bool is_bit_depth_10);
 static int  compute_losless_comp_header_size(int width, int height);
 
 #if 0
@@ -1133,7 +1133,7 @@ static int hevc_alloc_mmu(struct vdec_h264_hw_s *hw,
 }
 
 static int  compute_losless_comp_body_size(int width,
-					int height, int bit_depth_10)
+					int height, bool is_bit_depth_10)
 {
 	int    width_x64;
 	int    height_x32;
@@ -1146,9 +1146,9 @@ static int  compute_losless_comp_body_size(int width,
 	height_x32 >>= 5;
 
 #ifdef H264_MMU
-	bsize = (bit_depth_10 ? 4096 : 3264) * width_x64*height_x32;
+	bsize = (is_bit_depth_10 ? 4096 : 3264) * width_x64*height_x32;
 #else
-	bsize = (bit_depth_10 ? 4096 : 3072) * width_x64*height_x32;
+	bsize = (is_bit_depth_10 ? 4096 : 3072) * width_x64*height_x32;
 #endif
 	return bsize;
 }
@@ -8944,12 +8944,12 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	return 0;
 }
 
-static int h264_mmu_page_num(int w, int h, int save_mode)
+static int h264_mmu_page_num(int w, int h, bool is_bit_depth_10)
 {
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 
-	picture_size = compute_losless_comp_body_size(w, h, save_mode);
+	picture_size = compute_losless_comp_body_size(w, h, is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (PAGE_SIZE - 1)) >> PAGE_SHIFT);
 
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)

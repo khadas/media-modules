@@ -885,7 +885,7 @@ int vp9_release_frame_buffer(struct vpx_codec_frame_buffer_s *aml_buf)
 }
 
 static int  compute_losless_comp_body_size(int width, int height,
-				uint8_t is_bit_depth_10);
+				bool is_bit_depth_10);
 
 static void setup_display_size(struct VP9_Common_s *cm, union param_u *params,
 						int print_header_info)
@@ -1656,12 +1656,12 @@ static int get_double_write_mode_init(struct VP9Decoder_s *pbi)
 
 /* return page number */
 static int vp9_mmu_page_num(struct VP9Decoder_s *pbi,
-		int w, int h, int save_mode)
+		int w, int h, bool is_bit_depth_10)
 {
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
 
-	picture_size = compute_losless_comp_body_size(w, h, save_mode);
+	picture_size = compute_losless_comp_body_size(w, h, is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (PAGE_SIZE - 1)) >> PAGE_SHIFT);
 
 	max_frame_num = (vvp9_frame_mmu_map_size(pbi) >> 2);
@@ -1695,7 +1695,7 @@ int vp9_alloc_mmu(
 	unsigned int *mmu_index_adr)
 {
 	int ret;
-	int bit_depth_10 = (bit_depth == VPX_BITS_10);
+	bool is_bit_depth_10 = (bit_depth == VPX_BITS_10);
 	int cur_mmu_4k_number;
 	struct aml_buf *aml_buf;
 
@@ -1711,7 +1711,7 @@ int vp9_alloc_mmu(
 	cur_mmu_4k_number = vp9_mmu_page_num(pbi,
 				pic_width,
 				pic_height,
-				bit_depth_10);
+				is_bit_depth_10);
 	if (cur_mmu_4k_number < 0)
 		return -1;
 	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
@@ -3693,7 +3693,7 @@ static struct BuffInfo_s amvvp9_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 
 /*Losless compression body buffer size 4K per 64x32 (jt)*/
 int  compute_losless_comp_body_size(int width, int height,
-				uint8_t is_bit_depth_10)
+				bool is_bit_depth_10)
 {
 	int     width_x64;
 	int     height_x32;
@@ -8390,7 +8390,7 @@ static void get_picture_qos_info(struct VP9Decoder_s *pbi)
 static void vvp9_get_comp_buf_info(struct VP9Decoder_s *pbi,
 					struct vdec_comp_buf_info *info)
 {
-	u16 bit_depth = pbi->param.p.bit_depth;
+	u16 bit_depth = pbi->vp9_param.p.bit_depth;
 
 	info->max_size = vp9_max_mmu_buf_size(
 			pbi->max_pic_w,
@@ -8401,7 +8401,7 @@ static void vvp9_get_comp_buf_info(struct VP9Decoder_s *pbi,
 	info->frame_buffer_size = vp9_mmu_page_num(
 			pbi, pbi->frame_width,
 			pbi->frame_height,
-			bit_depth == 0);
+			bit_depth == VPX_BITS_10);
 }
 
 static int vvp9_get_ps_info(struct VP9Decoder_s *pbi, struct aml_vdec_ps_infos *ps)
