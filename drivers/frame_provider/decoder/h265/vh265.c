@@ -2146,6 +2146,8 @@ struct hevc_state_s {
 	int nal_skip_policy;
 	bool high_bandwidth_flag;
 	char *hdr10p_data_buf[BUF_POOL_SIZE];
+	int crop_w;
+	int crop_h;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -8870,6 +8872,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 		vf->src_fmt.play_id = vdec->play_num;
 
+		hevc->crop_w = vf->width;
+		hevc->crop_h = vf->height;
+
 		vf->width = vf->width /
 			get_double_write_ratio(pic->double_write_mode & 0xf);
 		vf->height = vf->height /
@@ -11037,10 +11042,10 @@ int vh265_dec_status(struct vdec_info *vstatus)
 	if (!hevc)
 		return -1;
 
-	vstatus->frame_width = hevc->pic_w;
+	vstatus->frame_width = hevc->crop_w;
 	/* for hevc interlace for disp height x2 */
 	vstatus->frame_height =
-		(hevc->pic_h << hevc->interlace_flag);
+		(hevc->crop_h << hevc->interlace_flag);
 	if (hevc->frame_dur != 0)
 		vstatus->frame_rate = ((96000 * 10 / hevc->frame_dur) % 10) < 5 ?
 				96000 / hevc->frame_dur : (96000 / hevc->frame_dur +1);
