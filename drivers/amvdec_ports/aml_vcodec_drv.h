@@ -91,6 +91,8 @@
 #define TRANS_ABORT		(1 << 2)
 
 #define CTX_BUF_TOTAL(ctx) (ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size)
+
+#define MAX_AVBC_BUFFER_SIZE	16
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */
@@ -387,6 +389,15 @@ struct v4l_buff_pool {
 	u32 seq[V4L_CAP_BUFF_MAX];
 	u32 in, out;
 	u32 dec, vpp, ge2d;
+};
+
+struct v4l_compressed_buffer_info {
+	u64	used_page_sum;
+	u32	recycle_num;
+	u32	used_page_distributed_array[MAX_AVBC_BUFFER_SIZE];
+	u32	used_page_in_group[V4L_CAP_BUFF_MAX];
+	u32	max_avg_val_by_group;
+	u32	used_page_by_group;
 };
 
 enum aml_thread_type {
@@ -760,6 +771,9 @@ struct aml_vcodec_ctx {
 	bool			film_grain_present;
 	void			*bmmu_box_dw;
 	void			*mmu_box_dw;
+	void (*cal_compress_buff_info)(ulong, struct aml_vcodec_ctx *ctx);
+	struct mutex			compressed_buf_info_lock;
+	struct v4l_compressed_buffer_info	compressed_buf_info;
 	struct aml_buf_mgr_s		bm;
 	void (*vdec_recycle_dec_resource)(void *, struct aml_buf *);
 	atomic_t		vpp_cache_num;

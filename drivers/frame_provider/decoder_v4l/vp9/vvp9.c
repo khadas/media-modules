@@ -7667,6 +7667,7 @@ static int recycle_mmu_buf_tail(struct VP9Decoder_s *pbi,
 {
 	struct VP9_Common_s *const cm = &pbi->common;
 	struct aml_buf *aml_buf;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
 	if (pbi->used_4k_num == -1) {
 		pbi->used_4k_num =
@@ -7675,6 +7676,8 @@ static int recycle_mmu_buf_tail(struct VP9Decoder_s *pbi,
 	vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
 		"afbc index %d page_start %d\n",
 		cm->cur_fb_idx_mmu, pbi->used_4k_num);
+
+	ctx->cal_compress_buff_info(pbi->used_4k_num, ctx);
 
 	if (check_dma)
 		hevc_mmu_dma_check(hw_to_vdec(pbi));

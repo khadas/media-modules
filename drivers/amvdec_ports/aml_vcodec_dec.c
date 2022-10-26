@@ -84,6 +84,7 @@
 #define WORK_ITEMS_MAX (32)
 #define MAX_DI_INSTANCE (2)
 
+#define PAGE_NUM_ONE_MB	(256)
 //#define USEC_PER_SEC 1000000
 
 #define call_void_memop(vb, op, args...)				\
@@ -957,6 +958,34 @@ void aml_creat_pipeline(struct aml_vcodec_ctx *ctx,
 			"unsupport requester %x\n", requester);
 	}
 }
+void cal_compress_buff_info(ulong used_page_num, struct aml_vcodec_ctx *ctx)
+{
+	struct v4l_compressed_buffer_info *buf_info = &ctx->compressed_buf_info;
+	u32 total_buffer_num = ctx->dpb_size;
+	u32 cur_index = buf_info->recycle_num % total_buffer_num;
+	u32 cur_avg_val_by_group;
+
+	if (!(debug_mode & V4L_DEBUG_CODEC_COUNT))
+		return;
+
+	mutex_lock(&ctx->compressed_buf_info_lock);
+	buf_info->used_page_sum += used_page_num;
+	buf_info->used_page_distributed_array[(u32)used_page_num / PAGE_NUM_ONE_MB]++;
+
+	buf_info->used_page_by_group = buf_info->used_page_by_group -
+		buf_info->used_page_in_group[cur_index] + used_page_num;
+	buf_info->used_page_in_group[cur_index] = used_page_num;
+	cur_avg_val_by_group = buf_info->used_page_by_group / total_buffer_num;
+	if (cur_avg_val_by_group > buf_info->max_avg_val_by_group)
+		buf_info->max_avg_val_by_group = cur_avg_val_by_group;
+
+	buf_info->recycle_num++;
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"4k_used_num %ld used_page_sum %llu used_page_by_group %u max_avg_val %u cur_avg_val %u buffer_num %d recycle_num %u\n",
+		used_page_num, buf_info->used_page_sum, buf_info->used_page_by_group,
+			buf_info->max_avg_val_by_group, cur_avg_val_by_group, total_buffer_num, buf_info->recycle_num);
+	mutex_unlock(&ctx->compressed_buf_info_lock);
+}
 
 static struct task_ops_s v4l_sink_ops = {
 	.type		= TASK_TYPE_V4L_SINK,
@@ -1048,6 +1077,60 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 
 	pr_info("\n==== Show Buffer Status ======== \n");
 	buf_core_walk(&ctx->bm.bc);
+}
+
+void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_q_data *outq = NULL;
+	struct vdec_pic_info pic;
+	int i;
+	u32 aerage_mem_size;
+	u32 max_avg_val_by_proup;
+	struct v4l_compressed_buffer_info *buffer = &ctx->compressed_buf_info;
+	u64 used_page_sum = buffer->used_page_sum;
+
+	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &pic)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"get pic info err\n");
+		return;
+	}
+
+	outq = aml_vdec_get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+
+	pr_info("\n==== Show mmu buffer info ======== \n");
+	if (buffer->recycle_num == 0) {
+		pr_info("\nNo valid info \n");
+		return;
+	}
+	mutex_lock(&ctx->compressed_buf_info_lock);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"Format : %s  dw:%d  Resolution : visible(%dx%d)  dpb_size:%d\n",
+		outq->fmt->name, ctx->config.parm.dec.cfg.double_write_mode,
+		pic.visible_width, pic.visible_height, ctx->dpb_size);
+
+	do_div(used_page_sum, buffer->recycle_num);
+	aerage_mem_size = ((u32)used_page_sum * 100) / PAGE_NUM_ONE_MB;
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"mmu mem recycle num: %u, average used mmu mem %u.%u%u(MB)\n",
+		buffer->recycle_num, aerage_mem_size / 100, (aerage_mem_size % 100) / 10, aerage_mem_size % 10);
+
+	max_avg_val_by_proup = buffer->max_avg_val_by_group * 100 / PAGE_NUM_ONE_MB;
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		"%d buffer in group, max avg used mem by group %u.%u%u(MB)\n", ctx->dpb_size,
+		max_avg_val_by_proup / 100, (max_avg_val_by_proup % 100) / 10, max_avg_val_by_proup % 10);
+
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,"mmu mem used distribution ratio\n");
+
+	for (i = 0; i < MAX_AVBC_BUFFER_SIZE; i++) {
+		u32 count = buffer->used_page_distributed_array[i];
+		//if (count)
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"range %d [%dMB ~ %dMB] distribution num %d ratio %u%%\n",
+				i, i, i+1, count, (count * 100) / buffer->recycle_num);
+	}
+
+	mutex_unlock(&ctx->compressed_buf_info_lock);
+	pr_info("\n==== End Show mmu buffer info ======== \n");
 }
 
 static void reconfig_vpp_status(struct aml_vcodec_ctx *ctx)
@@ -3660,6 +3743,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 
 		aml_buf_reset(&ctx->bm);
 
+		aml_compressed_info_show(ctx);
+		memset(&ctx->compressed_buf_info, 0, sizeof(ctx->compressed_buf_info));
 		ctx->buf_used_count = 0;
 	}
 }

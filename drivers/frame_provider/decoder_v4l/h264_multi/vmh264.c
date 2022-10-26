@@ -9322,6 +9322,7 @@ result_done:
 						"release unused buf , used_4k_num %ld index %d\n",
 						used_4k_num, hw->hevc_cur_buf_idx);
 
+					ctx->cal_compress_buff_info(used_4k_num, ctx);
 					hevc_mmu_dma_check(hw_to_vdec(hw));
 					decoder_mmu_box_free_idx_tail(aml_buf->fbc->mmu,
 						aml_buf->fbc->index, used_4k_num);
