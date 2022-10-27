@@ -2145,6 +2145,8 @@ struct hevc_state_s {
 	struct trace_decoder_name trace;
 	int nal_skip_policy;
 	bool high_bandwidth_flag;
+	bool res_change;
+
 	char *hdr10p_data_buf[BUF_POOL_SIZE];
 	int crop_w;
 	int crop_h;
@@ -6153,7 +6155,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 #endif
 	if (hevc->m_nalUnitType != NAL_UNIT_CODED_SLICE_IDR
 			&& hevc->m_nalUnitType !=
-			NAL_UNIT_CODED_SLICE_IDR_N_LP) {
+			NAL_UNIT_CODED_SLICE_IDR_N_LP && hevc->res_change != true) {
 		struct PIC_s *pic_display;
 
 		pic = get_pic_by_POC(hevc, decoded_poc);
@@ -6259,7 +6261,11 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 		} while (pic_display);
 	} else {
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
-			hevc_print(hevc, H265_DEBUG_BUFMGR, "[BM] current pic is IDR, ");
+			if (hevc->m_nalUnitType == NAL_UNIT_CODED_SLICE_IDR
+				|| hevc->m_nalUnitType ==NAL_UNIT_CODED_SLICE_IDR_N_LP)
+				hevc_print(hevc, H265_DEBUG_BUFMGR, "[BM] current pic is IDR, ");
+			else
+				hevc_print(hevc, H265_DEBUG_BUFMGR, "[BM] res change, ");
 			hevc_print(hevc, H265_DEBUG_BUFMGR, "clear referenced flag of all buffers\n");
 		}
 		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
@@ -6273,6 +6279,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 			pic = get_pic_by_POC(hevc, decoded_poc);
 
 		flush_output(hevc, pic);
+		hevc->res_change = false;
 	}
 
 }
@@ -6720,6 +6727,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->pic_h = rpm_param->p.pic_height_in_luma_samples;
 			hevc->frame_width = hevc->pic_w;
 			hevc->frame_height = hevc->pic_h;
+			hevc->res_change = true;
 #ifdef LOSLESS_COMPRESS_MODE
 			if ((get_double_write_mode(hevc) & 0x10) == 0)
 				init_decode_head_hw(hevc);
@@ -11304,6 +11312,7 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 		hevc->i_only = 0x0;
 	hevc->error_watchdog_count = 0;
 	hevc->sei_present_flag = 0;
+	hevc->res_change = false;
 	if (vdec->sys_info)
 		pts_unstable = ((unsigned long)vdec->sys_info->param & 0x40) >> 6;
 	hevc_print(hevc, 0,
