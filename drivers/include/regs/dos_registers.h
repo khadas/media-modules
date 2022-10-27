@@ -18,7 +18,9 @@
  * Description:
  */
 #define NEW_REG_CHECK_MASK  (0xffff0000)
-/*new reg mask, bit20~bit27 chipid, bit16~bit19 subid*/
+/*new reg mask, bit20~bit27 chipid, bit16~bit19 subid.
+Only for new registers added in S5 that have the same
+address as the previous register.*/
 #define MASK_S5_NEW_REGS   ((0x3e << 20) & 0xffff0000)
 
 #ifndef AMRISC_REGS_HEADER_
@@ -687,18 +689,18 @@
 #define HEVC_ASSIST_DEBUG_B                 (0x30eb | MASK_S5_NEW_REGS)
 #define HEVC_ASSIST_DEBUG_C                 (0x30ec | MASK_S5_NEW_REGS)
 #define HEVC_ASSIST_MIRROR_CONFIG           (0x30ed | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_F_CTRL                    (0x30f0 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_F_START_ADDR              (0x30f1 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_F_END_ADDR                (0x30f2 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_F_STATUS0                 (0x30f3 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_F_STATUS1                 (0x30f4 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_F_STATUS2                 (0x30f5 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_B_CTRL                    (0x30f8 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_B_START_ADDR              (0x30f9 | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_B_END_ADDR                (0x30fa | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_B_STATUS0                 (0x30fb | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_B_STATUS1                 (0x30fc | MASK_S5_NEW_REGS)
-#define HEVC_RDMA_B_STATUS2                 (0x30fd | MASK_S5_NEW_REGS)
+#define HEVC_RDMA_F_CTRL                    0x30f0
+#define HEVC_RDMA_F_START_ADDR              0x30f1
+#define HEVC_RDMA_F_END_ADDR                0x30f2
+#define HEVC_RDMA_F_STATUS0                 0x30f3
+#define HEVC_RDMA_F_STATUS1                 0x30f4
+#define HEVC_RDMA_F_STATUS2                 0x30f5
+#define HEVC_RDMA_B_CTRL                    0x30f8
+#define HEVC_RDMA_B_START_ADDR              0x30f9
+#define HEVC_RDMA_B_END_ADDR                0x30fa
+#define HEVC_RDMA_B_STATUS0                 0x30fb
+#define HEVC_RDMA_B_STATUS1                 0x30fc
+#define HEVC_RDMA_B_STATUS2                 0x30fd
 /* from s5 */
 
 #define HEVC_MSP_DBE                      (0x3800 | MASK_S5_NEW_REGS)
