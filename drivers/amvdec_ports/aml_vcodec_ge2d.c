@@ -34,10 +34,8 @@
 #include "utils/common.h"
 #include "../common/media_utils/media_utils.h"
 
-#define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
-#include <trace/events/meson_atrace.h>
-
 #define GE2D_BUF_GET_IDX(ge2d_buf) (ge2d_buf->aml_vb->vb.vb2_buf.index)
+
 #define INPUT_PORT 0
 #define OUTPUT_PORT 1
 
@@ -242,7 +240,7 @@ static int v4l_ge2d_empty_input_done(struct aml_v4l2_ge2d_buf *buf)
 	kfifo_put(&ge2d->input, buf);
 	update_ge2d_num_cache(ge2d);
 
-	ATRACE_COUNTER("VC_IN_GE2D-1.recycle", aml_buf->index);
+	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_1, aml_buf->index);
 
 	return 0;
 }
@@ -301,7 +299,7 @@ static int v4l_ge2d_fill_output_done(struct aml_v4l2_ge2d_buf *buf)
 		kfifo_len(&ge2d->out_done_q),
 		buf->vf->width, buf->vf->height);
 
-	ATRACE_COUNTER("VC_OUT_GE2D-2.submit", aml_buf->index);
+	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_4, aml_buf->index);
 
 	aml_buf_done(&ge2d->ctx->bm, aml_buf, BUF_USER_GE2D);
 
@@ -348,7 +346,7 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 		mutex_unlock(&ge2d->output_lock);
 		up(&ge2d->sem_out);
 
-		ATRACE_COUNTER("VC_OUT_GE2D-3.vf_get", aml_buf->index);
+		vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_5, aml_buf->index);
 
 		v4l_dbg(ge2d->ctx, V4L_DEBUG_GE2D_BUFMGR,
 			"%s: vf:%px, index:%d, flag(vf:%x ge2d:%x), ts:%lld, type:%x, wxh:%ux%u\n",
@@ -362,6 +360,7 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 
 static void ge2d_vf_put(void *caller, struct vframe_s *vf)
 {
+
 }
 
 static int aml_v4l2_ge2d_thread(void* param)
@@ -603,7 +602,7 @@ retry:
 		ge2d_config.src2_para.mem_type	= CANVAS_TYPE_INVALID;
 		ge2d_config.mem_sec	= ctx->is_drm_mode ? 1 : 0;
 
-		ATRACE_COUNTER("VC_OUT_GE2D-1.handle_start",
+		vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_3,
 			in_buf->aml_vb->aml_buf->index);
 
 		v4l_dbg(ctx, V4L_DEBUG_GE2D_BUFMGR,
@@ -931,7 +930,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		}
 	} while(0);
 
-	ATRACE_COUNTER("VC_OUT_GE2D-0.receive", aml_buf->index);
+	vdec_tracing(&ge2d->ctx->vtr, VTRACE_GE2D_PIC_2, aml_buf->index);
 
 	kfifo_put(&ge2d->in_done_q, in_buf);
 	update_ge2d_num_cache(ge2d);

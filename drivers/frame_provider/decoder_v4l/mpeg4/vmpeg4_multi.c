@@ -972,7 +972,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				if (v4l2_ctx->is_stream_off) {
 					vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 				} else {
-					ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
+					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
@@ -1082,9 +1082,9 @@ static int v4l_res_change(struct vdec_mpeg4_hw_s *hw, int width, int height, int
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
 			flush_output(hw);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 			ret = 1;
 		}
@@ -1225,7 +1225,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 	}
 	reg = READ_VREG(MREG_BUFFEROUT);
 
-	ATRACE_COUNTER("V_ST_DEC-decode_state", reg);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, reg);
 
 	time_increment_resolution = READ_VREG(MP4_RATE);
 	fixed_vop_rate = time_increment_resolution >> 16;
@@ -1691,7 +1691,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-	ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 	ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 
@@ -1717,7 +1717,7 @@ static void vmpeg4_work(struct work_struct *work)
 			"vmpeg4_work: result=%d,status=%d\n",
 			hw->dec_result, hw_to_vdec(hw)->next_status);
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
 	if (hw->dec_result == DEC_RESULT_UNFINISH) {
 		if (!hw->ctx_valid)
@@ -1757,10 +1757,9 @@ static void vmpeg4_work(struct work_struct *work)
 		hw->chunk = NULL;
 		vdec_clean_input(vdec);
 		flush_output(hw);
-
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(vdec);
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 
 		mmpeg4_debug_print(DECODE_ID(hw), 0,
 			"%s: eos flushed, frame_num %d\n",
@@ -1798,7 +1797,7 @@ static void vmpeg4_work(struct work_struct *work)
 	else
 		vdec_core_finish_run(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC);
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	wake_up_interruptible(&hw->wait_q);
 	if (hw->vdec_cb)
@@ -2585,7 +2584,7 @@ static bool is_available_buffer(struct vdec_mpeg4_hw_s *hw)
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-free_buff_count", free_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }
@@ -2685,7 +2684,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		}
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
 
 	if (vdec_frame_based(vdec) && !(vdec_secure(vdec) || vdec_dmabuf(vdec))) {
 		/* HW needs padding (NAL start) for frame ending */

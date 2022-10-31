@@ -53,10 +53,6 @@
 #include "../frame_provider/decoder/utils/vdec_v4l2_buffer_ops.h"
 
 
-#define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_V4L2
-#include <trace/events/meson_atrace.h>
-
-
 #define OUT_FMT_IDX		(0) //default h264
 #define CAP_FMT_IDX		(11) //capture nv21m
 #define CAP_FMT_I420_IDX	(15) //use for mjpeg
@@ -75,6 +71,7 @@
 /*V4L2_CID_USER_AMLOGIC_BASE + 5 occupied*/
 #define AML_V4L2_GET_BITDEPTH (V4L2_CID_USER_AMLOGIC_BASE + 6)
 #define AML_V4L2_DEC_PARMS_CONFIG (V4L2_CID_USER_AMLOGIC_BASE + 7)
+#define AML_V4L2_GET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 8)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -769,8 +766,9 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 		}
 	} while(0);
 
-	ATRACE_COUNTER("VC_OUT_VSINK-1.submit", vb2_buf->index);
-	ATRACE_COUNTER("V_ST_VSINK-input_buffering", vdec_frame_number(ctx->ada_ctx));
+
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_6, vb2_buf->index);
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_1, vdec_frame_number(ctx->ada_ctx));
 
 	if (vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L) {
 		dstbuf->vb.flags = V4L2_BUF_FLAG_LAST;
@@ -858,7 +856,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	if (ctx->state == AML_STATE_FLUSHING &&
 		ctx->has_receive_eos) {
 		ctx->state = AML_STATE_FLUSHED;
-		ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 			"vcodec state (AML_STATE_FLUSHED)\n");
 	}
@@ -885,7 +883,8 @@ static void fill_capture_done_cb(void *v4l_ctx, void *fb_ctx)
 		return;
 	}
 
-	ATRACE_COUNTER("VC_OUT_VSINK-0.receive", vb->vb2_buf.index);
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_5, vb->vb2_buf.index);
+
 	mutex_lock(&ctx->capture_buffer_lock);
 	kfifo_put(&ctx->capture_buffer, vb);
 	mutex_unlock(&ctx->capture_buffer_lock);
@@ -1161,7 +1160,7 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_PROBE) {
 			ctx->state = AML_STATE_READY;
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_READY)\n");
 		}
@@ -1173,7 +1172,7 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 		if (ctx->m2m_ctx->out_q_ctx.q.streaming &&
 			ctx->m2m_ctx->cap_q_ctx.q.streaming) {
 			ctx->state = AML_STATE_ACTIVE;
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_ACTIVE)\n");
 		}
@@ -1227,7 +1226,7 @@ void dmabuff_recycle_worker(struct work_struct *work)
 			"recycle buff idx: %d, vbuf: %lx\n", vb->vb2_buf.index,
 			buf->addr ? buf->addr: (ulong)sg_dma_address(buf->out_sgt->sgl));
 
-		ATRACE_COUNTER("VO_OUT_VSINK-2.write_secure_end", vb->vb2_buf.index);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_9, vb->vb2_buf.index);
 
 		if (vb->vb2_buf.state != VB2_BUF_STATE_ERROR)
 			v4l2_buff_done(vb, buf->error ? VB2_BUF_STATE_ERROR :
@@ -1306,7 +1305,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_ACTIVE) {
 			ctx->state = AML_STATE_FLUSHING;// prepare flushing
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_FLUSHING-LASTFRM)\n");
 		}
@@ -1349,12 +1348,12 @@ static void aml_vdec_worker(struct work_struct *work)
 		"timestamp: 0x%llx\n", src_buf->timestamp);*/
 
 	if (ctx->output_dma_mode) {
-		ATRACE_COUNTER("VO_IN_VSINK-2.write_secure", buf.size);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_3, buf.size);
 	} else {
-		ATRACE_COUNTER("VO_IN_VSINK-2.write", buf.size);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_2, buf.size);
 	}
 
-	ATRACE_COUNTER("V_ST_VSINK-input_buffering", vdec_frame_number(ctx->ada_ctx));
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_1, vdec_frame_number(ctx->ada_ctx));
 
 	ret = vdec_if_decode(ctx, &buf, &res_chg);
 	if (ret > 0) {
@@ -1368,7 +1367,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		if (ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
-			ATRACE_COUNTER("VO_OUT_VSINK-0.write_end", buf.size);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_8, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_DONE);
 		}
@@ -1379,7 +1378,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		if (ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
-			ATRACE_COUNTER("VO_OUT_VSINK-3.write_error", buf.size);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_10, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_ERROR);
 		}
@@ -1398,7 +1397,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		mutex_lock(&ctx->state_lock);
 		if (ctx->state == AML_STATE_ACTIVE) {
 			ctx->state = AML_STATE_FLUSHING;// prepare flushing
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_FLUSHING-RESCHG)\n");
 		}
@@ -1413,7 +1412,7 @@ static void aml_vdec_worker(struct work_struct *work)
 
 		goto out;
 	} else {
-		ATRACE_COUNTER("VO_OUT_VSINK-1.write_again", buf.size);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_11, buf.size);
 		/* decoder is lack of resource, retry after short delay */
 		if (vdec_get_instance_num() < 2)
 			usleep_range(2000, 4000);
@@ -1434,7 +1433,7 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 
 	if (aml_codec_reset(ctx->ada_ctx, &ctx->reset_flag)) {
 		ctx->state = AML_STATE_ABORT;
-		ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 			"vcodec state (AML_STATE_ABORT).\n");
 	}
@@ -1923,7 +1922,7 @@ void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
 
 	flags = aml_vcodec_ctx_lock(ctx);
 	ctx->state = AML_STATE_ABORT;
-	ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 		"vcodec state (AML_STATE_ABORT)\n");
 	aml_vcodec_ctx_unlock(ctx, flags);
@@ -1982,8 +1981,10 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	q_data->bytesperline[1] = q_data->coded_width;
 	ctx->reset_flag = V4L_RESET_MODE_NORMAL;
 
+	vdec_trace_init(&ctx->vtr, ctx->id, -1);
+
 	ctx->state = AML_STATE_IDLE;
-	ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 		"vcodec state (AML_STATE_IDLE)\n");
 }
@@ -2009,20 +2010,20 @@ static int vidioc_vdec_qbuf(struct file *file, void *priv,
 	if (V4L2_TYPE_IS_OUTPUT(buf->type)) {
 		if (V4L2_TYPE_IS_MULTIPLANAR(buf->type)) {
 			if (ret == -EAGAIN)
-				ATRACE_COUNTER("VO_IN_VSINK-1.que_again", buf->m.planes[0].bytesused);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_1, buf->m.planes[0].bytesused);
 			else
-				ATRACE_COUNTER("VO_IN_VSINK-0.que", buf->m.planes[0].bytesused);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_0, buf->m.planes[0].bytesused);
 		} else {
 			if (ret == -EAGAIN)
-				ATRACE_COUNTER("VO_IN_VSINK-1.que_again", buf->length);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_1, buf->length);
 			else
-				ATRACE_COUNTER("VO_IN_VSINK-0.que", buf->length);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_0, buf->length);
 		}
 	} else {
 		if (ret == -EAGAIN)
-			ATRACE_COUNTER("VC_IN_VSINK-1.que_again", buf->index);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_1, buf->index);
 		else
-			ATRACE_COUNTER("VC_IN_VSINK-0.que", buf->index);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_0, buf->index);
 	}
 
 	return ret;
@@ -2050,20 +2051,20 @@ static int vidioc_vdec_dqbuf(struct file *file, void *priv,
 	if (V4L2_TYPE_IS_OUTPUT(buf->type)) {
 		if (V4L2_TYPE_IS_MULTIPLANAR(buf->type)) {
 			if (ret == -EAGAIN)
-				ATRACE_COUNTER("VO_OUT_VSINK-5.deque_again", buf->m.planes[0].bytesused);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_7, buf->m.planes[0].bytesused);
 			else
-				ATRACE_COUNTER("VO_OUT_VSINK-4.deque", buf->m.planes[0].bytesused);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_6, buf->m.planes[0].bytesused);
 		} else {
 			if (ret == -EAGAIN)
-				ATRACE_COUNTER("VO_OUT_VSINK-5.deque_again", buf->length);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_7, buf->length);
 			else
-				ATRACE_COUNTER("VO_OUT_VSINK-4.deque", buf->length);
+				vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_6, buf->length);
 		}
 	} else {
 		if (ret == -EAGAIN)
-			ATRACE_COUNTER("VC_OUT_VSINK-3.deque_again", buf->index);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_8, buf->index);
 		else
-			ATRACE_COUNTER("VC_OUT_VSINK-2.deque", buf->index);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_7, buf->index);
 	}
 
 	return ret;
@@ -2514,8 +2515,11 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 				mutex_unlock(&ctx->state_lock);
 				return -EINVAL;
 			}
+
+			vdec_trace_init(&ctx->vtr, ctx->id, vdec_get_vdec_id(ctx->ada_ctx));
+
 			ctx->state = AML_STATE_INIT;
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_INIT)\n");
 		}
@@ -2545,8 +2549,11 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 				mutex_unlock(&ctx->state_lock);
 				return -EINVAL;
 			}
+
+			vdec_trace_init(&ctx->vtr, ctx->id, vdec_get_vdec_id(ctx->ada_ctx));
+
 			ctx->state = AML_STATE_INIT;
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 				"vcodec state (AML_STATE_INIT)\n");
 		}
@@ -3203,6 +3210,8 @@ void aml_v4l_ctx_release(struct kref *kref)
 		vdec_clean_all_fence(ctx->sync);
 	}
 
+	vdec_trace_clean(&ctx->vtr);
+
 	kfree(ctx);
 }
 
@@ -3353,7 +3362,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		ctx->in_buff_cnt++;
 
-		ATRACE_COUNTER("VC_IN_VSINK-4.recycle", vb->index);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_4, vb->index);
 
 		if (ctx->vpp) {
 			aml_v4l2_vpp_recycle(ctx->vpp, buf);
@@ -3485,7 +3494,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	mutex_lock(&ctx->state_lock);
 	if (ctx->state == AML_STATE_INIT) {
 		ctx->state = AML_STATE_PROBE;
-		ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 			"vcodec state (AML_STATE_PROBE)\n");
 	}
@@ -3509,7 +3518,7 @@ static void vb2ops_vdec_buf_finish(struct vb2_buffer *vb)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"Unrecoverable error on buffer.\n");
 		ctx->state = AML_STATE_ABORT;
-		ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
 			"vcodec state (AML_STATE_ABORT)\n");
 	}
@@ -3702,7 +3711,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			(vdec_frame_number(ctx->ada_ctx) > 0) &&
 			(ctx->state < AML_STATE_ACTIVE)) {
 			ctx->state = AML_STATE_INIT;
-			ATRACE_COUNTER("V_ST_VSINK-state", ctx->state);
+			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
 			ctx->v4l_resolution_change = false;
 			ctx->reset_flag = V4L_RESET_MODE_NORMAL;
 			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -3811,6 +3820,9 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case AML_V4L2_DEC_PARMS_CONFIG:
 		vidioc_vdec_g_parm_ext(ctrl, ctx);
+		break;
+	case AML_V4L2_GET_INST_ID:
+		ctrl->val = ctx->id;
 		break;
 	default:
 		ret = -EINVAL;
@@ -3932,6 +3944,18 @@ static const struct v4l2_ctrl_config ctrl_sgt_streamparm = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_get_inst_id = {
+	.name	= "Get instance id",
+	.id	= AML_V4L2_GET_INST_ID,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_INTEGER,
+	.flags	= V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+	.min	= 0,
+	.max	= 0x7fffffff,
+	.step	= 1,
+	.def	= 0,
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -3995,6 +4019,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_sgt_streamparm, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_get_inst_id, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;

@@ -29,6 +29,7 @@ ${MODULE_NAME}-objs += decoder/aml_mjpeg_parser.o
 ${MODULE_NAME}-objs += utils/golomb.o
 endif
 ${MODULE_NAME}-objs += utils/common.o
+${MODULE_NAME}-objs += utils/aml_dec_trace.o
 
 PR_FMT = "amlv4l"
 PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"

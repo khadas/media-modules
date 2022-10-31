@@ -32,6 +32,8 @@
 #include <linux/amlogic/media/vfm/vframe.h>
 #include <media/v4l2-mem2mem.h>
 //#include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
+
+#include "utils/aml_dec_trace.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_dec.h"
 
@@ -784,6 +786,8 @@ struct aml_vcodec_ctx {
 	int                     write_frames;
 	u64			current_timestamp;
 	bool			force_recycle;
+
+	struct vdec_trace		vtr;
 };
 
 /**

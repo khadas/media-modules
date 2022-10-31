@@ -980,7 +980,7 @@ static void trigger_schedule(struct AV1HW_s *hw)
 		!hw->v4l_params_parsed)
 		vdec_v4l_write_frame_sync(ctx);
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", 0);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
 		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
@@ -6380,7 +6380,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			if (v4l2_ctx->is_stream_off) {
 				vav1_vf_put(vav1_vf_get(hw), hw);
 			} else {
-				ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
+				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
 		} else
@@ -6432,7 +6432,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vdec_vframe_ready(vdec, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
-	ATRACE_COUNTER("VC_OUT_DEC-submit", aml_buf->index);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 
 	hw->eos = true;
@@ -7916,10 +7916,10 @@ static int v4l_res_change(struct AV1HW_s *hw)
 			mutex_lock(&hw->assist_task.assist_mutex);
 
 			av1_postproc(hw);
-
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
+
 			mutex_unlock(&hw->assist_task.assist_mutex);
 			ret = 1;
 		}
@@ -8624,6 +8624,7 @@ static irqreturn_t vav1_isr(int irq, void *data)
 {
 	unsigned int dec_status;
 	struct AV1HW_s *hw = (struct AV1HW_s *)data;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 
@@ -8647,7 +8648,7 @@ static irqreturn_t vav1_isr(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-decode_state", dec_status);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	hw->dec_status = dec_status;
 	hw->process_busy = 1;
@@ -9370,6 +9371,7 @@ static void av1_work(struct work_struct *work)
 {
 	struct AV1HW_s *hw = container_of(work,
 		struct AV1HW_s, work);
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	/* finished decoding one frame or error,
 	 * notify vdec core to switch context
@@ -9386,7 +9388,7 @@ static void av1_work(struct work_struct *work)
 		READ_VREG(HEVC_STREAM_WR_PTR),
 		READ_VREG(HEVC_STREAM_RD_PTR));
 
-	ATRACE_COUNTER("V_ST_DEC-work_state", hw->dec_result);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_3, hw->dec_result);
 
 	if (hw->dec_result == AOM_AV1_RESULT_NEED_MORE_BUFFER) {
 		av1_recycle_frame_buffer(hw);
@@ -9407,7 +9409,7 @@ static void av1_work(struct work_struct *work)
 			spin_unlock_irqrestore(&hw->wait_buf_lock, flags);
 
 			if (hw->wait_more_buf) {
-				ATRACE_COUNTER("V_ST_DEC-wait_more_buff", __LINE__);
+				vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_5, __LINE__);
 				ret = vdec_post_task(av1_wait_cap_buf, hw);
 				if (ret != 0) {
 					pr_err("post task create failed!!!! ret %d\n", ret);
@@ -9420,7 +9422,7 @@ static void av1_work(struct work_struct *work)
 			}
 
 		} else {
-			ATRACE_COUNTER("V_ST_DEC-wait_more_buff", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_5, 0);
 			av1_release_bufs(hw);
 			hw->postproc_done = 0;
 			av1_continue_decoding(hw, hw->cur_obu_type);
@@ -9533,9 +9535,10 @@ static void av1_work(struct work_struct *work)
 		mutex_lock(&hw->assist_task.assist_mutex);
 		av1_postproc(hw);
 
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 		notify_v4l_eos(hw_to_vdec(hw));
-		ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+		vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
+
 		mutex_unlock(&hw->assist_task.assist_mutex);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
@@ -9769,7 +9772,7 @@ static bool is_available_buffer(struct AV1HW_s *hw)
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
 
-	ATRACE_COUNTER("av1_free_buff_count", free_count);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= hw->run_ready_min_buf_num ? true : false;
 }
@@ -9903,7 +9906,7 @@ static void run_front(struct vdec_s *vdec)
 		return;
 	}
 
-	ATRACE_COUNTER("V_ST_DEC-chunk_size", size);
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
 
 	input_empty[hw->index] = 0;
 	hw->dec_result = DEC_RESULT_NONE;

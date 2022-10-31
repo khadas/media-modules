@@ -53,7 +53,7 @@ static void di_release_keep_buf_wrap(void *arg)
 
 	di_release_keep_buf(buf);
 
-	ATRACE_COUNTER("VC_OUT_VPP_LC-2.lc_release", buf->mng.index);
+	ATRACE_COUNTER("VPP_PIC_lc_buf_release", buf->mng.index);
 }
 
 static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
@@ -97,7 +97,7 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 			"fail to set dmabuf DI hook\n");
 	}
 
-	ATRACE_COUNTER("VC_OUT_VPP_LC-0.lc_attach", vpp_buf->di_local_buf->mng.index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_12, vpp_buf->di_local_buf->mng.index);
 
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 		"%s attach di local buffer %px, dbuf:%px\n",
@@ -129,7 +129,7 @@ static int detach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 		return 0;
 	}
 
-	ATRACE_COUNTER("VC_OUT_VPP_LC-1.lc_detach", vpp_buf->di_local_buf->mng.index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_13, vpp_buf->di_local_buf->mng.index);
 
 	ret = uvm_detach_hook_mod(dma, VF_PROCESS_DI);
 	if (ret < 0) {
@@ -249,7 +249,7 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("VC_OUT_VPP-2.lc_submit", aml_buf->index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_10, aml_buf->index);
 
 	aml_buf_done(&vpp->ctx->bm, aml_buf, BUF_USER_VPP);
 
@@ -322,7 +322,7 @@ static enum DI_ERRORTYPE
 	if (vpp->buffer_mode != BUFFER_MODE_ALLOC_BUF)
 		vpp->in_num[OUTPUT_PORT]++;
 
-	ATRACE_COUNTER("VC_IN_VPP-1.recycle", aml_buf->index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_1, aml_buf->index);
 
 	return DI_ERR_NONE;
 }
@@ -385,7 +385,7 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("VC_OUT_VPP-2.submit", aml_buf->index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_9, aml_buf->index);
 
 	aml_buf_done(&vpp->ctx->bm, aml_buf, BUF_USER_VPP);
 
@@ -485,7 +485,7 @@ static enum DI_ERRORTYPE
 		kfifo_len(&vpp->in_done_q),
 		kfifo_len(&vpp->out_done_q));
 
-	ATRACE_COUNTER("VC_OUT_VPP-2.submit", fb->index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_9, fb->index);
 
 	fb->task->submit(fb->task, TASK_TYPE_VPP);
 
@@ -543,7 +543,7 @@ static void vpp_vf_get(void *caller, struct vframe_s *vf_out)
 
 		up(&vpp->sem_out);
 
-		ATRACE_COUNTER("VC_OUT_VPP-3.vf_get", aml_buf->index);
+		vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_11, aml_buf->index);
 
 		v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
 			"%s: vf:%px, index:%d, flag(vf:%x di:%x), ts:%lld\n",
@@ -582,7 +582,7 @@ static void vpp_vf_put(void *caller, struct vframe_s *vf)
 		buf->flag,
 		vf->timestamp);
 
-	ATRACE_COUNTER("VC_IN_VPP-0.vf_put", aml_buf->index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_0, aml_buf->index);
 
 	if (!eos && !bypass) {
 		if (vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF) {
@@ -810,18 +810,18 @@ retry:
 			kfifo_len(&vpp->out_done_q));
 
 		if (vpp->work_mode == VPP_MODE_S4_DW_MMU) {
-			ATRACE_COUNTER("VC_OUT_VPP-1.fill_output_start_dw",
+			vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_7,
 				out_buf->aml_vb->aml_buf->index);
 
 			kfifo_put(&vpp->processing, in_buf);
 
 			di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
-			ATRACE_COUNTER("VC_OUT_VPP-1.empty_input_start_dw",
+			vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_8,
 				in_buf->aml_vb->aml_buf->index);
 			di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 		} else {
 			if (vpp->is_bypass_p) {
-				ATRACE_COUNTER("V4L_OUT_VPP-1.direct_handle_start",
+				vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_6,
 					in_buf->aml_vb->aml_buf->index);
 				out_buf->di_buf.flag = in_buf->di_buf.flag;
 				out_buf->di_buf.vf->vf_ext = in_buf->di_buf.vf;
@@ -834,18 +834,19 @@ retry:
 					 * the flow of DI local buffer:
 					 * empty input -> output done cb -> fetch processing fifo.
 					 */
-					ATRACE_COUNTER("VC_OUT_VPP-1.lc_handle_start",
+					vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_5,
 						in_buf->aml_vb->aml_buf->index);
+
 					out_buf->inbuf = in_buf;
 					kfifo_put(&vpp->processing, out_buf);
 
 					di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 				} else {
-					ATRACE_COUNTER("VC_OUT_VPP-1.fill_output_start",
+					vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_3,
 						out_buf->aml_vb->aml_buf->index);
 					di_fill_output_buffer(vpp->di_handle, &out_buf->di_buf);
 
-					ATRACE_COUNTER("VC_OUT_VPP-1.empty_input_start",
+					vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_4,
 						in_buf->aml_vb->aml_buf->index);
 					di_empty_input_buffer(vpp->di_handle, &in_buf->di_buf);
 				}
@@ -1296,7 +1297,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		}
 	} while(0);
 
-	ATRACE_COUNTER("VC_OUT_VPP-0.receive", aml_buf->index);
+	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_2, aml_buf->index);
 
 	kfifo_put(&vpp->in_done_q, in_buf);
 	up(&vpp->sem_in);
