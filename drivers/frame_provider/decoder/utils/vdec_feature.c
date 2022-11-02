@@ -71,7 +71,7 @@ static int vcodec_feature_CC(u8 *buf, int size, int vformat, int is_v4l)
 			case VFORMAT_MPEG12:
 			case VFORMAT_H264:
 			case VFORMAT_AVS:
-				pbuf += snprintf(pbuf, size, "        \"CC subtitle\" : \"true\"\n");
+				pbuf += snprintf(pbuf, size, "        \"CC subtitle\" : true,\n");
 				break;
 			default:
 				break;
@@ -86,7 +86,7 @@ static int vcodec_feature_report_information(u8 *buf, int size, int vformat, int
 	u8 *pbuf = buf;
 
 	if (!is_v4l) {
-		pbuf += snprintf(pbuf, size, "        \"Decoder information report\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"Decoder information report\" : true,\n");
 	}
 
 	return pbuf - buf;
@@ -102,7 +102,7 @@ static int vcodec_feature_i_only_mode(u8 *buf, int size, int vformat)
 		case VFORMAT_MPEG4:
 		case VFORMAT_HEVC:
 		case VFORMAT_AVS2:
-			pbuf += snprintf(pbuf, size, "        \"I only mode\" : \"true\"\n");
+			pbuf += snprintf(pbuf, size, "        \"I only mode\" : true,\n");
 			break;
 		default:
 			break;
@@ -123,8 +123,8 @@ static int vcodec_feature_dolbyVison(u8 *buf, int size, int vformat)
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4)) {
-				pbuf += snprintf(pbuf, size, "        \"DolbyVision\" : \"true\"\n");
-				pbuf += snprintf(pbuf, size, "        \"multi_frame_dv\" : \"true\"\n");
+				pbuf += snprintf(pbuf, size, "        \"DolbyVision\" : true,\n");
+				pbuf += snprintf(pbuf, size, "        \"multi_frame_dv\" : true,\n");
 			}
 			break;
 		default:
@@ -145,7 +145,7 @@ static int vcodec_feature_HDR(u8 *buf, int size, int vformat)
 		case VFORMAT_AVS2:
 		case VFORMAT_VP9:
 		case VFORMAT_AVS3:
-				pbuf += snprintf(pbuf, size, "        \"HDR\" : \"true\"\n");
+				pbuf += snprintf(pbuf, size, "        \"HDR\" : true,\n");
 			break;
 		default:
 			break;
@@ -167,17 +167,17 @@ static int vcodec_feature_doublewrite(u8 *buf, int size, int vformat)
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
-			s = snprintf(pbuf, size - tsize, "        \"DoubleWrite\" ");
+			s = snprintf(pbuf, size - tsize, "        \"DoubleWrite\" :");
 			tsize += s;
 			pbuf += s;
 			if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3)) {
-				s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"0x10\", \"0x10000\", \"0x20000\"]\n");
+				s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"0x10\", \"0x10000\", \"0x20000\"],\n");
 				tsize += s;
 				pbuf += s;
 			}
 			else {
-				s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"8\", \"0x10\", \"0x10000\", \"0x20000\"]\n");
+				s = snprintf(pbuf, size - tsize, "[ \"0\", \"1\", \"2\", \"3\", \"4\", \"8\", \"0x10\", \"0x10000\", \"0x20000\"],\n");
 				tsize += s;
 				pbuf += s;
 			}
@@ -198,7 +198,7 @@ static int vcodec_feature_vdec_fence(u8 *buf, int size, int vformat)
 		case VFORMAT_HEVC:
 		case VFORMAT_VP9:
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
-				pbuf += snprintf(pbuf, size, "        \"GameMode\" : \"true\"\n");
+				pbuf += snprintf(pbuf, size, "        \"GameMode\" : true,\n");
 			break;
 		default:
 			break;
@@ -218,9 +218,9 @@ static int vcodec_feature_bitdepth(u8 *buf, int size, int vformat)
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB)
-				pbuf += snprintf(pbuf, size, "        \"BitDepth\" : \"10\"\n");
+				pbuf += snprintf(pbuf, size, "        \"BitDepth\" : \"10\",\n");
 			else
-				pbuf += snprintf(pbuf, size, "        \"BitDepth\" : \"8\"\n");
+				pbuf += snprintf(pbuf, size, "        \"BitDepth\" : \"8\",\n");
 			break;
 		default:
 			break;
@@ -242,25 +242,25 @@ static int vcodec_feature_MaxResolution(u8 *buf, int size, int vformat)
 		case VFORMAT_AVS3:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
-				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"8k\"\n");
+				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"8k\",\n");
 			else if (vdec_is_support_4k() &&
 					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
-				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"4k60\"\n");
+				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"4k60\",\n");
 			else
-				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\"\n");
+				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\",\n");
 			break;
 		case VFORMAT_H264:
 			if (vdec_is_support_4k())
-				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"4k30\"\n");
+				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"4k30\",\n");
 			else
-				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\"\n");
+				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\",\n");
 			break;
 		case VFORMAT_MPEG12:
 		case VFORMAT_MPEG4:
 		case VFORMAT_MJPEG:
 		case VFORMAT_VC1:
 		case VFORMAT_AVS:
-			pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\"\n");
+			pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\",\n");
 			break;
 		default:
 			break;
@@ -283,9 +283,9 @@ static int vcodec_feature_clock(u8 *buf, int size, int vformat)
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\"\n");
+				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\",\n");
 			else
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\"\n");
+				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\",\n");
 			break;
 		case VFORMAT_H264:
 		case VFORMAT_MPEG12:
@@ -298,9 +298,9 @@ static int vcodec_feature_clock(u8 *buf, int size, int vformat)
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\"\n");
+				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\",\n");
 			else
-				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\"\n");
+				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\",\n");
 			break;
 		default:
 			break;
@@ -365,7 +365,7 @@ static int vcodec_feature_FCC(u8 *buf, int size, int vformat, int is_v4l)
 			case VFORMAT_HEVC:
 			case VFORMAT_H264:
 			case VFORMAT_MPEG12:
-				pbuf += snprintf(pbuf, size, "        \"Decoder FCC support\" : \"true\"\n");
+				pbuf += snprintf(pbuf, size, "        \"Decoder FCC support\" : true,\n");
 				break;
 			default:
 				break;
@@ -380,7 +380,7 @@ static int vcodec_feature_RDMA(u8 *buf, int size, int vformat)
 	u8 *pbuf = buf;
 
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3)
-		pbuf += snprintf(pbuf, size, "        \"Decoder RDMA support\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"Decoder RDMA support\" : true,\n");
 
 	return pbuf - buf;
 }
@@ -390,7 +390,7 @@ static int vcodec_feature_v4ldec_nr(u8 *buf, int size, int vformat, int is_v4l)
 	u8 *pbuf = buf;
 
 	if (is_v4l) {
-		pbuf += snprintf(pbuf, size, "        \"V4ldec nr\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"V4ldec nr\" : true,\n");
 	}
 
 	return pbuf - buf;
@@ -401,7 +401,7 @@ static int vcodec_feature_ge2d_wrapper(u8 *buf, int size, int vformat, int is_v4
 	u8 *pbuf = buf;
 
 	if (is_v4l && (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7)) {
-		pbuf += snprintf(pbuf, size, "        \"Ge2d wrapper\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"Ge2d wrapper\" : true,\n");
 	}
 
 	return pbuf - buf;
@@ -411,7 +411,7 @@ static int vcodec_feature_DMABUF_heap(u8 *buf, int size, int vformat, int is_v4l
 {
 	u8 *pbuf = buf;
 
-	pbuf += snprintf(pbuf, size, "        \"DMA buffer heap\" : \"true\"\n");
+	pbuf += snprintf(pbuf, size, "        \"DMA buffer heap\" : true,\n");
 
 	return pbuf - buf;
 }
@@ -421,7 +421,7 @@ static int vcodec_feature_dynamic_buffer_management(u8 *buf, int size, int vform
 	u8 *pbuf = buf;
 
 	if (is_v4l) {
-		pbuf += snprintf(pbuf, size, "        \"Dynamic buffer management\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"Dynamic buffer management\" : true,\n");
 	}
 
 	return pbuf - buf;
@@ -432,14 +432,11 @@ static int vcodec_feature_es_dma_mode(u8 *buf, int size, int vformat, int is_v4l
 	u8 *pbuf = buf;
 
 	if (is_v4l) {
-		pbuf += snprintf(pbuf, size, "        \"Es dma mode\" : \"true\"\n");
+		pbuf += snprintf(pbuf, size, "        \"Es dma mode\" : true,\n");
 	}
 
 	return pbuf - buf;
 }
-
-
-
 
 int vcodec_feature_get_feature(u8 *buf, int vformat, int is_v4l)
 {
@@ -524,11 +521,12 @@ int vcodec_feature_get_feature(u8 *buf, int vformat, int is_v4l)
 	tsize += s;
 	pbuf += s;
 
-	s = snprintf(pbuf, size - tsize, "        \"UcodeVersionRequest\" : \"0.3.10\"\n");
+	s = snprintf(pbuf, size - tsize, "        \"UcodeVersionRequest\" : \"0.3.10\",\n");
+
 	tsize += s;
 	pbuf += s;
 
-	s = snprintf(pbuf, size - tsize, "    }\n");
+	s = snprintf(pbuf, size - tsize, "    },\n");
 	tsize += s;
 	pbuf += s;
 
