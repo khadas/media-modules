@@ -432,6 +432,7 @@ static u32 debug;
 static u32 disable_fg;
 /*for debug*/
 static u32 use_dw_mmu;
+static u32 mmu_mem_save = 1;
 
 static bool is_reset;
 /*for debug*/
@@ -1274,6 +1275,8 @@ int av1_alloc_mmu(
 				aml_buf->fbc->index,
 				aml_buf->fbc->frame_size,
 				mmu_index_adr);
+	if (!ret)
+		aml_buf->fbc->used[aml_buf->fbc->index] |= 1;
 
 	av1_print(hw, AV1_DEBUG_BUFMGR, "%s afbc_index %d dma 0x%lx\n",
 			__func__, aml_buf->fbc->index, aml_buf->planes[0].addr);
@@ -1298,6 +1301,7 @@ int av1_alloc_mmu_dw(
 	bool is_bit_depth_10 = (bit_depth == AOM_BITS_10);
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
+	struct aml_buf *aml_buf;
 
 	if (get_double_write_mode(hw) & 0x10)
 		return 0;
@@ -1321,25 +1325,14 @@ int av1_alloc_mmu_dw(
 		return -1;
 	}
 
-	if (hw->is_used_v4l) {
-		//todo
-		#if 0
-		struct internal_comp_buf *ibuf =
-			index_to_icomp_buf(hw, cur_buf_idx);
+	aml_buf = index_to_afbc_aml_buf(hw, cur_buf_idx);
 
-		ret = decoder_mmu_box_alloc_idx(
-				ibuf->mmu_box_dw,
-				ibuf->index,
-				ibuf->frame_buffer_size,
-				mmu_index_adr);
-		#endif
-	} else {
-		ret = decoder_mmu_box_alloc_idx(
-			hw->mmu_box_dw,
-			cur_buf_idx,
-			cur_mmu_4k_number,
+	ret = decoder_mmu_box_alloc_idx(
+			aml_buf->fbc->mmu_dw,
+			aml_buf->fbc->index,
+			aml_buf->fbc->frame_size,
 			mmu_index_adr);
-	}
+
 	return ret;
 }
 #endif
@@ -2966,11 +2959,20 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 	if (!aml_buf)
 		return -1;
 
-	if (hw->mmu_enable) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
+		(get_double_write_mode(hw) != 0x10)) {
 		hw->m_BUF[i].header_addr = aml_buf->fbc->haddr;
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
 			pr_info("MMU header_adr %d: %ld\n",
 				i, hw->m_BUF[i].header_addr);
+		}
+	}
+
+	if (get_double_write_mode(hw) & 0x20) {
+		hw->m_BUF[i].header_dw_addr = aml_buf->fbc->haddr_dw;
+		if (debug & AV1_DEBUG_BUFMGR_MORE) {
+			pr_info("MMU header_dw_addr %d: %ld\n",
+				i, hw->m_BUF[i].header_dw_addr);
 		}
 	}
 
@@ -3014,8 +3016,12 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 	}
 
 	/* config frame buffer */
-	if (hw->mmu_enable)
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
+			(get_double_write_mode(hw) != 0x10))
 		pic->header_adr = hw->m_BUF[i].header_addr;
+	if (get_double_write_mode(hw) & 0x20) {
+		pic->header_dw_adr = hw->m_BUF[i].header_dw_addr;
+	}
 
 	pic->BUF_index		= i;
 	pic->lcu_total		= lcu_total;
@@ -7005,6 +7011,28 @@ static void  config_mcrcc_axi_hw_nearest_ref(struct AV1HW_s *hw)
 
 #endif
 
+static int av1_get_current_fbc_index(struct AV1HW_s *hw, int index)
+{
+	int i;
+
+	for (i = 0; i < BUF_FBC_NUM_MAX; i++) {
+		if (hw->m_BUF[index].v4l_ref_buf_addr
+			== hw->afbc_buf_table[i].fb) {
+			av1_print(hw, AV1_DEBUG_BUFMGR,
+				"cur fb idx mmu %d\n",
+				i);
+			break;
+		}
+	}
+
+	if (i >= BUF_FBC_NUM_MAX)
+		av1_print(hw, AV1_DEBUG_BUFMGR,
+				"[ERR]can't find fbc idx!\n");
+
+	return i;
+}
+
+
 int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 {
 	int ret = 0;
@@ -7218,18 +7246,10 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 
 		if (ret >= 0 && (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
 			(get_double_write_mode(hw) != 0x10)) {
-			for (i = 0; i < BUF_FBC_NUM_MAX; i++) {
-				if (hw->m_BUF[cm->cur_frame->buf.index].v4l_ref_buf_addr
-					== hw->afbc_buf_table[i].fb) {
-					cm->cur_fb_idx_mmu = i;
-					av1_print(hw, AV1_DEBUG_BUFMGR,
-						"cur fb idx mmu %d\n",
-						i);
-					break;
-				}
-			}
+			cm->cur_fb_idx_mmu = av1_get_current_fbc_index(hw,
+						cm->cur_frame->buf.index);
 
-			if (i >= BUF_FBC_NUM_MAX)
+			if (cm->cur_fb_idx_mmu >= BUF_FBC_NUM_MAX)
 				av1_print(hw, 0,
 				"[ERR]can't find fb(0x%lx) in afbc table\n",
 				hw->m_BUF[cm->cur_frame->buf.index].v4l_ref_buf_addr);
@@ -7245,16 +7265,16 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 #ifdef AOM_AV1_MMU_DW
 			if (get_double_write_mode(hw) & 0x20) {
 				ret = av1_alloc_mmu_dw(hw,
-				cm->cur_frame->buf.index,
+				cm->cur_fb_idx_mmu,
 				cur_pic_config->y_crop_width,
 				cur_pic_config->y_crop_height,
 				hw->aom_param.p.bit_depth,
 				hw->dw_frame_mmu_map_addr);
 				if (ret >= 0)
-					cm->cur_fb_idx_mmu_dw = cm->cur_frame->buf.index;
+					cm->cur_fb_idx_mmu_dw = cm->cur_fb_idx_mmu;
 				else
 					pr_err("can't alloc need dw mmu1,idx %d ret =%d\n",
-					cm->cur_frame->buf.index, ret);
+					cm->cur_fb_idx_mmu, ret);
 			}
 #endif
 #ifdef DEBUG_CRC_ERROR
@@ -8227,14 +8247,12 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 					if (get_double_write_mode(hw) & 0x20) {
 						used_4k_num =
 							(READ_VREG(HEVC_SAO_MMU_STATUS2) >> 16);
-						#if 0//todo
 						decoder_mmu_box_free_idx_tail(
-							ibuf->mmu_box_dw,
-							ibuf->index,
+							aml_buf->fbc->mmu_dw,
+							aml_buf->fbc->index,
 							used_4k_num);
-						#endif
 						av1_print(hw, AOM_DEBUG_HW_MORE, "dw mmu free tail, index %d used_num 0x%x\n",
-							cm->cur_frame->buf.index, used_4k_num);
+							aml_buf->fbc->index, used_4k_num);
 					}
 #endif
 					cm->cur_fb_idx_mmu = INVALID_IDX;
@@ -9664,8 +9682,9 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 			aml_buf = (struct aml_buf *)hw->m_BUF[i].v4l_ref_buf_addr;
 
 			av1_print(hw, AV1_DEBUG_BUFMGR,
-				"%s buf idx: %d fb: 0x%lx vb idx: %d dma addr: 0x%lx vf_ref %d\n",
-				__func__, i, hw->m_BUF[i].v4l_ref_buf_addr,
+				"%s i: %d buf idx: %d fb: 0x%lx vb idx: %d dma addr: 0x%lx vf_ref %d\n",
+				__func__, i, frame_bufs[i].buf.index,
+				hw->m_BUF[i].v4l_ref_buf_addr,
 				aml_buf->index,
 				frame_bufs[i].buf.cma_alloc_addr,
 				frame_bufs[i].buf.vf_ref);
@@ -9673,6 +9692,20 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			if (!frame_bufs[i].buf.vf_ref) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
+			}
+
+			if (mmu_mem_save && hw->mmu_enable &&
+				(ctx->config.parm.dec.cfg.double_write_mode == 0x21) &&
+				frame_bufs[i].buf.vf_ref) {
+				if (aml_buf->fbc->used[aml_buf->fbc->index] & 1) {
+					decoder_mmu_box_free_idx(aml_buf->fbc->mmu,
+								aml_buf->fbc->index);
+					aml_buf->fbc->used[aml_buf->fbc->index] &= ~0x1;
+					av1_print(hw, AV1_DEBUG_BUFMGR,
+						"free mmu buffer frame idx %d afbc_index: %d\n",
+						frame_bufs[i].buf.index,
+						aml_buf->fbc->index);
+				}
 			}
 
 			lock_buffer_pool(hw->common.buffer_pool, flags);
@@ -10930,6 +10963,9 @@ MODULE_PARM_DESC(disable_fg, "\n amvdec_av1 disable_fg\n");
 
 module_param(use_dw_mmu, uint, 0664);
 MODULE_PARM_DESC(use_dw_mmu, "\n amvdec_av1 use_dw_mmu\n");
+
+module_param(mmu_mem_save, uint, 0664);
+MODULE_PARM_DESC(mmu_mem_save, "\n amvdec_av1 mmu_mem_save\n");
 
 module_param(radr, uint, 0664);
 MODULE_PARM_DESC(radr, "\n radr\n");

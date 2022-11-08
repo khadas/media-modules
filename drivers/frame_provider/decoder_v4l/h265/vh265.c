@@ -10051,6 +10051,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				hevc->empty_flag = 1;
 				/*suffix sei or dv meta*/
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
+				if (!hevc->first_pic_flag)
+					vdec_v4l_post_error_frame_event(ctx);
 				goto pic_done;
 			} else {
 				hevc->dec_result = DEC_RESULT_AGAIN;

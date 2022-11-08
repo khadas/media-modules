@@ -105,14 +105,20 @@ typedef void (*get_fbc_info)(struct aml_buf_mgr_s *,
  * @haddr	: The address of header data.
  * @hsize	: The size of header data.
  * @frame_size	: the size of AFBC data per frame.
+ * @used: bit[0]: 0, idle; 1, decoder alloc from mmu
+ *        bit[1]: 0, idle; 1, decoder alloc from mmu_dw.
  */
 struct aml_buf_fbc {
 	u32		index;
 	void		*bmmu;
 	void		*mmu;
+	void		*bmmu_dw;
+	void		*mmu_dw;
 	int		ref;
 	ulong		haddr;
 	u32		hsize;
+	ulong		haddr_dw;
+	u32		hsize_dw;
 	u32		frame_size;
 	int		used[BUF_FBC_NUM_MAX];
 };
@@ -170,6 +176,8 @@ struct aml_buf_mgr_s {
 	/* fbc information */
 	void				*bmmu;
 	void				*mmu;
+	void				*bmmu_dw;
+	void				*mmu_dw;
 	struct aml_buf_fbc		*fbc_array;
 	get_fbc_info			get_fbc_info;
 };
