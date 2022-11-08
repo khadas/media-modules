@@ -78,7 +78,7 @@
 
 #define MHz (1000000)
 
-#define VPU_INIT_VIDEO_MEMORY_SIZE_IN_BYTE (64 * SZ_1M)
+#define VPU_INIT_VIDEO_MEMORY_SIZE_IN_BYTE (256 * SZ_1M)
 
 #define LOG_ALL 0
 #define LOG_INFO 1
@@ -128,6 +128,9 @@ static struct platform_device *hevc_pdev;
 
 static struct vpu_bit_firmware_info_t s_bit_firmware_info[MAX_NUM_VPU_CORE];
 
+static spinlock_t s_dma_buf_lock = __SPIN_LOCK_UNLOCKED(s_dma_buf_lock);
+static struct list_head s_dma_bufp_head = LIST_HEAD_INIT(s_dma_bufp_head);
+
 static struct vpu_dma_cfg dma_cfg[3];
 
 struct vpu_clks {
@@ -144,6 +147,10 @@ static struct vpu_clks s_vpu_clks;
 
 static u32 vpu_src_addr_config(struct vpu_dma_buf_info_t);
 static void vpu_dma_buffer_unmap(struct vpu_dma_cfg *cfg);
+static u32 vpu_multi_src_addr_config(struct vpu_multi_dma_buf_info_t *pinfo,
+		struct file *filp);
+static s32 vpu_multi_src_addr_unmap(struct vpu_multi_dma_buf_info_t *dma_info,
+		struct file *filp);
 
 static void dma_flush(u32 buf_start, u32 buf_size)
 {
@@ -291,17 +298,25 @@ static s32 vpu_free_instances(struct file *filp)
 	struct vpudrv_instance_list_t *vil, *n;
 	struct vpudrv_instance_pool_t *vip;
 	void *vip_base;
+	s32 instance_pool_size_per_core;
+	void *vdi_mutexes_base;
+	const s32 PTHREAD_MUTEX_T_DESTROY_VALUE = 0xdead10cc;
 
-	enc_pr(LOG_DEBUG, "vpu_free_instances\n");
+	enc_pr(LOG_DEBUG, "[VPUDRV] vpu_free_instances\n");
+
+	/* s_instance_pool.size was assigned to the size of all core once
+		call VDI_IOCTL_GET_INSTANCE_POOL by user. */
+	instance_pool_size_per_core = (s_instance_pool.size/MAX_NUM_VPU_CORE);
 
 	list_for_each_entry_safe(vil, n, &s_inst_list_head, list) {
 		if (vil->filp == filp) {
-			vip_base = (void *)s_instance_pool.base;
+			vip_base = (void *)(s_instance_pool.base +
+				(instance_pool_size_per_core*vil->core_idx));
 			enc_pr(LOG_INFO,
-				"free_instances instIdx=%d, coreIdx=%d, vip_base=%p\n",
-				(s32)vil->inst_idx,
-				(s32)vil->core_idx,
-				vip_base);
+				"free_ins Idx=%d, core=%d, base=%p, sz=%d\n",
+				(s32)vil->inst_idx, (s32)vil->core_idx,
+				vip_base,
+				(s32)instance_pool_size_per_core);
 			vip = (struct vpudrv_instance_pool_t *)vip_base;
 			if (vip) {
 				/* only first 4 byte is key point
@@ -310,9 +325,30 @@ static s32 vpu_free_instances(struct file *filp)
 				 */
 				memset(&vip->codecInstPool[vil->inst_idx],
 					0x00, 4);
+
+#define PTHREAD_MUTEX_T_HANDLE_SIZE 4
+				vdi_mutexes_base = (vip_base +
+					(instance_pool_size_per_core -
+					PTHREAD_MUTEX_T_HANDLE_SIZE*4));
+				enc_pr(LOG_INFO,
+					"Force destroy in user space ");
+				enc_pr(LOG_INFO," vdi_mutex_base=%p \n",
+					vdi_mutexes_base);
+				if (vdi_mutexes_base) {
+					s32 i;
+					for (i = 0; i < 4; i++) {
+						memcpy(vdi_mutexes_base,
+						&PTHREAD_MUTEX_T_DESTROY_VALUE,
+						PTHREAD_MUTEX_T_HANDLE_SIZE);
+						vdi_mutexes_base +=
+						PTHREAD_MUTEX_T_HANDLE_SIZE;
+					}
+				}
 			}
+			spin_lock(&s_vpu_lock);
 			s_vpu_open_ref_count--;
 			list_del(&vil->list);
+			spin_unlock(&s_vpu_lock);
 			kfree(vil);
 		}
 	}
@@ -361,6 +397,27 @@ static u32 vpu_is_buffer_cached(struct file *filp, ulong vm_pgoff)
 	spin_unlock(&s_vpu_lock);
 	enc_pr(LOG_ALL, "[-]vpu_is_buffer_cached, ret:%d\n", cached);
 	return cached;
+}
+
+static s32 vpu_multi_dma_buf_release(struct file *filp)
+{
+	struct vpu_multi_dma_buf_pool_t *pool, *n;
+	struct vpu_dma_cfg vb;
+
+	enc_pr(LOG_DEBUG, "vpu_release_dma_buffers\n");
+	list_for_each_entry_safe(pool, n, &s_dma_bufp_head, list) {
+		if (pool->filp == filp) {
+			vb = pool->dma_cfg;
+			if (vb.attach) {
+				vpu_dma_buffer_unmap(&vb);
+				spin_lock(&s_dma_buf_lock);
+				list_del(&pool->list);
+				spin_unlock(&s_dma_buf_lock);
+				kfree(pool);
+			}
+		}
+	}
+	return 0;
 }
 
 static void hevcenc_isr_tasklet(ulong data)
@@ -430,14 +487,14 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	s_vpu_drv_context.open_count++;
 	if (s_vpu_drv_context.open_count == 1) {
 		alloc_buffer = true;
-	} else {
+	}/* else {
 		r = -EBUSY;
 		enc_pr(LOG_ERROR, "vpu_open, device is busy, s_vpu_drv_context.open_count=%d\n",
 				s_vpu_drv_context.open_count);
 		s_vpu_drv_context.open_count--;
 		spin_unlock(&s_vpu_lock);
 		return r;
-	}
+	}*/
 	filp->private_data = (void *)(&s_vpu_drv_context);
 	spin_unlock(&s_vpu_lock);
 	if (alloc_buffer && !use_reserve) {
@@ -777,8 +834,8 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 				spin_lock(&s_vpu_lock);
 				list_for_each_entry_safe(vbp, n,
 					&s_vbp_head, list) {
-					if ((compat_ulong_t)vbp->vb.base
-						== buf32.base) {
+					if ((compat_ulong_t)vbp->vb.phys_addr
+						== buf32.phys_addr) {
 						list_del(&vbp->list);
 						kfree(vbp);
 						break;
@@ -1438,6 +1495,156 @@ static long vpu_ioctl(struct file *filp, u32 cmd, ulong arg)
 				"[-]VDI_IOCTL_UNMAP_DMA\n");
 		}
 		break;
+
+	case VDI_IOCTL_CONFIG_MULTI_DMA:
+		{
+			struct vpu_multi_dma_buf_info_t dma_info;
+			enc_pr(LOG_ALL,
+				"[+]VDI_IOCTL_CONFIG_MULTI_DMA\n");
+
+			if (copy_from_user(&dma_info,
+				(struct vpu_multi_dma_buf_info_t *)arg,
+				sizeof(struct vpu_multi_dma_buf_info_t)))
+				return -EFAULT;
+			ret = down_interruptible(&s_vpu_sem);
+			if (ret != 0)
+				break;
+			if (vpu_multi_src_addr_config(&dma_info, filp)) {
+				up(&s_vpu_sem);
+				enc_pr(LOG_ERROR,
+						"src addr config error\n");
+				ret = -EFAULT;
+				break;
+			}
+			up(&s_vpu_sem);
+			ret = copy_to_user((void __user *)arg,
+				&dma_info,
+				sizeof(struct vpu_multi_dma_buf_info_t));
+			if (ret) {
+				ret = -EFAULT;
+				break;
+			}
+			enc_pr(LOG_ALL,
+				"[-]VDI_IOCTL_CONFIG_MULTI_DMA %d, %d, %d\n",
+				dma_info.fd[0],
+				dma_info.fd[1],
+				dma_info.fd[2]);
+		}
+		break;
+#ifdef CONFIG_COMPAT
+	case VDI_IOCTL_CONFIG_MULTI_DMA32:
+		{
+			struct vpu_multi_dma_buf_info_t dma_info;
+			struct compat_vpu_multi_dma_buf_info_t dma_info32;
+			enc_pr(LOG_ALL,
+				"[+]VDI_IOCTL_CONFIG_MULTI_DMA32\n");
+
+			if (copy_from_user(&dma_info32,
+				(struct compat_vpu_multi_dma_buf_info_t *)arg,
+				sizeof(struct compat_vpu_multi_dma_buf_info_t)))
+				return -EFAULT;
+			dma_info.num_planes = dma_info32.num_planes;
+			dma_info.fd[0] = (int) dma_info32.fd[0];
+			dma_info.fd[1] = (int) dma_info32.fd[1];
+			dma_info.fd[2] = (int) dma_info32.fd[2];
+			ret = down_interruptible(&s_vpu_sem);
+			if (ret != 0)
+				break;
+			if (vpu_multi_src_addr_config(&dma_info, filp)) {
+				up(&s_vpu_sem);
+				enc_pr(LOG_ERROR,
+						"src addr config error\n");
+				ret = -EFAULT;
+				break;
+			}
+			up(&s_vpu_sem);
+			dma_info32.phys_addr[0] =
+				(compat_ulong_t) dma_info.phys_addr[0];
+			dma_info32.phys_addr[1] =
+				(compat_ulong_t) dma_info.phys_addr[1];
+			dma_info32.phys_addr[2] =
+				(compat_ulong_t) dma_info.phys_addr[2];
+			ret = copy_to_user((void __user *)arg,
+				&dma_info32,
+				sizeof(struct compat_vpu_multi_dma_buf_info_t));
+			if (ret) {
+				ret = -EFAULT;
+				break;
+			}
+			enc_pr(LOG_ALL,
+				"[-]VDI_IOCTL_CONFIG_MULTI_DMA32 %d, %d, %d\n",
+				dma_info.fd[0],
+				dma_info.fd[1],
+				dma_info.fd[2]);
+		}
+		break;
+#endif
+	case VDI_IOCTL_UNMAP_MULTI_DMA:
+		{
+			struct vpu_multi_dma_buf_info_t dma_info;
+
+			enc_pr(LOG_ALL,
+				"[+]VDI_IOCTL_UNMAP_MULTI_DMA\n");
+
+			if (copy_from_user(&dma_info,
+				(struct vpu_multi_dma_buf_info_t *)arg,
+				sizeof(struct vpu_multi_dma_buf_info_t)))
+				return -EFAULT;
+			ret = down_interruptible(&s_vpu_sem);
+			if (ret != 0)
+				break;
+			if (vpu_multi_src_addr_unmap(&dma_info, filp)) {
+				up(&s_vpu_sem);
+				enc_pr(LOG_ERROR,
+					"dma addr unmap config error\n");
+				ret = -EFAULT;
+				break;
+			}
+			up(&s_vpu_sem);
+			enc_pr(LOG_ALL,
+				"[-]VDI_IOCTL_UNMAP_MULTI_DMA\n");
+		}
+		break;
+#ifdef CONFIG_COMPAT
+	case VDI_IOCTL_UNMAP_MULTI_DMA32:
+		{
+			struct vpu_multi_dma_buf_info_t dma_info;
+			struct compat_vpu_multi_dma_buf_info_t dma_info32;
+
+			enc_pr(LOG_ALL,
+				"[+]VDI_IOCTL_UNMAP_MULTI_DMA32\n");
+
+			if (copy_from_user(&dma_info32,
+				(struct compat_vpu_multi_dma_buf_info_t *)arg,
+				sizeof(struct compat_vpu_multi_dma_buf_info_t)))
+				return -EFAULT;
+			dma_info.num_planes = dma_info32.num_planes;
+			dma_info.fd[0] = (int) dma_info32.fd[0];
+			dma_info.fd[1] = (int) dma_info32.fd[1];
+			dma_info.fd[2] = (int) dma_info32.fd[2];
+			dma_info.phys_addr[0] =
+				(ulong) dma_info32.phys_addr[0];
+			dma_info.phys_addr[1] =
+				(ulong) dma_info32.phys_addr[1];
+			dma_info.phys_addr[2] =
+				(ulong) dma_info32.phys_addr[2];
+
+			ret = down_interruptible(&s_vpu_sem);
+			if (ret != 0)
+				break;
+			if (vpu_multi_src_addr_unmap(&dma_info, filp)) {
+				up(&s_vpu_sem);
+				enc_pr(LOG_ERROR,
+					"dma addr unmap config error\n");
+				ret = -EFAULT;
+				break;
+			}
+			up(&s_vpu_sem);
+			enc_pr(LOG_ALL,
+				"[-]VDI_IOCTL_UNMAP_MULTI_DMA32\n");
+		}
+		break;
+#endif
 	default:
 		{
 			enc_pr(LOG_ERROR,
@@ -1535,6 +1742,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 {
 	s32 ret = 0;
 	ulong flags;
+	u32 open_count;
 
 	enc_pr(LOG_DEBUG, "vpu_release, calling process: %d:%s\n", current->pid, current->comm);
 	ret = down_interruptible(&s_vpu_sem);
@@ -1552,6 +1760,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 
 	if (ret == 0) {
 		vpu_free_buffers(filp);
+		vpu_multi_dma_buf_release(filp);
 		vpu_free_instances(filp);
 
 		spin_lock(&s_vpu_lock);
@@ -1559,8 +1768,12 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 				s_vpu_drv_context.open_count);
 
 		s_vpu_drv_context.open_count--;
+		open_count = s_vpu_drv_context.open_count;
 		spin_unlock(&s_vpu_lock);
-		if (s_vpu_drv_context.open_count == 0) {
+
+		enc_pr(LOG_DEBUG, "open_count=%u\n", open_count);
+
+		if (open_count == 0) {
 			enc_pr(LOG_DEBUG,
 			       "vpu_release: s_interrupt_flag(%d), reason(0x%08lx)\n",
 			       s_interrupt_flag, s_vpu_drv_context.interrupt_reason);
@@ -1868,9 +2081,9 @@ static u32 vpu_src_addr_config(struct vpu_dma_buf_info_t info) {
 	enc_pr(LOG_INFO, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
 		phy_addr_y, phy_addr_u, phy_addr_v);
 
-	dma_cfg[0].paddr = (void *)phy_addr_y;
-	dma_cfg[1].paddr = (void *)phy_addr_u;
-	dma_cfg[2].paddr = (void *)phy_addr_v;
+	dma_cfg[0].paddr = phy_addr_y;
+	dma_cfg[1].paddr = phy_addr_u;
+	dma_cfg[2].paddr = phy_addr_v;
 
 	enc_pr(LOG_INFO, "info.num_planes %d, info.fmt %d\n",
 		info.num_planes, info.fmt);
@@ -1905,6 +2118,123 @@ static u32 vpu_src_addr_config(struct vpu_dma_buf_info_t info) {
 	}
 	return 0;
 
+}
+
+static u32 vpu_multi_src_addr_config(struct vpu_multi_dma_buf_info_t *pinfo,
+		struct file *filp)
+{
+	struct vpu_multi_dma_buf_pool_t *vbp;
+	unsigned long phy_addr;
+	struct vpu_dma_cfg *cfg;
+	s32 idx, ret = 0;
+	if (pinfo->num_planes == 0 || pinfo->num_planes > 3)
+		return -EFAULT;
+
+	for (idx = 0; idx < pinfo->num_planes; idx++)
+		pinfo->phys_addr[idx] = 0;
+	for (idx = 0; idx < pinfo->num_planes; idx++) {
+		vbp = kzalloc(sizeof(*vbp), GFP_KERNEL);
+		if (!vbp) {
+			ret = -ENOMEM;
+			break;
+		}
+		memset(vbp, 0, sizeof(struct vpu_multi_dma_buf_pool_t));
+		cfg = &vbp->dma_cfg;
+		cfg->dir = DMA_TO_DEVICE;
+		cfg->fd = pinfo->fd[idx];
+		cfg->dev = &(hevc_pdev->dev);
+		phy_addr = 0;
+		ret = vpu_dma_buffer_get_phys(cfg, &phy_addr);
+		if (ret < 0) {
+			enc_pr(LOG_ERROR, "import fd %d failed\n", cfg->fd);
+			kfree(vbp);
+			ret = -1;
+			break;
+		}
+		pinfo->phys_addr[idx] = (ulong) phy_addr;
+		vbp->filp = filp;
+		spin_lock(&s_dma_buf_lock);
+		list_add(&vbp->list, &s_dma_bufp_head);
+		spin_unlock(&s_dma_buf_lock);
+	}
+	enc_pr(LOG_INFO, "vpu_src_addr_config phy_addr 0x%lx, 0x%lx, 0x%lx\n",
+		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
+
+	return ret;
+}
+
+static s32 vpu_multi_src_addr_unmap(struct vpu_multi_dma_buf_info_t *pinfo,
+		struct file *filp)
+{
+	struct vpu_multi_dma_buf_pool_t *pool, *n;
+	struct vpu_dma_cfg vb;
+	ulong phys_addr;
+	s32 plane_idx = 0;
+	s32 ret = 0;
+	s32 found;
+
+	if (pinfo->num_planes == 0 || pinfo->num_planes > 3)
+		return -EFAULT;
+
+	enc_pr(LOG_INFO,
+		"dma_unmap planes %d fd: %d-%d-%d, phy_add: 0x%lx-%lx-%lx\n",
+		pinfo->num_planes, pinfo->fd[0],pinfo->fd[1], pinfo->fd[2],
+		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
+
+	list_for_each_entry_safe(pool, n, &s_dma_bufp_head, list) {
+		found = 0;
+		if (pool->filp == filp) {
+			vb = pool->dma_cfg;
+			phys_addr = vb.paddr;
+			if (vb.fd == pinfo->fd[0])
+			{
+				if (phys_addr != pinfo->phys_addr[0]) {
+					enc_pr(LOG_ERROR, "dma_unmap plane 0");
+					enc_pr(LOG_ERROR, " no match ");
+					enc_pr(LOG_ERROR, "0x%lx %lx\n",
+						phys_addr, pinfo->phys_addr[0]);
+				}
+				found = 1;
+				plane_idx++;
+			}
+			else if (vb.fd == pinfo->fd[1]
+				&& pinfo->num_planes > 1) {
+				if (phys_addr != pinfo->phys_addr[1]) {
+					enc_pr(LOG_ERROR, "dma_unmap plane 1");
+					enc_pr(LOG_ERROR, " no match ");
+					enc_pr(LOG_ERROR, "0x%lx %lx\n",
+						phys_addr, pinfo->phys_addr[1]);
+				}
+				plane_idx++;
+				found = 1;
+			}
+			else if (vb.fd == pinfo->fd[2]
+				&& pinfo->num_planes > 2) {
+				if (phys_addr != pinfo->phys_addr[2]) {
+					enc_pr(LOG_ERROR, "dma_unmap plane 2");
+					enc_pr(LOG_ERROR, " no match ");
+					enc_pr(LOG_ERROR, "0x%lx %lx\n",
+						phys_addr, pinfo->phys_addr[2]);
+				}
+				plane_idx++;
+				found = 1;
+			}
+			if (found && vb.attach) {
+				vpu_dma_buffer_unmap(&vb);
+				spin_lock(&s_dma_buf_lock);
+				list_del(&pool->list);
+				spin_unlock(&s_dma_buf_lock);
+				kfree(pool);
+			}
+		}
+	}
+
+	if (plane_idx != pinfo->num_planes) {
+		enc_pr(LOG_DEBUG, "dma_unmap fd planes not match\n");
+		enc_pr(LOG_DEBUG, " found %d need %d\n",
+		       plane_idx, pinfo->num_planes);
+	}
+	return ret;
 }
 
 static const struct file_operations vpu_fops = {

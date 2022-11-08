@@ -191,16 +191,39 @@ struct vpu_dma_cfg {
 	int fd;
 	void *dev;
 	void *vaddr;
-	void *paddr;
+	unsigned long paddr;
 	struct dma_buf *dbuf;
 	struct dma_buf_attachment *attach;
 	struct sg_table *sg;
 	enum dma_data_direction dir;
 };
 
+struct vpu_multi_dma_buf_info_t {
+    u32 num_planes;
+    s32 fd[3];
+    ulong phys_addr[3]; /* phys address for DMA buffer */
+};
+
+#ifdef CONFIG_COMPAT
+struct compat_vpu_multi_dma_buf_info_t {
+    u32 num_planes;
+    compat_int_t fd[3];
+    compat_ulong_t phys_addr[3]; /* phys address for DMA buffer */
+};
+#endif
+
+/* To track the occupied dma_buf  */
+struct vpu_multi_dma_buf_pool_t {
+    struct list_head list;
+    struct vpu_dma_cfg dma_cfg;
+    struct file *filp;
+};
+
 #define VPUDRV_BUF_LEN struct vpudrv_buffer_t
 #define VPUDRV_BUF_LEN32 struct compat_vpudrv_buffer_t
 #define VPUDRV_INST_LEN struct vpudrv_inst_info_t
+#define VPUDRV_DMABUF_MULTI_LEN struct vpu_multi_dma_buf_info_t
+#define VPUDRV_DMABUF_MULTI_LEN32 struct compat_vpu_multi_dma_buf_info_t
 
 #define VDI_MAGIC  'V'
 #define VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY \
@@ -248,6 +271,12 @@ struct vpu_dma_cfg {
 #define VDI_IOCTL_UNMAP_DMA \
         _IOW(VDI_MAGIC, 15, u32)
 
+#define VDI_IOCTL_CONFIG_MULTI_DMA \
+            _IOW(VDI_MAGIC, 16, VPUDRV_DMABUF_MULTI_LEN)
+
+#define VDI_IOCTL_UNMAP_MULTI_DMA \
+            _IOW(VDI_MAGIC, 17, VPUDRV_DMABUF_MULTI_LEN)
+
 #ifdef CONFIG_COMPAT
 #define VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY32 \
 	_IOW(VDI_MAGIC, 0, VPUDRV_BUF_LEN32)
@@ -269,6 +298,13 @@ struct vpu_dma_cfg {
 
 #define VDI_IOCTL_FLUSH_BUFFER32 \
 	_IOW(VDI_MAGIC, 13, VPUDRV_BUF_LEN32)
+
+#define VDI_IOCTL_CONFIG_MULTI_DMA32 \
+	_IOW(VDI_MAGIC, 16, VPUDRV_DMABUF_MULTI_LEN32)
+
+#define VDI_IOCTL_UNMAP_MULTI_DMA32 \
+	_IOW(VDI_MAGIC, 17, VPUDRV_DMABUF_MULTI_LEN32)
+
 #endif
 
 enum {
