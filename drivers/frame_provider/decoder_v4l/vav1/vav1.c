@@ -174,6 +174,7 @@
 #define AOM_AV1_FGS_PARAM_CONT               8
 #define AOM_AV1_DISCARD_NAL                  0x10
 #define AOM_AV1_RESULT_NEED_MORE_BUFFER      0x11
+#define DEC_RESULT_UNFINISH	        		 0x12
 
 /*status*/
 #define AOM_AV1_DEC_PIC_END                  0xe0
@@ -264,6 +265,8 @@ static unsigned int dw_mmu_enable[MAX_DECODE_INSTANCE_NUM];
 #endif
 
 static u32 decode_timeout_val = 600;
+static u32 enable_single_slice = 1;
+
 static int start_decode_buf_level = 0x8000;
 static u32 force_pts_unstable;
 static u32 mv_buf_margin = REF_FRAMES;
@@ -878,6 +881,9 @@ struct AV1HW_s {
 	int cur_idx;
 	struct afbc_buf  afbc_buf_table[BUF_FBC_NUM_MAX];
 	struct vdec_ge2d *ge2d;
+	u32 data_offset;
+	u32 data_invalid;
+	u32 consume_byte;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -8277,18 +8283,32 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			if (multi_frames_in_one_pack &&
 			hw->frame_decoded &&
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) < hw->data_size) {
-#ifdef DEBUG_CRC_ERROR
-				if ((crc_debug_flag & 0x40) && cm->cur_frame)
-					dump_mv_buffer(hw, &cm->cur_frame->buf);
+				if (enable_single_slice == 1) {
+					hw->consume_byte = READ_VREG(HEVC_SHIFT_BYTE_COUNT) - 4;
+					hw->dec_result = DEC_RESULT_UNFINISH;
+					amhevc_stop();
+#ifdef MCRCC_ENABLE
+					if (mcrcc_cache_alg_flag)
+						dump_hit_rate(hw);
 #endif
-				WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
-				av1_print(hw, AOM_DEBUG_HW_MORE,
-				"PIC_END, fgs_valid %d search head ...\n",
-				hw->fgs_valid);
-				if (hw->config_next_ref_info_flag)
-					config_next_ref_info_hw(hw);
-				ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+					vdec_schedule_work(&hw->work);
+				}else {
+#ifdef DEBUG_CRC_ERROR
+					if ((crc_debug_flag & 0x40) && cm->cur_frame)
+						dump_mv_buffer(hw, &cm->cur_frame->buf);
+#endif
+					WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
+					av1_print(hw, AOM_DEBUG_HW_MORE,
+						"PIC_END, fgs_valid %d search head ...\n",
+						hw->fgs_valid);
+					if (hw->config_next_ref_info_flag)
+						config_next_ref_info_hw(hw);
+					ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
+				}
 			} else {
+				hw->data_size = 0;
+				hw->data_offset = 0;
 #ifdef DEBUG_CRC_ERROR
 				if ((crc_debug_flag & 0x40) && cm->cur_frame)
 					dump_mv_buffer(hw, &cm->cur_frame->buf);
@@ -8818,11 +8838,11 @@ static void vav1_put_timer_func(struct timer_list *timer)
 		av1_print(hw, 0,
 			"%s: chunk size 0x%x off 0x%x sum 0x%x\n",
 			__func__,
-			hw->chunk->size,
-			hw->chunk->offset,
-			get_data_check_sum(hw, hw->chunk->size)
+			hw->data_size,
+			hw->data_offset,
+			get_data_check_sum(hw, hw->data_size)
 			);
-		dump_data(hw, hw->chunk->size);
+		dump_data(hw, hw->data_size);
 	}
 #endif
 	if (debug & AV1_DEBUG_DUMP_PIC_LIST) {
@@ -8997,9 +9017,9 @@ static void vav1_prot_init(struct AV1HW_s *hw, u32 mask)
 	WRITE_VREG(NAL_SEARCH_CTL, 0x8);
 
 	WRITE_VREG(DECODE_STOP_POS, udebug_flag);
-#if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
-	WRITE_VREG(HEVC_DBG_LOG_ADR, hw->ucode_log_phy_addr);
-#endif
+//#if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
+//	WRITE_VREG(HEVC_DBG_LOG_ADR, hw->ucode_log_phy_addr);
+//#endif
 }
 
 static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
@@ -9282,10 +9302,10 @@ static unsigned int get_data_check_sum
 
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
-			hw->chunk->offset, size);
+			hw->data_offset, size);
 	else
 		data = ((u8 *)hw->chunk->block->start_virt) +
-			hw->chunk->offset;
+			hw->data_offset;
 
 	sum = crc32_le(0, data, size);
 
@@ -9298,15 +9318,15 @@ static void dump_data(struct AV1HW_s *hw, int size)
 {
 	int jj;
 	u8 *data = NULL;
-	int padding_size = hw->chunk->offset &
+	int padding_size = hw->data_offset &
 		(VDEC_FIFO_ALIGN - 1);
 
 	if (!hw->chunk->block->is_mapped)
 		data = codec_mm_vmap(hw->chunk->block->start +
-			hw->chunk->offset, size);
+			hw->data_offset, size);
 	else
 		data = ((u8 *)hw->chunk->block->start_virt) +
-			hw->chunk->offset;
+			hw->data_offset;
 
 	av1_print(hw, 0, "padding: ");
 	for (jj = padding_size; jj > 0; jj--)
@@ -9496,10 +9516,10 @@ static void av1_work(struct work_struct *work)
 				);
 
 			if (debug & PRINT_FLAG_VDEC_DATA)
-				dump_data(hw, hw->chunk->size);
+				dump_data(hw, hw->data_size);
 
-			decode_size = hw->chunk->size +
-				(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+			decode_size = hw->data_size +
+				(hw->data_offset & (VDEC_FIFO_ALIGN - 1));
 
 			WRITE_VREG(HEVC_DECODE_SIZE,
 				READ_VREG(HEVC_DECODE_SIZE) + decode_size);
@@ -9591,8 +9611,23 @@ static void av1_work(struct work_struct *work)
 			hw->start_shift_bytes
 			);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
-	}
+	} else if (hw->dec_result == DEC_RESULT_UNFINISH) {
+		hw->result_done_count++;
+		hw->process_state = PROC_STATE_INIT;
 
+		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
+			"%s (===> %d) dec_result %d (%d) %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
+			__func__,
+			hw->frame_count,
+			hw->dec_result,
+			hw->result_done_count,
+			READ_VREG(HEVC_STREAM_LEVEL),
+			READ_VREG(HEVC_STREAM_WR_PTR),
+			READ_VREG(HEVC_STREAM_RD_PTR),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
+			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
+		amhevc_stop();
+	}
 	if (hw->stat & STAT_VDEC_RUN) {
 		amhevc_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
@@ -9926,17 +9961,42 @@ static void run_front(struct vdec_s *vdec)
 	run_count[hw->index]++;
 	hevc_reset_core(vdec);
 
-	size = vdec_prepare_input(vdec, &hw->chunk);
-	if (size < 0) {
-		input_empty[hw->index]++;
+	if ((vdec_frame_based(vdec)) &&
+		(hw->dec_result == DEC_RESULT_UNFINISH)) {
+		u32 res_byte = hw->data_size - hw->consume_byte;
 
-		hw->dec_result = DEC_RESULT_AGAIN;
+		av1_print(hw, AV1_DEBUG_BUFMGR,
+			"%s before, consume 0x%x, size 0x%x, offset 0x%x, res 0x%x\n", __func__,
+			hw->consume_byte, hw->data_size, hw->data_offset + hw->consume_byte, res_byte);
 
-		av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
-			"ammvdec_av1: Insufficient data\n");
+		hw->data_invalid = vdec_offset_prepare_input(vdec, hw->consume_byte, hw->data_offset, hw->data_size);
+		hw->data_offset -= (hw->data_invalid - hw->consume_byte);
+		hw->data_size += (hw->data_invalid - hw->consume_byte);
+		size = hw->data_size;
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, hw->data_invalid);
 
-		vdec_schedule_work(&hw->work);
-		return;
+		av1_print(hw, AV1_DEBUG_BUFMGR,
+			"%s after, consume 0x%x, size 0x%x, offset 0x%x, invalid 0x%x, res 0x%x\n", __func__,
+			hw->consume_byte, hw->data_size, hw->data_offset, hw->data_invalid, res_byte);
+	} else {
+		size = vdec_prepare_input(vdec, &hw->chunk);
+		if (size < 0) {
+			input_empty[hw->index]++;
+
+			hw->dec_result = DEC_RESULT_AGAIN;
+
+			av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
+				"ammvdec_av1: Insufficient data\n");
+
+			vdec_schedule_work(&hw->work);
+			return;
+		}
+		if ((vdec_frame_based(vdec)) &&
+			(hw->chunk != NULL)) {
+			hw->data_offset = hw->chunk->offset;
+			hw->data_size = size;
+		}
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_C, 0);
 	}
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, size);
@@ -9952,10 +10012,10 @@ static void run_front(struct vdec_s *vdec)
 
 			if (!hw->chunk->block->is_mapped)
 				data = codec_mm_vmap(hw->chunk->block->start +
-					hw->chunk->offset, size);
+					hw->data_offset, size);
 			else
 				data = ((u8 *)hw->chunk->block->start_virt) +
-					hw->chunk->offset;
+					hw->data_offset;
 
 			//print_hex_debug(data, size, size > 64 ? 64 : size);
 			av1_print(hw, 0,
@@ -9967,7 +10027,7 @@ static void run_front(struct vdec_s *vdec)
 				data[size - 1]);
 			av1_print(hw, 0,
 				"%s frm cnt (%d): chunk (0x%x 0x%x) (%x %x %x %x %x) bytes 0x%x\n",
-				__func__, hw->frame_count, hw->chunk->size, hw->chunk->offset,
+				__func__, hw->frame_count, hw->data_size, hw->data_offset,
 				READ_VREG(HEVC_STREAM_START_ADDR),
 				READ_VREG(HEVC_STREAM_END_ADDR),
 				READ_VREG(HEVC_STREAM_LEVEL),
@@ -9982,8 +10042,8 @@ static void run_front(struct vdec_s *vdec)
 				"%s (%d): size 0x%x (0x%x 0x%x) (%x %x %x %x %x) bytes 0x%x\n",
 				__func__,
 				hw->frame_count, size,
-				hw->chunk ? hw->chunk->size : 0,
-				hw->chunk ? hw->chunk->offset : 0,
+				hw->chunk ? hw->data_size : 0,
+				hw->chunk ? hw->data_offset : 0,
 				READ_VREG(HEVC_STREAM_START_ADDR),
 				READ_VREG(HEVC_STREAM_END_ADDR),
 				READ_VREG(HEVC_STREAM_LEVEL),
@@ -10034,14 +10094,13 @@ static void run_front(struct vdec_s *vdec)
 
 	if (vdec_frame_based(vdec)) {
 		if (debug & PRINT_FLAG_VDEC_DATA)
-			dump_data(hw, hw->chunk->size);
+			dump_data(hw, hw->data_size);
 
 		WRITE_VREG(HEVC_SHIFT_BYTE_COUNT, 0);
-		size = hw->chunk->size +
-			(hw->chunk->offset & (VDEC_FIFO_ALIGN - 1));
+		size = hw->data_size +
+			(hw->data_offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
-			vdec->mvfrm->frame_size = hw->chunk->size;
-		ctx->current_timestamp = hw->chunk->timestamp;
+			vdec->mvfrm->frame_size = hw->data_size;
 	}
 	hw->data_size = size;
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
@@ -10135,6 +10194,7 @@ static void  av1_decode_ctx_reset(struct AV1HW_s *hw)
 	hw->frame_decoded	= 0;
 	hw->eos			= false;
 	hw->aml_buf		= NULL;
+	hw->dec_result = DEC_RESULT_NONE;
 }
 
 static void reset(struct vdec_s *vdec)
@@ -10297,21 +10357,21 @@ static void av1_dump_state(struct vdec_s *vdec)
 	if (input_frame_based(vdec) && (debug & PRINT_FLAG_VDEC_DATA)) {
 		int jj;
 		if (hw->chunk && hw->chunk->block &&
-			hw->chunk->size > 0) {
+			hw->data_size > 0) {
 			u8 *data = NULL;
 
 			if (!hw->chunk->block->is_mapped)
 				data = codec_mm_vmap(
 					hw->chunk->block->start +
-					hw->chunk->offset,
-					hw->chunk->size);
+					hw->data_offset,
+					hw->data_size);
 			else
 				data = ((u8 *)hw->chunk->block->start_virt)
-					+ hw->chunk->offset;
+					+ hw->data_offset;
 			av1_print(hw, 0,
 				"frame data size 0x%x\n",
-				hw->chunk->size);
-			for (jj = 0; jj < hw->chunk->size; jj++) {
+				hw->data_size);
+			for (jj = 0; jj < hw->data_size; jj++) {
 				if ((jj & 0xf) == 0)
 					av1_print(hw, 0,
 						"%06x:", jj);
@@ -11170,6 +11230,10 @@ MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");
 
 module_param(v4l_bitstream_id_enable, uint, 0664);
 MODULE_PARM_DESC(v4l_bitstream_id_enable, "\n v4l_bitstream_id_enable\n");
+
+module_param(enable_single_slice, uint, 0664);
+MODULE_PARM_DESC(enable_single_slice, "\n  enable_single_slice\n");
+
 
 module_init(amvdec_av1_driver_init_module);
 module_exit(amvdec_av1_driver_remove_module);

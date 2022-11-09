@@ -213,6 +213,12 @@ static const struct vframe_operations_s vh265_vf_provider = {
 
 static struct vframe_provider_s vh265_vf_prov;
 
+//0.3.42-g8104942
+#define UCODE_SWAP_VERSION 3
+#define UCODE_SWAP_SUBMIT_COUNT 42
+
+
+static u32 enable_swap = 1;
 static u32 bit_depth_luma;
 static u32 bit_depth_chroma;
 static u32 video_signal_type;
@@ -2150,6 +2156,7 @@ struct hevc_state_s {
 	char *hdr10p_data_buf[BUF_POOL_SIZE];
 	int crop_w;
 	int crop_h;
+	bool enable_ucode_swap;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -7402,7 +7409,7 @@ static void hevc_local_uninit(struct hevc_state_s *hevc)
 	hevc->lmem_ptr = NULL;
 
 #ifdef SWAP_HEVC_UCODE
-	if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {
+	if (hevc->is_swap) {
 		if (hevc->mc_cpu_addr != NULL) {
 			dma_free_coherent(amports_get_dma_device(),
 				hevc->swap_size, hevc->mc_cpu_addr,
@@ -8048,15 +8055,18 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #else
 		ATRACE_COUNTER(hevc->trace.get_canvas0_addr, vf->canvas0Addr);
 #endif
+		if (hevc->discard_dv_data || (vdec_stream_based(vdec) && (vf->type & VIDTYPE_INTERLACE))) {
+			vf->discard_dv_data = true;
+		}
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT) {
 			hevc_print(hevc, 0,
-				"%s(vf 0x%p type %d index 0x%x poc %d/%d) pts(%d,%d) dur %d\n",
+				"%s(vf 0x%p type %x index 0x%x poc %d/%d) pts(%d,%d) dur %d, discard_dv:%d\n",
 				__func__, vf, vf->type, vf->index,
 				get_pic_poc(hevc, vf->index & 0xff),
 				get_pic_poc(hevc, (vf->index >> 8) & 0xff),
 				vf->pts, vf->pts_us64,
-				vf->duration);
+				vf->duration, vf->discard_dv_data);
 #ifdef MULTI_INSTANCE_SUPPORT
 			hevc_print(hevc, 0, "get canvas0 addr:0x%x\n", vf->canvas0_config[0].phy_addr);
 #else
@@ -8236,6 +8246,10 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 		unsigned char index;
 
 		if (!req->vf) {
+			req->aux_size = atomic_read(&hevc->vf_put_count);
+			return 0;
+		}
+		if (req->vf->discard_dv_data) {
 			req->aux_size = atomic_read(&hevc->vf_put_count);
 			return 0;
 		}
@@ -8794,9 +8808,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
 		set_frame_info(hevc, vf, pic);
-		if (hevc->discard_dv_data) {
-			vf->discard_dv_data = true;
-		}
 
 		if (hevc->high_bandwidth_flag) {
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
@@ -9487,8 +9498,7 @@ static int hevc_recover(struct hevc_state_s *hevc)
 		   READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap &&
-		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {
+	if (!tee_enabled() && hevc->is_swap) {
 		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 	}
 #endif
@@ -9856,6 +9866,16 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		if (hevc->m_ins_flag) {
 			read_decode_info(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc))) {
+				/* Ucode multiplexes HEVC_ASSIST_SCRATCH_4 to output dual layer flags.
+				 * In the decoder driver, the bit0 of the register is read to
+				 * determine whether the DV stream is a dual layer stream
+				 */
+				bool dv_duallayer = READ_VREG(HEVC_ASSIST_SCRATCH_4) & 0x1;
+				if ((!hevc->discard_dv_data) && (!hevc->dv_duallayer)
+					&& (dv_duallayer)) {
+					hevc->dv_duallayer = true;
+					hevc_print(hevc, 0, "dv dual layer\n");
+				}
 				hevc->empty_flag = 1;
 				/*suffix sei or dv meta*/
 				set_aux_data(hevc, hevc->cur_pic, 1, 0);
@@ -11250,8 +11270,7 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 	config_decode_mode(hevc);
 	config_aux_buf(hevc);
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap &&
-		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {
+	if (!tee_enabled() && hevc->is_swap) {
 		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 		/*pr_info("write swap buffer %x\n", (u32)(hevc->mc_dma_handle));*/
 	}
@@ -11373,28 +11392,39 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	INIT_WORK(&hevc->notify_work, vh265_notify_work);
 	INIT_WORK(&hevc->set_clk_work, vh265_set_clk);
 
+	if ((get_decoder_firmware_version() <= UCODE_SWAP_VERSION) &&
+		(get_decoder_firmware_submit_count() < UCODE_SWAP_SUBMIT_COUNT)) {
+		hevc->enable_ucode_swap = false;
+		if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) && (!hevc->is_4k)) {
+			hevc->enable_ucode_swap = true;
+		}
+	} else {
+		if (enable_swap)
+			hevc->enable_ucode_swap = true;
+		else
+			hevc->enable_ucode_swap = false;
+	}
+
+	pr_debug("ucode version %d.%d, swap enable %d\n",
+		get_decoder_firmware_version(), get_decoder_firmware_submit_count(),
+		hevc->enable_ucode_swap);
+
 	fw = vzalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))
 		return -ENOMEM;
 
 	if (hevc->mmu_enable) {
-		if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_GXM)
+		if (hevc->enable_ucode_swap) {
+			size = get_firmware_data(VIDEO_DEC_HEVC_MMU_SWAP, fw->data);
+			if (size < 0) {
+				pr_info("hevc can not get swap fw code\n");
+				size = get_firmware_data(VIDEO_DEC_HEVC_MMU, fw->data);
+				hevc->enable_ucode_swap = false;
+				hevc->is_swap = false;
+			} else if (size)
+				hevc->is_swap = true;	//local fw swap
+		} else {
 			size = get_firmware_data(VIDEO_DEC_HEVC_MMU, fw->data);
-		else {
-			if (!hevc->is_4k) {
-				/* if an older version of the fw was loaded, */
-				/* needs try to load noswap fw because the */
-				/* old fw package dose not contain the swap fw.*/
-				size = get_firmware_data(
-					VIDEO_DEC_HEVC_MMU_SWAP, fw->data);
-				if (size < 0)
-					size = get_firmware_data(
-						VIDEO_DEC_HEVC_MMU, fw->data);
-				else if (size)
-					hevc->is_swap = true;
-			} else
-				size = get_firmware_data(VIDEO_DEC_HEVC_MMU,
-					fw->data);
 		}
 	} else
 		size = get_firmware_data(VIDEO_DEC_HEVC, fw->data);
@@ -11408,8 +11438,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	fw->len = size;
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap &&
-		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {
+	if (!tee_enabled() && hevc->is_swap) {
 		if (hevc->mmu_enable) {
 			hevc->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
 			hevc->mc_cpu_addr =
@@ -11443,23 +11472,17 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 #endif
 	amhevc_enable();
 
-	if (hevc->mmu_enable)
-		if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_GXM)
-			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
-		else {
-			if (!hevc->is_4k) {
-				/* if an older version of the fw was loaded, */
-				/* needs try to load noswap fw because the */
-				/* old fw package dose not contain the swap fw. */
-				ret = amhevc_loadmc_ex(VFORMAT_HEVC, "hevc_mmu_swap", fw->data);
-				if (ret < 0)
-					ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
-				else
-					hevc->is_swap = true;
-			} else
+	if (hevc->mmu_enable) {
+		if (hevc->enable_ucode_swap) {
+			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "hevc_mmu_swap", fw->data);
+			if (ret < 0)
 				ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
+			else
+				hevc->is_swap = true;
+		} else {
+			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
 		}
-	else
+	} else
 		ret = amhevc_loadmc_ex(VFORMAT_HEVC, NULL, fw->data);
 
 	if (ret < 0) {
@@ -11475,8 +11498,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	hevc->stat |= STAT_MC_LOAD;
 
 #ifdef DETREFILL_ENABLE
-	if (hevc->is_swap &&
-		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
+	if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 		init_detrefill_buf(hevc);
 #endif
 	/* enable AMRISC side protocol */
@@ -11545,8 +11567,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	}
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap &&
-		get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM) {
+	if (!tee_enabled() && hevc->is_swap) {
 		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 	}
 #endif
@@ -12855,33 +12876,21 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		  and not changes to another.
 		  ignore reload.
 		*/
-		if (tee_enabled() && hevc->is_swap &&
-			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
+		if (tee_enabled() && hevc->is_swap)
 			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
 	} else {
 		if (hevc->mmu_enable) {
-			if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_GXM)
+			if (hevc->enable_ucode_swap) {
 				loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
+						"hevc_mmu_swap", hevc->fw->data);
+				if (loadr < 0) {
+					loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
 						"h265_mmu", hevc->fw->data);
-			else {
-				if (!hevc->is_4k) {
-					/* if an older version of the fw was loaded, */
-					/* needs try to load noswap fw because the */
-					/* old fw package dose not contain the swap fw.*/
-					loadr = amhevc_vdec_loadmc_ex(
-						VFORMAT_HEVC, vdec,
-						"hevc_mmu_swap",
-						hevc->fw->data);
-					if (loadr < 0)
-						loadr = amhevc_vdec_loadmc_ex(
-							VFORMAT_HEVC, vdec,
-							"h265_mmu",
-							hevc->fw->data);
-					else
-						hevc->is_swap = true;
+					hevc->enable_ucode_swap = false;
 				} else
-					loadr = amhevc_vdec_loadmc_ex(
-						VFORMAT_HEVC, vdec,
+					hevc->is_swap = true;
+			} else {
+				loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
 						"h265_mmu", hevc->fw->data);
 			}
 		} else
@@ -12897,12 +12906,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			return;
 		}
 
-		if (tee_enabled() && hevc->is_swap &&
-			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
+		if (tee_enabled() && hevc->is_swap)
 			hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
 #ifdef DETREFILL_ENABLE
-		if (hevc->is_swap &&
-			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
+		if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 			init_detrefill_buf(hevc);
 #endif
 		vdec->mc_loaded = 1;
@@ -14325,6 +14332,9 @@ MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
 
 module_param(udebug_pause_pos, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_pos, "\n udebug_pause_pos\n");
+
+module_param(enable_swap, uint, 0664);
+MODULE_PARM_DESC(enable_swap, "\n enable_swap\n");
 
 module_param(udebug_pause_val, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_val, "\n udebug_pause_val\n");
