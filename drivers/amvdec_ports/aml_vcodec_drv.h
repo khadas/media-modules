@@ -788,6 +788,7 @@ struct aml_vcodec_ctx {
 	bool			force_recycle;
 
 	struct vdec_trace		vtr;
+	int dv_id;
 };
 
 /**

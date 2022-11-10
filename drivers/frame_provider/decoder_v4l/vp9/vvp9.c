@@ -7194,6 +7194,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 
 		aml_buf = index_to_aml_buf(pbi, pic_config->v4l_buf_index);
 		vf->v4l_mem_handle = (ulong)aml_buf;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 
 		if (!aml_buf) {
 			kfifo_put(&pbi->newframe_q, (const struct vframe_s *)vf);

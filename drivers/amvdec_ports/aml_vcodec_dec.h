@@ -71,8 +71,8 @@ struct file_private_data {
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
 #define META_DATA_SIZE			(256)
-#define MD_BUF_SIZE			(1024)
-#define COMP_BUF_SIZE			(8196)
+//#define MD_BUF_SIZE			(1024)
+//#define COMP_BUF_SIZE			(8196)
 #define SEI_BUF_SIZE			(2 * 12 * 1024)
 #define HDR10P_BUF_SIZE			(128)
 

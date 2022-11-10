@@ -6008,6 +6008,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		aml_buf = index_to_aml_buf(hw, pic_config->v4l_buf_index);
 		vf->v4l_mem_handle = (ulong)aml_buf;
+		vf->src_fmt.dv_id = v4l2_ctx->dv_id;
 
 		av1_print(hw, AOM_DEBUG_VFRAME,
 			"%s: pic index %d fb: 0x%lx\n",
