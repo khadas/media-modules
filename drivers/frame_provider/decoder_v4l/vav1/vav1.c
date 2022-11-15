@@ -5523,7 +5523,8 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 			alloc_num = FRAME_BUFFERS;
 		}
 		hw->fg_addr = codec_mm_dma_alloc_coherent(&hw->fg_table_handle,
@@ -5537,7 +5538,8 @@ static int av1_local_init(struct AV1HW_s *hw, bool reset_flag)
 	}
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		cur_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
 	}
 
@@ -8022,7 +8024,8 @@ static int work_space_size_update(struct AV1HW_s *hw)
 			init_buff_spec(hw, p_buf_info);
 			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W))
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
 				p_buf_info->fgs_table.buf_start = hw->fg_phy_addr;
 			hw->work_space_buf = p_buf_info;
 			hw->pbi->work_space_buf = p_buf_info;

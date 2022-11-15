@@ -120,6 +120,10 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.chip_id = AM_MESON_CPU_MAJOR_ID_S5,
 		.reg_compat = s5_mm_registers_compat,
 	},
+	[AM_MESON_CPU_MAJOR_ID_T5M - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T5M,
+		.reg_compat = NULL,
+	},
 };
 
 static const struct of_device_id cpu_ver_of_match[] = {
@@ -205,6 +209,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-s5",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S5 - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-t5m",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_T5M - MAJOR_ID_START],
 	},
 	{},
 };

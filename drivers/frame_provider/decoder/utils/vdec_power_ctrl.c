@@ -83,6 +83,11 @@ static void pm_vdec_power_switch(struct pm_pd_s *pd, int id, bool on)
 {
 	struct device *dev = pd[id].dev;
 
+	if (dev == NULL) {
+		pr_debug("no dev %d, maybe always on\n", id);
+		return;
+	}
+
 	if (on)
 		pm_runtime_get_sync(dev);
 	else
@@ -150,7 +155,8 @@ static void pm_vdec_clock_on(int id)
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2 &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M))
 			amports_switch_gate("clk_hevcf_mux", 1);
 		else
 			amports_switch_gate("clk_hevc_mux", 1);
@@ -186,18 +192,6 @@ static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 
 	pm_vdec_clock_on(id);
 	pm_vdec_power_switch(pm->pd_data, id, true);
-	// debug s5, remove after pd done?
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
-		/* vdec mem pd */
-		pr_info("DOS_MEM_PD_VDEC %x\n", DOS_MEM_PD_VDEC);
-		WRITE_VREG(DOS_MEM_PD_VDEC, 0);
-		/* hevc mem pd */
-		pr_info("DOS_MEM_PD_HEVC %x\n", DOS_MEM_PD_HEVC);
-		WRITE_VREG(DOS_MEM_PD_HEVC, 0);
-		pr_info("DOS_MEM_PD_HEVC_DBE %x\n", DOS_MEM_PD_HEVC_DBE);
-		WRITE_VREG(DOS_MEM_PD_HEVC_DBE, 0);
-		pr_info("--->s5 MEM PD set enable id %d\n", id);
-	}
 }
 
 static void pm_vdec_power_domain_power_off(struct device *dev, int id)
@@ -211,6 +205,10 @@ static void pm_vdec_power_domain_power_off(struct device *dev, int id)
 static bool pm_vdec_power_domain_power_state(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
+
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) && (id == VDEC_1)) {
+		return 0;
+	}
 
 	return pm_runtime_active(pm->pd_data[id].dev);
 }

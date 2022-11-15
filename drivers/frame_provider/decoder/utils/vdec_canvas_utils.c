@@ -42,7 +42,8 @@ bool is_support_vdec_canvas(void)
 	*/
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
 		return true;
 	return false;
 }

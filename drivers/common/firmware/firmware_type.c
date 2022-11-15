@@ -83,6 +83,7 @@ static const struct cpu_type_s cpu_type[] = {
 	{AM_MESON_CPU_MAJOR_ID_T3,	"t3"},
 	{AM_MESON_CPU_MAJOR_ID_P1,	"p1"},
 	{AM_MESON_CPU_MAJOR_ID_S4D,	"s4d"},
+	{AM_MESON_CPU_MAJOR_ID_T5M,	"t5m"},
 };
 
 const char *get_fw_format_name(unsigned int format)

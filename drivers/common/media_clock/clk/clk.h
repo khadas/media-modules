@@ -23,6 +23,7 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/clk/clk-conf.h>
 #include "clk_priv.h"
 #include <linux/amlogic/media/clk/gp_pll.h>
 
@@ -132,8 +133,12 @@ static int __init vdec_init_clk(void)
 
 	pdev = initial_dos_device();
 
-	if (is_support_new_dos_dev())
+	if (is_support_new_dos_dev()) {
+		/* set clock parent as dos dev node */
+		of_clk_set_defaults(pdev->dev.of_node, false);
+
 		amports_clock_gate_init(&pdev->dev);
+	}
 
 	register_vdec_clk_mgr(cpus, VDEC_1, &vdec_clk_mgr);
 #ifdef VDEC_HAS_VDEC2
