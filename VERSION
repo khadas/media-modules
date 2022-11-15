@@ -1,9 +1,13 @@
 Major_V=6
-Minor_V=1
-BaseChangeId=I105b34640d3117394ca3fbfc439378cafbf22d70
+Minor_V=2
+BaseChangeId=I4fbaec8fca500961bea8776fdbb2174524563da7
 
 
 #history version
+#V6.1 Release Notes
+#Release_ChangeId_V6_1=I0d3c81da04b619ca6cd71b5f0263a5adf694d13c
+#Support T7C, T3 
+#Support new DOS Reg management
 #V6.0 Release Notes
 #Release_ChangeId_V6_0=Ie5dd8015a9663f3be43a0867348b70812bdfb25e
 #Support DMABUF heap Feature
