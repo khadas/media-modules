@@ -393,7 +393,6 @@ struct vdec_avs_hw_s {
 	u32 next_pts;
 	unsigned char throw_pb_flag;
 	struct pic_pts_s pic_pts[PIC_PTS_NUM];
-	int pic_pts_wr_pos;
 
 #ifdef DEBUG_PTS
 	u32 pts_hit;
@@ -977,28 +976,29 @@ static void avs_pts_check_in(struct vdec_avs_hw_s *hw,
 {
 	if (chunk)
 		debug_print(hw, PRINT_FLAG_PTS,
-			"%s %d (wr pos %d), pts %d pts64 %ld timestamp %ld\n",
-			__func__, decode_pic_count, hw->pic_pts_wr_pos,
+			"%s %d (buffer index %d), pts %d pts64 %ld timestamp %ld\n",
+			__func__, decode_pic_count, hw->decoding_index,
 			chunk->pts, (u64)(chunk->pts64), (u64)(chunk->timestamp));
 	else
 		debug_print(hw, PRINT_FLAG_PTS,
 			"%s %d, chunk is null\n",
 			__func__, decode_pic_count);
 
-	if (chunk) {
-		hw->pic_pts[hw->pic_pts_wr_pos].pts = chunk->pts;
-		hw->pic_pts[hw->pic_pts_wr_pos].pts64 = chunk->pts64;
-		hw->pic_pts[hw->pic_pts_wr_pos].timestamp = chunk->timestamp;
-	} else {
-		hw->pic_pts[hw->pic_pts_wr_pos].pts = 0;
-		hw->pic_pts[hw->pic_pts_wr_pos].pts64 = 0;
-		hw->pic_pts[hw->pic_pts_wr_pos].timestamp = 0;
+	if (hw->decoding_index != INVALID_IDX) {
+		if (chunk) {
+			hw->pic_pts[hw->decoding_index].pts = chunk->pts;
+			hw->pic_pts[hw->decoding_index].pts64 = chunk->pts64;
+			hw->pic_pts[hw->decoding_index].timestamp = chunk->timestamp;
+		} else {
+			hw->pic_pts[hw->decoding_index].pts = 0;
+			hw->pic_pts[hw->decoding_index].pts64 = 0;
+			hw->pic_pts[hw->decoding_index].timestamp = 0;
+		}
+
+		hw->pic_pts[hw->decoding_index].decode_pic_count
+				= decode_pic_count;
 	}
-	hw->pic_pts[hw->pic_pts_wr_pos].decode_pic_count
-		= decode_pic_count;
-	hw->pic_pts_wr_pos++;
-	if (hw->pic_pts_wr_pos >= PIC_PTS_NUM)
-		hw->pic_pts_wr_pos = 0;
+
 	return;
 }
 
@@ -1006,12 +1006,11 @@ static void clear_pts_buf(struct vdec_avs_hw_s *hw)
 {
 	int i;
 	debug_print(hw, PRINT_FLAG_PTS, "%s\n",	__func__);
-	hw->pic_pts_wr_pos = 0;
-	for (i = 0; i < PIC_PTS_NUM; i++) {
-		hw->pic_pts[hw->pic_pts_wr_pos].pts = 0;
-		hw->pic_pts[hw->pic_pts_wr_pos].pts64 = 0;
-		hw->pic_pts[hw->pic_pts_wr_pos].timestamp = 0;
-		hw->pic_pts[hw->pic_pts_wr_pos].decode_pic_count = 0;
+	for (i = 0; i < hw->vf_buf_num_used; i++) {
+		hw->pic_pts[hw->decoding_index].pts = 0;
+		hw->pic_pts[hw->decoding_index].pts64 = 0;
+		hw->pic_pts[hw->decoding_index].timestamp = 0;
+		hw->pic_pts[hw->decoding_index].decode_pic_count = 0;
 	}
 }
 
@@ -3268,7 +3267,6 @@ void (*callback)(struct vdec_s *, void *),
 		avs_pts_check_in(hw,
 			hw->decode_pic_count & 0xffff,
 			hw->chunk);
-
 		WRITE_VREG(DECODE_STATUS,
 			(hw->decode_pic_count & 0xffff) |
 			((~hw->buf_recycle_status) << 16));
@@ -3917,6 +3915,13 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 			debug_print(hw, PRINT_FLAG_DECODING,
 				"READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
 
+			if ((dec_control & DEC_CONTROL_FLAG_FORCE_2500_1080P_INTERLACE)
+				&& hw->frame_width == 1920 && hw->frame_height == 1080) {
+					hw->interlace_flag = true;
+					debug_print(hw, PRINT_FLAG_DECODING,
+						"force interlace!\n");
+			}
+
 			if (!v4l_res_change(hw)) {
 				if (ctx->param_sets_from_ucode && !hw->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
@@ -4016,11 +4021,6 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					hw->pts_i_hit++;
 			}
 #endif
-			if (hw->chunk) {
-				hw->pic_pts[hw->decoding_index].pts = hw->chunk->pts;
-				hw->pic_pts[hw->decoding_index].pts64 = hw->chunk->pts64;
-				hw->pic_pts[hw->decoding_index].timestamp = hw->chunk->timestamp;
-			}
 			hw->res_ch_flag = 0;
 			if (hw->throw_pb_flag && picture_type != I_PICTURE) {
 				debug_print(hw, PRINT_FLAG_DECODING,

@@ -858,7 +858,6 @@ struct vdec_h264_hw_s {
 	u32 cfg_param2;
 	u32 cfg_param3;
 	u32 cfg_param4;
-	u32 cfg_bitstream_restriction_flag;
 	int valve_count;
 	u8 next_again_flag;
 	u32 pre_parser_wr_ptr;
@@ -5179,7 +5178,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->dpb.reorder_output = max_reference_size;
 
 		hw->cfg_param1 = param1;
-		hw->cfg_bitstream_restriction_flag = hw->bitstream_restriction_flag;
 
 		hw->seq_info2 = seq_info2;
 		hw->seq_info3 = seq_info3;
@@ -9045,15 +9043,14 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 			vdec_v4l_res_ch_event(ctx);
 			hw->res_ch_flag = 1;
 			ctx->v4l_resolution_change = 1;
-			hw->bitstream_restriction_flag = hw->cfg_bitstream_restriction_flag; // restore the old value when v4l res change
 			amvdec_stop();
 			if (hw->mmu_enable)
 				amhevc_stop();
 			hw->eos = 1;
 			flush_dpb(p_H264_Dpb);
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", __LINE__);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, __LINE__);
 			notify_v4l_eos(hw_to_vdec(hw));
-			ATRACE_COUNTER("V_ST_DEC-submit_eos", 0);
+			vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_4, 0);
 			ret = 1;
 		}
 	}

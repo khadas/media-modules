@@ -1092,7 +1092,7 @@ static int get_double_write_mode_init(struct AV1HW_s *hw)
 static u32 use_sfgs;
 module_param(use_sfgs, uint, 0664);
 
-void film_grain_task_wakeup(struct AV1HW_s *hw)
+static void film_grain_task_wakeup(struct AV1HW_s *hw)
 {
 	u32 fg_reg0, fg_reg1, num_y_points, num_cb_points, num_cr_points;
 	struct AV1_Common_s *cm = &hw->common;
@@ -1124,7 +1124,6 @@ void film_grain_task_wakeup(struct AV1HW_s *hw)
 		}
 	}
 }
-EXPORT_SYMBOL(film_grain_task_wakeup);
 
 static int film_grain_task(void *args)
 {
@@ -3054,11 +3053,15 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 		pic->fgs_table_adr = hw->fg_phy_addr;
 		pr_info("set buffer %d film grain table 0x%x\n",
 			pic->index, pic->fgs_table_adr);
-	} else
+		} else {
 #endif
-	pic->fgs_table_adr =
-		hw->work_space_buf->fgs_table.buf_start +
-		(pic->index * FGS_TABLE_SIZE);
+			if (hw->assist_task.use_sfgs) {
+				pic->sfgs_table_phy = hw->fg_phy_addr + (pic->index * FGS_TABLE_SIZE);
+				pic->sfgs_table_ptr = hw->fg_ptr + (pic->index * FGS_TABLE_SIZE);
+			}
+			pic->fgs_table_adr = hw->work_space_buf->fgs_table.buf_start +
+				(pic->index * FGS_TABLE_SIZE);
+		}
 
 	if (debug) {
 
@@ -10106,6 +10109,7 @@ static void run_front(struct vdec_s *vdec)
 			(hw->data_offset & (VDEC_FIFO_ALIGN - 1));
 		if (vdec->mvfrm)
 			vdec->mvfrm->frame_size = hw->data_size;
+		ctx->current_timestamp = hw->chunk->timestamp;
 	}
 	hw->data_size = size;
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
