@@ -7954,6 +7954,7 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 #endif
 		hevc->show_frame_num++;
 		vf->index_disp = atomic_read(&hevc->vf_get_count);
+		vf->omx_index = atomic_read(&hevc->vf_get_count);
 		atomic_add(1, &hevc->vf_get_count);
 
 		if (kfifo_peek(&hevc->display_q, &next_vf) && next_vf) {
@@ -8686,7 +8687,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					vf->width, vf->height, vf->compWidth, vf->compHeight);
 		}
 
-		vf->src_fmt.play_id = vdec->play_num;
+		vf->src_fmt.play_id = vdec->inst_cnt;
 
 		hevc->crop_w = vf->width;
 		hevc->crop_h = vf->height;
@@ -8987,9 +8988,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 
 		hevc_print(hevc, H265_DEBUG_PRINT_SEI,
-			"aux_data_size:%d signal_type:0x%x sei_present_flag:%d play_num:%d vf:%p\n",
+			"aux_data_size:%d signal_type:0x%x sei_present_flag:%d inst_cnt:%d vf:%p\n",
 			hevc->m_PIC[index]->aux_data_size, hevc->video_signal_type, hevc->sei_present_flag,
-			vdec->play_num, vf);
+			vdec->inst_cnt, vf);
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
 			int i = 0;
@@ -13116,7 +13117,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		hevc->i_only);
 
 	hevc_print(hevc, 0,
-		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
+		"is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d error_frame_count %d drop_frame_count %d\n",
 		input_frame_based(vdec),
 		hevc->eos,
 		hevc->dec_result,
@@ -13124,7 +13125,9 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		display_frame_count[hevc->index],
 		run_count[hevc->index],
 		not_run_ready[hevc->index],
-		input_empty[hevc->index]);
+		input_empty[hevc->index],
+		hevc->gvs->error_frame_count,
+		hevc->gvs->drop_frame_count);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
 		enum receiver_start_e state =
@@ -13813,16 +13816,16 @@ static int __init amvdec_h265_driver_init_module(void)
 			amvdec_h265_profile.profile = "4k";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 			amvdec_h265_profile.profile =
-				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm";
+				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm, multi_frame_dv";
 		}else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
 			amvdec_h265_profile.profile =
-				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm";
+				"4k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm, multi_frame_dv";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_MG9TV)
 			amvdec_h265_profile.profile = "4k";
 	} else {
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
 			amvdec_h265_profile.profile =
-				"8bit, 10bit, dwrite, compressed, frame_dv, uvm, v4l";
+				"8bit, 10bit, dwrite, compressed, frame_dv, uvm, v4l, multi_frame_dv";
 		} else {
 			amvdec_h265_profile.profile =
 				"8bit, 10bit, dwrite, compressed, v4l";

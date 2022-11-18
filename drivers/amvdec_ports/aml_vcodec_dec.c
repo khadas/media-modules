@@ -480,7 +480,8 @@ static bool ge2d_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
 			(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
-			(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG) &&
+			(ctx->output_pix_fmt != V4L2_PIX_FMT_AVS)) {
 			return false;
 		}
 	} else if (ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG) {
@@ -2495,6 +2496,15 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	q_data->fmt = fmt;
 	vidioc_try_fmt(f, q_data->fmt);
 
+	if (V4L2_TYPE_IS_OUTPUT(f->type) && ctx->drv_handle && ctx->receive_cmd_stop) {
+		ctx->state = AML_STATE_IDLE;
+		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
+			"vcodec state (AML_STATE_IDLE)\n");
+		vdec_if_deinit(ctx);
+		ctx->receive_cmd_stop = 0;
+	}
+
 	if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		q_data->sizeimage[0] = pix_mp->plane_fmt[0].sizeimage;
 		q_data->coded_width = pix_mp->width;
@@ -4204,6 +4214,8 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			if (force_enable_di_local_buffer & 0x2)
 				ctx->vpp_cfg.enable_local_buf = false;
 		}
+		ctx->vpp_cfg.dynamic_bypass_vpp =
+			dec->cfg.metadata_config_flag & (1 << 10);
 
 		ctx->ge2d_cfg.bypass =
 			(dec->cfg.metadata_config_flag & (1 << 9));

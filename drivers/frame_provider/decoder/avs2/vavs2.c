@@ -4378,6 +4378,7 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 		if (vf->pts)
 			vf->vf_ud_param.ud_param.meta_info.vpts_valid = 1;
 
+		vf->omx_index = dec->vf_get_count;
 		dec->vf_get_count++;
 		if (pic)
 			avs2_print(dec, AVS2_DBG_BUFMGR,
@@ -7375,6 +7376,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	struct vframe_content_light_level_s content_light_level;
 	struct vframe_master_display_colour_s vf_dp;
 	struct AVS2Decoder_s *dec = NULL;
+	static struct vframe_operations_s vf_tmp_ops;
 
 	pr_info("%s\n", __func__);
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
@@ -7444,8 +7446,12 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		snprintf(pdata->vf_provider_name, VDEC_PROVIDER_NAME_SIZE,
 			MULTI_INSTANCE_PROVIDER_NAME ".%02x", pdev->id & 0xff);
 
+	memcpy(&vf_tmp_ops, &vavs2_vf_provider, sizeof(struct vframe_operations_s));
+	if (without_display_mode == 1) {
+		vf_tmp_ops.get = NULL;
+	}
 	vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-		&vavs2_vf_provider, dec);
+		&vf_tmp_ops, dec);
 
 	dec->provider_name = pdata->vf_provider_name;
 	platform_set_drvdata(pdev, pdata);

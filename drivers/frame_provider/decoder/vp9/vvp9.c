@@ -7960,6 +7960,7 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 		if (index < pbi->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp = pbi->vf_get_count;
+			vf->omx_index = pbi->vf_get_count;
 			pbi->vf_get_count++;
 			if (debug & VP9_DEBUG_BUFMGR)
 				pr_info("%s idx: %d, type 0x%x w/h %d/%d, pts %d, %lld, ts: %lld\n",
@@ -12194,6 +12195,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	struct vframe_master_display_colour_s vf_dp;
 	struct VP9Decoder_s *pbi = NULL;
 	int i;
+	static struct vframe_operations_s vf_tmp_ops;
 
 	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_GXL ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXL ||
@@ -12448,8 +12450,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	}
 
 	if (!pbi->is_used_v4l) {
+		memcpy(&vf_tmp_ops, &vvp9_vf_provider, sizeof(struct vframe_operations_s));
+
+		if (without_display_mode == 1) {
+			vf_tmp_ops.get = NULL;
+		}
+
 		vf_provider_init(&pdata->vframe_provider, pdata->vf_provider_name,
-			&vvp9_vf_provider, pbi);
+			&vf_tmp_ops, pbi);
 	}
 
 	if (no_head & 0x10) {

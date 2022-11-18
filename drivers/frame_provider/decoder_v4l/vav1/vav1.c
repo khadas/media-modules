@@ -1526,11 +1526,22 @@ static int get_mv_buf(struct AV1HW_s *hw,
 		pic_config->mpred_mv_wr_start_addr =
 			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
 			(~0xffff);
-		if (debug & AV1_DEBUG_BUFMGR_MORE)
+		if (debug & AV1_DEBUG_BUFMGR)
 			pr_info("%s => %d (%d) size 0x%x\n", __func__, ret,
 				pic_config->mpred_mv_wr_start_addr, hw->m_mv_BUF[ret].size);
 	} else {
 		pr_info("%s: Error, mv buf is not enough\n", __func__);
+		if (debug & AV1_DEBUG_BUFMGR) {
+			dump_pic_list(hw);
+			for (i = 0; i < MAX_BUF_NUM; i++) {
+				av1_print(hw, 0,
+					"mv_Buf(%d) start_adr 0x%x size 0x%x used %d\n",
+					i,
+					hw->m_mv_BUF[i].start_adr,
+					hw->m_mv_BUF[i].size,
+					hw->m_mv_BUF[i].used_flag);
+			}
+		}
 	}
 	return ret;
 }
@@ -1539,7 +1550,7 @@ static void put_mv_buf(struct AV1HW_s *hw,
 {
 	int i = *mv_buf_index;
 	if (i >= MV_BUFFER_NUM) {
-		if (debug & AV1_DEBUG_BUFMGR_MORE)
+		if (debug & AV1_DEBUG_BUFMGR)
 			pr_info("%s: index %d beyond range\n", __func__, i);
 		return;
 	}
@@ -1559,7 +1570,7 @@ static void put_mv_buf(struct AV1HW_s *hw,
 		return;
 	}
 
-	if (debug & AV1_DEBUG_BUFMGR_MORE)
+	if (debug & AV1_DEBUG_BUFMGR)
 		pr_info("%s(%d): used_flag(%d)\n", __func__, i, hw->m_mv_BUF[i].used_flag);
 
 	*mv_buf_index = -1;
@@ -1695,6 +1706,8 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 int get_free_frame_buffer(struct AV1_Common_s *cm)
 {
 	struct AV1HW_s *hw = container_of(cm, struct AV1HW_s, common);
+
+	put_un_used_mv_bufs(hw);
 
 	return v4l_get_free_fb(hw);
 }
@@ -5803,6 +5816,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			vf->index_disp =  atomic_read(&hw->vf_get_count);
+			vf->omx_index = atomic_read(&hw->vf_get_count);
 			atomic_add(1, &hw->vf_get_count);
 			if (debug & AOM_DEBUG_VFRAME) {
 				struct BufferPool_s *pool = hw->common.buffer_pool;
@@ -5927,7 +5941,7 @@ void av1_inc_vf_ref(struct AV1HW_s *hw, int index)
 	if ((debug & AV1_DEBUG_IGNORE_VF_REF) == 0) {
 		cm->buffer_pool->frame_bufs[index].buf.vf_ref++;
 
-		av1_print(hw, AV1_DEBUG_BUFMGR_MORE, "%s index = %d new vf_ref = %d\r\n",
+		av1_print(hw, AV1_DEBUG_BUFMGR, "%s index = %d new vf_ref = %d\r\n",
 			__func__, index,
 			cm->buffer_pool->frame_bufs[index].buf.vf_ref);
 	}
@@ -6284,7 +6298,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				vf->duration = 0;
 		}
 
-		vf->src_fmt.play_id = vdec->play_num;
+		vf->src_fmt.play_id = vdec->inst_cnt;
 
 		av1_inc_vf_ref(hw, pic_config->v4l_buf_index);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
@@ -6354,8 +6368,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 #endif
 
 		av1_print(hw, AV1_DEBUG_SEI_DETAIL,
-			"%s aux_data_size:%d play_num:%d vf:%p\n",
-			__func__, pic_config->aux_data_size, vdec->play_num, vf);
+			"%s aux_data_size:%d inst_cnt:%d vf:%p\n",
+			__func__, pic_config->aux_data_size, vdec->inst_cnt, vf);
 
 		if (debug & AV1_DEBUG_SEI_DETAIL) {
 			int i = 0;
@@ -10978,11 +10992,11 @@ static int __init amvdec_av1_driver_init_module(void)
 	}
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
 		amvdec_av1_profile.profile =
-				"10bit, dwrite, compressed, no_head, uvm";
+				"10bit, dwrite, compressed, no_head, uvm, multi_frame_dv";
 	} else if (((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb())
 		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)) {
 		amvdec_av1_profile.profile =
-				"8k, 10bit, dwrite, compressed, no_head, frame_dv, uvm";
+				"8k, 10bit, dwrite, compressed, no_head, frame_dv, uvm, multi_frame_dv";
 	} else {
 		amvdec_av1_profile.name = "av1_unsupport";
 	}

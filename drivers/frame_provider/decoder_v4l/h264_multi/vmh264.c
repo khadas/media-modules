@@ -3037,7 +3037,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			continue;
 		}
 
-		vf->src_fmt.play_id = vdec->play_num;
+		vf->src_fmt.play_id = vdec->inst_cnt;
 
 		if (i == 0) {
 			struct vdec_s *pvdec;
@@ -3070,9 +3070,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 #endif
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
-			"aux_data_size:%d signal_type:0x%x play_num:%d vf:%p\n",
+			"aux_data_size:%d signal_type:0x%x inst_cnt:%d vf:%p\n",
 			hw->buffer_spec[buffer_index].aux_data_size, hw->video_signal_type,
-			vdec->play_num, vf);
+			vdec->inst_cnt, vf);
 
 		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
 			int i = 0;
@@ -4355,6 +4355,7 @@ static struct vframe_s *vh264_vf_get(void *op_arg)
 		}
 		hw->last_frame_time = time;
 		vf->index_disp = atomic_read(&hw->vf_get_count);
+		vf->omx_index = atomic_read(&hw->vf_get_count);
 		atomic_add(1, &hw->vf_get_count);
 		if (kfifo_peek(&hw->display_q, &next_vf) && next_vf) {
 			vf->next_vf_pts_valid = true;
@@ -6625,8 +6626,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 #ifdef DETECT_WRONG_MULTI_SLICE
 		if (p_H264_Dpb->mVideo.dec_picture &&
 				hw->multi_slice_pic_flag == 2 &&
-				(p_H264_Dpb->dpb_param.l.data[SLICE_TYPE] != dpb_param_bak.l.data[SLICE_TYPE] ||
-				dpb_param_bak.l.data[FIRST_MB_IN_SLICE] > p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE])) {
+				(dpb_param_bak.l.data[FIRST_MB_IN_SLICE] > p_H264_Dpb->dpb_param.l.data[FIRST_MB_IN_SLICE])) {
 			dpb_print(DECODE_ID(hw), 0,
 				"decode next pic, save before, SLICE_TYPE BAK %d, SLICE_TYPE %d, FIRST_MB_IN_SLICE BAK %d, FIRST_MB_IN_SLICE %d\n",
 					dpb_param_bak.l.data[SLICE_TYPE], p_H264_Dpb->dpb_param.l.data[SLICE_TYPE],
@@ -8937,7 +8937,8 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		ps->dpb_margin = pic.dpb_margin;
 	}
 
-	if ((ps->dpb_frames >= 16) && (ps->coded_width > 1280) &&
+	if ((hw->dpb.max_dec_frame_buffering < 16) &&
+		(ps->dpb_frames >= 16) && (ps->coded_width > 1280) &&
 		(ps->coded_height > 768)) {
 		if (ps->field == V4L2_FIELD_NONE) {
 			ps->dpb_frames = adjust_dpb_size;
@@ -10701,14 +10702,14 @@ static int __init ammvdec_h264_driver_init_module(void)
 	if (vdec_is_support_4k()) {
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX) {
 			ammvdec_h264_profile.profile =
-					"4k, dwrite, compressed, frame_dv, fence";
+					"4k, dwrite, compressed, frame_dv, fence, multi_frame_dv";
 		} else if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) {
-			ammvdec_h264_profile.profile = "4k, frame_dv, fence";
+			ammvdec_h264_profile.profile = "4k, frame_dv, fence, multi_frame_dv";
 		}
 	} else {
 		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
 			ammvdec_h264_profile.profile =
-						"dwrite, compressed, frame_dv, v4l";
+						"dwrite, compressed, frame_dv, v4l, multi_frame_dv";
 		} else {
 			ammvdec_h264_profile.profile =
 						"dwrite, compressed, v4l";
