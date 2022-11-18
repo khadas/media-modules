@@ -21,6 +21,7 @@
 #define _AML_VCODEC_UTIL_H_
 
 #include <linux/types.h>
+#include <uapi/linux/time.h>
 
 #include "aml_buf_core.h"
 #include "aml_task_chain.h"
@@ -127,5 +128,14 @@ int user_to_task(enum buf_core_user user);
  * todo
  */
 int task_to_user(enum task_type_e task);
+
+#ifdef __KERNEL__
+static inline __u64 timeval_to_ns(const struct __kernel_v4l2_timeval *tv)
+#else
+static inline __u64 timeval_to_ns(const struct timeval *tv)
+#endif
+{
+	return (__u64)tv->tv_sec * 1000000000ULL + tv->tv_usec * 1000;
+}
 
 #endif /* _AML_VCODEC_UTIL_H_ */
