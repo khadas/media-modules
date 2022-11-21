@@ -33,6 +33,10 @@
 #include <linux/pm_runtime.h>
 #include "vdec.h"
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 0)
+#undef CONFIG_AMLOGIC_POWER
+#endif
 /* Directly controlled by reading and writing registers. */
 #define PM_POWER_CTRL_RW_REG		(0)
 

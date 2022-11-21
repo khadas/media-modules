@@ -27,6 +27,7 @@
 #else
 #include <uapi/linux/time.h>
 #endif
+#include <linux/version.h>
 
 #include "aml_buf_core.h"
 #include "aml_task_chain.h"
@@ -134,6 +135,7 @@ int user_to_task(enum buf_core_user user);
  */
 int task_to_user(enum task_type_e task);
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 0)
 #ifdef __KERNEL__
 static inline __u64 timeval_to_ns(const struct __kernel_v4l2_timeval *tv)
 #else
@@ -142,5 +144,6 @@ static inline __u64 timeval_to_ns(const struct timeval *tv)
 {
 	return (__u64)tv->tv_sec * 1000000000ULL + tv->tv_usec * 1000;
 }
+#endif
 
 #endif /* _AML_VCODEC_UTIL_H_ */

@@ -29,6 +29,7 @@
 #include <media/videobuf2-dma-contig.h>
 #include <linux/kthread.h>
 #include <linux/compat.h>
+#include <linux/version.h>
 #include <media/v4l2-dev.h>
 
 #include "aml_vcodec_drv.h"
@@ -628,7 +629,11 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 
 	//dev_set_name(&vdev->dev, "%s%d", name_base, vdev->num);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+	ret = video_register_device(vfd_dec, VFL_TYPE_GRABBER, 26);
+#else
 	ret = video_register_device(vfd_dec, VFL_TYPE_VIDEO, 26);
+#endif
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register video device\n");
 		goto err_dec_reg;
