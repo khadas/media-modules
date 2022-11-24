@@ -422,6 +422,8 @@ struct vdec_s {
 	u32 play_num;
 	wait_queue_head_t idle_wait;
 	struct vdec_data_info_s *vdata;
+	char frame_mode_size[32];
+	char stream_rp[32];
 };
 
 #define CODEC_MODE(a, b, c, d)\
