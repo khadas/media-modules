@@ -4099,7 +4099,7 @@ Again:
 			cfg = &request->dma_cfg[i];
 			enc_pr(LOG_INFO, "request vaddr %p, paddr %p\n",
 				cfg->vaddr, cfg->paddr);
-			if (cfg->fd >= 0 && cfg->vaddr != NULL)
+			if (cfg->fd >= 0 && cfg->paddr != NULL)
 				enc_dma_buf_unmap(cfg);
 		}
 	}
