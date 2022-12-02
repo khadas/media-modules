@@ -974,6 +974,7 @@ struct vdec_h264_hw_s {
 	ulong aux_mem_handle;
 	ulong frame_mmu_map_handle;
 	ulong mc_cpu_handle;
+	struct mutex pic_mutex;
 };
 
 static u32 again_threshold;
@@ -1788,6 +1789,7 @@ static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	mutex_lock(&hw->pic_mutex);
 	if (p_H264_Dpb->mVideo.dec_picture) {
 		release_picture(p_H264_Dpb,
 			p_H264_Dpb->mVideo.dec_picture);
@@ -1796,6 +1798,7 @@ static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 		if (hw->mmu_enable)
 			hevc_set_frame_done(hw);
 	}
+	mutex_unlock(&hw->pic_mutex);
 }
 
 static void  hevc_sao_wait_done(struct vdec_h264_hw_s *hw)
@@ -6794,7 +6797,9 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 			bufmgr_post(p_H264_Dpb);
 				hw->last_dec_picture =
 					p_H264_Dpb->mVideo.dec_picture;
+			mutex_lock(&hw->pic_mutex);
 			p_H264_Dpb->mVideo.dec_picture = NULL;
+			mutex_unlock(&hw->pic_mutex);
 			/* dump_dpb(&p_H264_Dpb->mDPB); */
 			hw->has_i_frame = 1;
 			if (hw->mmu_enable)
@@ -8114,6 +8119,7 @@ static void check_timer_func(struct timer_list *timer)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 	int error_skip_frame_count = error_skip_count & 0xfff;
 	unsigned int timeout_val = decode_timeout_val;
+	unsigned long flags;
 	if (timeout_val != 0 &&
 		hw->no_error_count < error_skip_frame_count)
 		timeout_val = errordata_timeout_val;
@@ -8135,10 +8141,15 @@ static void check_timer_func(struct timer_list *timer)
 		return;
 	}
 
-	if (vdec->next_status == VDEC_STATUS_DISCONNECTED &&
-			!hw->is_used_v4l) {
+	flags = vdec_power_lock(vdec);
+
+	if ((vdec->next_status == VDEC_STATUS_DISCONNECTED ||
+		vdec->suspend) &&
+		!hw->is_used_v4l) {
 		hw->dec_result = DEC_RESULT_FORCE_EXIT;
+		WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 		vdec_schedule_work(&hw->work);
+		vdec_power_unlock(vdec, flags);
 		pr_debug("vdec requested to be disconnected\n");
 		return;
 	}
@@ -8197,6 +8208,7 @@ static void check_timer_func(struct timer_list *timer)
 			READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 		hw->last_mby_mbx = mby_mbx;
 	}
+	vdec_power_unlock(vdec, flags);
 
 	if ((hw->ucode_pause_pos != 0) &&
 		(hw->ucode_pause_pos != 0xffffffff) &&
@@ -9744,6 +9756,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	 * notify vdec core to switch context
 	 */
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	u32 wcount = 0;
+	unsigned long flags;
 
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_WORKER_START);
@@ -9762,7 +9776,11 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			dealloc_buf_specs(hw, 0);
 			mutex_unlock(&vmh264_mutex);
 		}
-	hw->save_reg_f = READ_VREG(AV_SCRATCH_F);
+	flags = vdec_power_lock(vdec);
+		if (!vdec->suspend)
+			hw->save_reg_f = READ_VREG(AV_SCRATCH_F);
+		vdec_power_unlock(vdec, flags);
+
 	hw->dpb.last_dpb_status = hw->dpb.dec_dpb_status;
 	if (hw->dec_result == DEC_RESULT_CONFIG_PARAM) {
 		u32 param1 = READ_VREG(AV_SCRATCH_1);
@@ -10026,17 +10044,24 @@ result_done:
 		} else if (hw->dpb.mSlice.slice_type == B_SLICE) {
 			hw->gvs.b_decoded_frames++;
 		}
-		amvdec_stop();
+		flags = vdec_power_lock(vdec);
+		if (!vdec->suspend) {
+			amvdec_stop();
 
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s dec_result %d %x %x %x\n",
-			__func__,
-			hw->dec_result,
-			READ_VREG(VLD_MEM_VIFIFO_LEVEL),
-			READ_VREG(VLD_MEM_VIFIFO_WP),
-			READ_VREG(VLD_MEM_VIFIFO_RP));
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"%s dec_result %d %x %x %x\n",
+				__func__,
+				hw->dec_result,
+				READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+				READ_VREG(VLD_MEM_VIFIFO_WP),
+				READ_VREG(VLD_MEM_VIFIFO_RP));
+		}
+		vdec_power_unlock(vdec, flags);
 		mutex_lock(&hw->chunks_mutex);
-		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		flags = vdec_power_lock(vdec);
+		if (!vdec->suspend)
+			vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		vdec_power_unlock(vdec, flags);
 		hw->chunk = NULL;
 		mutex_unlock(&hw->chunks_mutex);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
@@ -10086,8 +10111,18 @@ result_done:
 		if (hw->mmu_enable)
 			amhevc_stop();
 		if (hw->stat & STAT_ISR_REG) {
-			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
+			do {
+				vdec_free_irq(VDEC_IRQ_1, (void *)hw);
+
+				if (++wcount > 1000)
+					break;
+				usleep_range(100, 200);
+			} while (vdec->irq_cnt > vdec->irq_thread_cnt);
 			hw->stat &= ~STAT_ISR_REG;
+
+			if (work_pending(&hw->work)) {
+				hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			}
 		}
 	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -10399,6 +10434,9 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	if (hw->reset_bufmgr_flag ||
 		((hw->error_proc_policy & 0x40) &&
 		p_H264_Dpb->buf_alloc_fail)) {
+		if (p_H264_Dpb->buf_alloc_fail)
+		    hw->reset_bufmgr_flag = 1;
+
 		h264_reset_bufmgr(vdec);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
@@ -11311,6 +11349,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 	decode_frame_count[DECODE_ID(hw)] = 0;
 	hw->dpb.without_display_mode = without_display_mode;
 	mutex_init(&hw->fence_mutex);
+	mutex_init(&hw->pic_mutex);
 	if (hw->enable_fence) {
 		pdata->sync = vdec_sync_get();
 		if (!pdata->sync) {

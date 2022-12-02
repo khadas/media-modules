@@ -2315,6 +2315,7 @@ static int config_pic(struct AVS2Decoder_s *dec,
 				VF_BUFFER_IDX(i),
 				buf_size, DRIVER_NAME,
 				&pic->cma_alloc_addr);
+
 		if (ret < 0) {
 			avs2_print(dec, 0,
 				"decoder_bmmu_box_alloc_buf_phy idx %d size %d fail\n",
@@ -2323,9 +2324,11 @@ static int config_pic(struct AVS2Decoder_s *dec,
 			return ret;
 		}
 
-		if (pic->cma_alloc_addr)
+		if (pic->cma_alloc_addr) {
 			y_adr = pic->cma_alloc_addr;
-		else {
+			if (!vdec_secure(hw_to_vdec(dec)))
+				codec_mm_memset(y_adr, 0, buf_size);
+		} else {
 			avs2_print(dec, 0,
 				"decoder_bmmu_box_alloc_buf_phy idx %d size %d return null\n",
 				VF_BUFFER_IDX(i),
@@ -2432,6 +2435,8 @@ static void init_pic_list(struct AVS2Decoder_s *dec)
 				dec->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
 				return;
 			}
+			if (!vdec_secure(hw_to_vdec(dec)))
+				codec_mm_memset(buf_addr, 0, header_size);
 		}
 	}
 #endif
@@ -2594,6 +2599,9 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 		return 0;
 
 	if (avs2_dec->img.type == P_IMG) {
+		int valid_ref_cnt;
+		valid_ref_cnt = 0;
+
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"config_mc_buffer for P_IMG, img type %d\n",
 			avs2_dec->img.type);
@@ -2602,6 +2610,9 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			(0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
+			if (pic->referred_by_others != 1)
+				continue;
+			valid_ref_cnt++;
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16) |
 				(pic->mc_canvas_u_v << 8) |
@@ -2615,7 +2626,13 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 				i, pic->mc_canvas_u_v, pic->mc_canvas_y,
 				pic->error_mark);
 		}
+
+		if (valid_ref_cnt != avs2_dec->img.num_of_references)
+			cur_pic->error_mark = 1;
 	} else if (avs2_dec->img.type == F_IMG) {
+		int valid_ref_cnt;
+		valid_ref_cnt = 0;
+
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"config_mc_buffer for F_IMG, img type %d\n",
 			avs2_dec->img.type);
@@ -2624,6 +2641,9 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 			(0 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
 			pic = avs2_dec->fref[i];
+			if (pic->referred_by_others != 0)
+				continue;
+			valid_ref_cnt++;
 			WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR,
 				(pic->mc_canvas_u_v << 16) |
 				(pic->mc_canvas_u_v << 8) |
@@ -2637,6 +2657,8 @@ static int config_mc_buffer(struct AVS2Decoder_s *dec)
 				i, pic->mc_canvas_u_v, pic->mc_canvas_y,
 				pic->error_mark);
 		}
+		if (valid_ref_cnt != avs2_dec->img.num_of_references)
+			cur_pic->error_mark = 1;
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR,
 			(16 << 8) | (0<<1) | 1);
 		for (i = 0; i < avs2_dec->img.num_of_references; i++) {
@@ -4315,8 +4337,8 @@ static struct avs2_frame_s *get_pic_by_index(
 		pic = dec->avs2_dec.m_bg;
 	else if (index >= 0	&& index < dec->used_buf_num) {
 		for (i = 0; i < dec->used_buf_num; i++) {
-			if (dec->avs2_dec.fref[i]->index == index)
-				pic = dec->avs2_dec.fref[i];
+			if (dec->avs2_dec.frm_pool[i].index == index)
+				pic = &dec->avs2_dec.frm_pool[i];
 		}
 	}
 	return pic;
@@ -5905,10 +5927,14 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			MV_BUFFER_IDX(i),
 			mv_buf_size,
 			DRIVER_NAME,
-			&buf_addr) < 0)
+			&buf_addr) < 0) {
 				ret = -1;
-			else
+			} else {
 				dec->avs2_dec.hc.cur_pic->mpred_mv_wr_start_addr = buf_addr;
+				if (!vdec_secure(hw_to_vdec(dec)))
+					codec_mm_memset(dec->avs2_dec.hc.cur_pic->mpred_mv_wr_start_addr,
+						0, mv_buf_size);
+			}
 		}
 #endif
 		if (ret < 0) {
@@ -7574,6 +7600,9 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 		vfree((void *)dec);
 		return ret;
 	}
+	if (!vdec_secure(pdata))
+		codec_mm_memset(dec->cma_alloc_addr, 0, dec->cma_alloc_count * PAGE_SIZE);
+
 	dec->buf_start = dec->cma_alloc_addr;
 	dec->buf_size = work_buf_size;
 

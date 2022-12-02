@@ -425,6 +425,8 @@ struct vdec_s {
 	struct vdec_data_info_s *vdata;
 	char frame_mode_size[32];
 	char stream_rp[32];
+	spinlock_t power_lock;
+	bool suspend;
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -762,6 +764,10 @@ int vdec_init_stbuf_info(struct vdec_s *vdec);
 void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb);
 
 void register_frame_rate_uevent_func(vdec_frame_rate_event_func func);
+
+unsigned long vdec_power_lock(struct vdec_s *vdec);
+
+void vdec_power_unlock(struct vdec_s *vdec, unsigned long flags);
 
 
 #endif				/* VDEC_H */
