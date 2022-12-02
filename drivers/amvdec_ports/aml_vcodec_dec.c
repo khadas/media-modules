@@ -296,6 +296,8 @@ extern int force_enable_di_local_buffer;
 extern int max_di_instance;
 extern int bypass_nr_flag;
 extern int es_node_expand;
+extern int force_di_permission;
+
 
 extern int get_double_write_ratio(int dw_mode);
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type);
@@ -4664,6 +4666,9 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 
 		ctx->internal_dw_scale = dec->cfg.metadata_config_flag & (1 << 13);
 		ctx->second_field_pts_mode = dec->cfg.metadata_config_flag & (1 << 12);
+		ctx->force_di_permission = dec->cfg.metadata_config_flag & (1 << 17);
+		if (force_di_permission)
+			ctx->force_di_permission = true;
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x metadata_config_flag: 0x%x\n",
 				__func__, in->parms_status, dec->cfg.metadata_config_flag);

@@ -545,6 +545,7 @@ struct vdec_avs_hw_s {
 	bool run_flag;
 	ulong user_data_handle;
 	ulong lmem_phy_handle;
+	bool force_interlaced_frame;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -3420,7 +3421,6 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 	struct aml_buf *aml_buf = NULL;
 	u32 nv_order = VIDTYPE_VIU_NV21;
 	u32 reg = pic->buffer_info;
-	bool force_interlaced_frame = false;
 	u32 picture_type = pic->picture_type;
 	u32 repeat_count = pic->repeat_cnt;
 	unsigned int pts = pic->pts;
@@ -3485,7 +3485,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		vf->signal_type = 0;
 		vf->index = buffer_index;
 		vf->duration_pulldown = 0;
-		if (force_interlaced_frame) {
+		if (hw->force_interlaced_frame) {
 			vf->type = VIDTYPE_INTERLACE_TOP;
 		}else{
 			vf->type = (reg & TOP_FIELD_FIRST_FLAG) ? VIDTYPE_INTERLACE_TOP : VIDTYPE_INTERLACE_BOTTOM;
@@ -3563,7 +3563,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 
 		set_frame_info(hw, vf, &dur);
 		vf->bufWidth = 1920;
-		if (force_interlaced_frame)
+		if (hw->force_interlaced_frame)
 			vf->pts = 0;
 		else
 		vf->pts = hw->next_pts;
@@ -3586,7 +3586,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		vf->signal_type = 0;
 		vf->index = buffer_index;
 		vf->duration_pulldown = 0;
-		if (force_interlaced_frame) {
+		if (hw->force_interlaced_frame) {
 			vf->type = VIDTYPE_INTERLACE_BOTTOM;
 		} else {
 			vf->type = (reg & TOP_FIELD_FIRST_FLAG) ?
@@ -4001,9 +4001,12 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 			debug_print(hw, PRINT_FLAG_DECODING,
 				"READ_VREG(AVS_PIC_INFO) = 0x%x\n", READ_VREG(AVS_PIC_INFO));
 
-			if ((dec_control & DEC_CONTROL_FLAG_FORCE_2500_1080P_INTERLACE)
+			hw->force_interlaced_frame = false;
+			if ((ctx->force_di_permission &&
+				dec_control & DEC_CONTROL_FLAG_FORCE_2500_1080P_INTERLACE)
 				&& hw->frame_width == 1920 && hw->frame_height == 1080) {
 					hw->interlace_flag = true;
+					hw->force_interlaced_frame = true;
 					debug_print(hw, PRINT_FLAG_DECODING,
 						"force interlace!\n");
 			}
