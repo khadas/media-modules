@@ -115,6 +115,8 @@ static int fops_vcodec_open(struct file *file)
 	ctx->cache_input_buffer_num = 60;
 	ctx->write_frames = 0;
 
+	aml_es_mgr_init(ctx);
+
 	if (enable_drm_mode) {
 		ctx->is_drm_mode = true;
 		ctx->param_sets_from_ucode = true;
@@ -204,6 +206,8 @@ static int fops_vcodec_release(struct file *file)
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "release decoder %lx\n", (ulong) ctx);
 	mutex_lock(&dev->dev_mutex);
+
+	aml_es_mgr_release(ctx);
 
 	aml_thread_stop(ctx);
 	wait_vcodec_ending(ctx);
@@ -822,6 +826,10 @@ module_param(force_enable_nr, int, 0644);
 int force_enable_di_local_buffer;
 EXPORT_SYMBOL(force_enable_di_local_buffer);
 module_param(force_enable_di_local_buffer, int, 0644);
+
+int es_node_expand = 1;
+EXPORT_SYMBOL(es_node_expand);
+module_param(es_node_expand, int, 0644);
 
 int dump_es_output_frame;
 EXPORT_SYMBOL(dump_es_output_frame);

@@ -89,6 +89,8 @@
 #define PAGE_NUM_ONE_MB	(256)
 //#define USEC_PER_SEC 1000000
 
+#define INVALID_IDX -1
+
 #define call_void_memop(vb, op, args...)				\
 	do {								\
 		if ((vb)->vb2_queue->mem_ops->op)			\
@@ -292,6 +294,7 @@ extern int force_enable_nr;
 extern int force_enable_di_local_buffer;
 extern int max_di_instance;
 extern int bypass_nr_flag;
+extern int es_node_expand;
 
 extern int get_double_write_ratio(int dw_mode);
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type);
@@ -301,6 +304,8 @@ static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
 				       u32 type);
 static void vidioc_vdec_s_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 static void vidioc_vdec_g_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
+
+void aml_es_status_dump(struct aml_vcodec_ctx *ctx);
 
 static ulong aml_vcodec_ctx_lock(struct aml_vcodec_ctx *ctx)
 {
@@ -1086,6 +1091,9 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 
 	pr_info("\n==== Show Buffer Status ======== \n");
 	buf_core_walk(&ctx->bm.bc);
+
+	pr_info("\n==== Show ES Status ======== \n");
+	aml_es_status_dump(ctx);
 }
 
 void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)
@@ -1383,7 +1391,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if ((!ctx->stream_mode) && ctx->output_dma_mode) {
+		if ((ctx->stream_mode) || ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_8, buf.size);
@@ -1394,7 +1402,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if ((!ctx->stream_mode) && ctx->output_dma_mode) {
+		if ((ctx->stream_mode) || ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_10, buf.size);
@@ -1904,6 +1912,8 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 			vdec_set_dmabuf_type(ctx->ada_ctx);
 		}
 
+		ctx->es_mgr.count = rb->count;
+
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"output buffer memory mode is %d\n", rb->memory);
 	}
@@ -1931,6 +1941,316 @@ static int vidioc_vdec_expbuf(struct file *file, void *priv,
 		"%s, type: %d\n", __func__, eb->type);
 
 	return v4l2_m2m_ioctl_expbuf(file, priv, eb);
+}
+
+static void ref_mark(struct aml_es_node *packet)
+{
+	get_dma_buf(packet->dbuf);
+	packet->ref_mark++;
+}
+
+static void ref_unmark(struct aml_es_node *packet)
+{
+	dma_buf_put(packet->dbuf);
+	packet->ref_mark--;
+}
+
+struct vb2_v4l2_buffer *aml_get_vb_by_index(struct aml_vcodec_ctx *ctx,
+	s32 index)
+{
+	struct vb2_v4l2_buffer *vb = NULL;
+	struct vb2_queue *q = NULL;
+
+	q = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
+	vb = to_vb2_v4l2_buffer(q->bufs[index]);
+
+	return vb;
+}
+
+void aml_es_node_alloc(struct aml_es_mgr *mgr)
+{
+	struct aml_es_node *packet;
+
+	packet = vzalloc(sizeof(struct aml_es_node));
+	if (packet == NULL) {
+		v4l_dbg(mgr->ctx, 0,
+		"es node alloc fail!\n");
+		return;
+	}
+	packet->index = INVALID_IDX;
+	list_add_tail(&packet->node, &mgr->free_que);
+	mgr->free_num++;
+	v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+		"%s: free_num(%d)\n",
+		__func__, mgr->free_num);
+}
+
+void  aml_es_node_expand(struct aml_es_mgr *mgr)
+{
+	struct aml_es_node *packet;
+	struct vb2_v4l2_buffer *vb;
+
+	mutex_lock(&mgr->mutex);
+
+	if (mgr->free_num)
+		goto out;
+
+	aml_es_node_alloc(mgr);
+	list_for_each_entry(packet, &mgr->used_que, node) {
+		if (!packet->ref_mark) {
+			vb = aml_get_vb_by_index(mgr->ctx, packet->index);
+			packet->dbuf = vb->vb2_buf.planes[0].dbuf;
+			ref_mark(packet);
+			aml_recycle_dma_buffers(mgr->ctx, packet->index);
+			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
+				"used_num(%d), free_num(%d) dbuf(%px)\n",
+				__func__, packet->index,
+				packet->ref_mark, packet->addr,
+				mgr->used_num, mgr->free_num, packet->dbuf);
+			break;
+		}
+	}
+out:
+	mutex_unlock(&mgr->mutex);
+}
+
+void aml_es_node_add(struct aml_es_mgr *mgr, ulong addr,
+	u32 size, s32 index)
+{
+	struct aml_es_node *packet, *tmp;
+	int i;
+
+	mutex_lock(&mgr->mutex);
+
+	if (!mgr->alloced) {
+		for (i = 0; i < mgr->count; i++) {
+			aml_es_node_alloc(mgr);
+		}
+		mgr->alloced = true;
+	}
+
+	if (list_empty(&mgr->free_que)) {
+		v4l_dbg(mgr->ctx, 0, "%s, empty free que!\n", __func__);
+		goto out;
+	}
+
+	list_for_each_entry_safe(packet, tmp, &mgr->free_que, node) {
+		if (packet->index == INVALID_IDX) {
+			packet->addr = addr;
+			packet->size = size;
+			packet->index = index;
+			list_del(&packet->node);
+			list_add_tail(&packet->node, &mgr->used_que);
+			mgr->free_num--;
+			mgr->used_num++;
+			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx), "
+				"size(%d), used_num(%d), free_num(%d)\n",
+				__func__, packet->index, packet->ref_mark,
+				packet->addr, packet->size,
+				mgr->used_num, mgr->free_num);
+			break;
+		}
+	}
+
+out:
+	mutex_unlock(&mgr->mutex);
+
+	/* for scenes where one frame of multi-packet data is not enough */
+	if (es_node_expand)
+		aml_es_node_expand(mgr);
+}
+
+void aml_es_node_del(struct aml_es_mgr *mgr, struct aml_es_node *packet)
+{
+	struct aml_es_node *cur_packet, *tmp;
+
+	mutex_lock(&mgr->mutex);
+
+	if (list_empty(&mgr->used_que)) {
+		v4l_dbg(mgr->ctx, 0, "%s, empty used que!\n", __func__);
+		goto out;
+	}
+
+	list_for_each_entry_safe(cur_packet, tmp, &mgr->used_que, node) {
+		if (cur_packet == packet) {
+			list_del(&packet->node);
+			list_add_tail(&packet->node, &mgr->free_que);
+			mgr->used_num--;
+			mgr->free_num++;
+			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
+				"used_num(%d), free_num(%d)\n",
+				__func__, packet->index, packet->ref_mark,
+				packet->addr, mgr->used_num,
+				mgr->free_num);
+			packet->index = INVALID_IDX;
+			break;
+		}
+	}
+
+out:
+	mutex_unlock(&mgr->mutex);
+}
+
+static struct aml_es_node *get_consumed_es_node(struct aml_es_mgr *mgr, ulong rp)
+{
+	struct aml_es_node *packet;
+	ulong  wp;
+	ulong start = mgr->buf_start;
+	ulong end = mgr->buf_start + mgr->buf_size;
+
+	mutex_lock(&mgr->mutex);
+
+	packet = list_first_entry(&mgr->used_que, struct aml_es_node, node);
+	wp = packet->addr + packet->size;
+
+	mutex_unlock(&mgr->mutex);
+
+	v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+		"%s: vb_idx(%d), addr(0x%lx), rp(0x%lx),"
+		" wp(0x%lx), cur_rp(0x%lx), cur_wp(0x%lx)\n",
+		__func__, packet->index, packet->addr,
+		rp, wp, mgr->cur_rp, mgr->cur_wp);
+
+	if (mgr->w_round > mgr->r_round) { /* wp turn around ahead of rp */
+		if (rp < mgr->cur_rp) {
+			if (rp < mgr->cur_wp)
+				return NULL;
+
+			mgr->cur_rp = rp;
+			mgr->r_round++;
+		} else {
+			mgr->cur_rp = rp;
+			return NULL;
+		}
+	} else if (mgr->w_round <  mgr->r_round) { /* rp turn around ahead of wp */
+		mgr->cur_wp = wp;
+		mgr->cur_rp = rp;
+
+		if (wp > end) {
+			mgr->cur_wp = start + wp - end;
+			mgr->cur_rp = rp;
+			if (rp < mgr->cur_wp)
+				return NULL;
+			mgr->w_round++;
+		}
+	} else {
+		mgr->w_round = 0;
+		mgr->r_round = 0;
+
+		if (wp > end) {
+			mgr->cur_wp = start + wp - end;
+			mgr->cur_rp = rp;
+			mgr->w_round++;
+			return NULL;
+		} else if (rp < mgr->cur_rp) {
+			if (rp > mgr->cur_wp)
+				return NULL;
+			mgr->r_round++;
+		}
+
+		mgr->cur_wp = wp;
+		mgr->cur_rp = rp;
+
+		if (mgr->w_round == mgr->r_round &&
+			rp < mgr->cur_wp)
+			return NULL;
+	}
+
+	return packet;
+}
+
+void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
+{
+	struct aml_es_node *packet;
+	struct vb2_v4l2_buffer *vb = NULL;
+
+	for (;;) {
+		packet = get_consumed_es_node(&ctx->es_mgr, addr);
+		if (packet == NULL)
+			break;
+		vb = aml_get_vb_by_index(ctx, packet->index);
+		v4l2_set_rp_addr(ctx->ada_ctx, vb->vb2_buf.planes[0].dbuf);
+		if (packet->ref_mark)
+			ref_unmark(packet);
+		else
+			aml_recycle_dma_buffers(ctx, packet->index);
+		aml_es_node_del(&ctx->es_mgr, packet);
+	}
+}
+
+void aml_es_mgr_init(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_es_mgr *mgr = &ctx->es_mgr;
+
+	INIT_LIST_HEAD(&mgr->used_que);
+	INIT_LIST_HEAD(&mgr->free_que);
+	mutex_init(&mgr->mutex);
+	mgr->ctx = ctx;
+}
+
+void aml_es_mgr_release(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_es_mgr *mgr = &ctx->es_mgr;
+	struct aml_es_node *packet, *tmp;
+
+	mutex_lock(&mgr->mutex);
+	if (!list_empty(&mgr->used_que)) {
+		list_for_each_entry_safe(packet, tmp, &mgr->used_que, node) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s: vb_idx(%d), que_num(%d)\n",
+				__func__, packet->index, mgr->used_num);
+			list_del(&packet->node);
+			vfree(packet);
+			mgr->used_num--;
+		}
+	}
+
+	if (!list_empty(&mgr->free_que)) {
+		list_for_each_entry_safe(packet, tmp, &mgr->free_que, node) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+				"%s: vb_idx(%d), que_num(%d)\n",
+				__func__, packet->index, mgr->free_num);
+			list_del(&packet->node);
+			vfree(packet);
+			mgr->free_num--;
+		}
+	}
+
+	mgr->used_num = 0;
+	mgr->free_num = 0;
+
+	mutex_unlock(&mgr->mutex);
+}
+
+void aml_es_status_dump(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_es_mgr *mgr = &ctx->es_mgr;
+	struct aml_es_node *packet;
+
+	mutex_lock(&mgr->mutex);
+	pr_info("\nUsed queue elements:\n");
+	if (!list_empty(&mgr->used_que)) {
+		list_for_each_entry(packet, &mgr->used_que, node) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"--> addr:%lx, size:%d, index:%d, ref:%d, used:%d\n",
+				packet->addr, packet->size, packet->index,
+				packet->ref_mark, mgr->used_num);
+		}
+	}
+
+	pr_info("\nFree queue elements:\n");
+	if (!list_empty(&mgr->free_que)) {
+		list_for_each_entry(packet, &mgr->free_que, node) {
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+				"--> addr:%lx, size:%d, index:%d, ref:%d, free:%d\n",
+				packet->addr, packet->size, packet->index,
+				packet->ref_mark, mgr->free_num);
+		}
+	}
+	mutex_unlock(&mgr->mutex);
 }
 
 void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
@@ -2895,12 +3215,11 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 
 	if (vb->memory == VB2_MEMORY_DMABUF && V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
 		if (!ctx->is_drm_mode) {
-			int fd = vb->planes[0].m.fd;
 			struct dmabuf_videodec_es_data *videodec_es_data;
-			if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_VIDEODEC_ES) {
+			if (dmabuf_manage_get_type(vb->planes[0].dbuf) != DMA_BUF_TYPE_VIDEODEC_ES) {
 				return 0;
 			}
-			videodec_es_data = (struct dmabuf_videodec_es_data *)dmabuf_manage_get_info(fd,
+			videodec_es_data = (struct dmabuf_videodec_es_data *)dmabuf_manage_get_info(vb->planes[0].dbuf,
 					DMA_BUF_TYPE_VIDEODEC_ES);
 
 			if (videodec_es_data && videodec_es_data->data_type == DMA_BUF_VIDEODEC_HDR10PLUS) {
@@ -3447,14 +3766,13 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	}
 
 	if (ctx->stream_mode) {
-		int fd = vb->planes[0].m.fd;
 		struct dmabuf_dmx_sec_es_data *es_data;
 
-		if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_DMX_ES) {
-			pr_err("lelexiang not DMA_BUF_TYPE_DMX_ES\n");
+		if (dmabuf_manage_get_type(vb->planes[0].dbuf) != DMA_BUF_TYPE_DMX_ES) {
+			pr_err("not DMA_BUF_TYPE_DMX_ES\n");
 			return;
 		}
-		es_data = (struct dmabuf_dmx_sec_es_data *)dmabuf_manage_get_info(fd, DMA_BUF_TYPE_DMX_ES);
+		es_data = (struct dmabuf_dmx_sec_es_data *)dmabuf_manage_get_info(vb->planes[0].dbuf, DMA_BUF_TYPE_DMX_ES);
 		buf->dma_buf = (void *)es_data;
 	}
 	v4l2_m2m_buf_queue(ctx->m2m_ctx, to_vb2_v4l2_buffer(vb));
@@ -3472,7 +3790,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			"Invalid flush buffer.\n");
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		if ((!ctx->stream_mode) && ctx->output_dma_mode)
+		if ((ctx->stream_mode) || ctx->output_dma_mode)
 			wake_up_interruptible(&ctx->wq);
 
 		return;
@@ -3483,6 +3801,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		int offset = vb->planes[0].data_offset;
 		if (ctx->set_ext_buf_flg == false) {
 			v4l2_set_ext_buf_addr(ctx->ada_ctx, es_data, offset);
+			ctx->es_free = aml_es_input_free;
 			ctx->set_ext_buf_flg = true;
 		}
 
@@ -3507,7 +3826,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if ((!ctx->stream_mode) && ctx->output_dma_mode) {
+		if ((ctx->stream_mode) || ctx->output_dma_mode) {
 			wake_up_interruptible(&ctx->wq);
 		} else {
 			v4l2_buff_done(to_vb2_v4l2_buffer(vb),
@@ -3524,7 +3843,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	buf->used = false;
 	v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-	if ((!ctx->stream_mode) && ctx->output_dma_mode) {
+	if ((ctx->stream_mode) || ctx->output_dma_mode) {
 		wake_up_interruptible(&ctx->wq);
 	} else if (ctx->param_sets_from_ucode) {
 		v4l2_buff_done(to_vb2_v4l2_buffer(vb),
@@ -3588,10 +3907,6 @@ static void vb2ops_vdec_buf_finish(struct vb2_buffer *vb)
 
 	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
 	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
-
-	if (ctx->stream_mode && V4L2_TYPE_IS_OUTPUT(vb->type)) {
-		v4l2_set_rp_addr(ctx->ada_ctx, vb->planes[0].m.fd);
-	}
 
 	if (buf->error) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,

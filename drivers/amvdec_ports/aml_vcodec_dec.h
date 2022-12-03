@@ -80,7 +80,6 @@ struct file_private_data {
 #define DV_TYPE		(2)
 #define HDR10P_TYPE	(4)
 
-
 /*
  * struct aml_buf - decoder frame buffer
  * @mem_type	: gather or scatter memory.
@@ -144,6 +143,33 @@ struct aml_v4l2_buf {
 	ulong addr;
 };
 
+struct aml_es_node {
+	ulong addr;
+	u32 size;
+	int index; /* vb2 index */
+	struct list_head node;
+	u32 ref_mark;
+	struct dma_buf *dbuf;
+};
+
+struct aml_es_mgr {
+	struct list_head used_que;
+	struct list_head free_que;
+	u32 used_num;
+	u32 free_num;
+	struct mutex mutex;
+	struct aml_vcodec_ctx *ctx;
+	int count; /* vb2 count */
+	bool alloced;
+	ulong buf_start;
+	u32 buf_size;
+	u32 buf_flag;
+	ulong cur_wp;
+	ulong cur_rp;
+	u32 r_round;
+	u32 w_round;
+};
+
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;
 extern const struct v4l2_m2m_ops aml_vdec_m2m_ops;
 
@@ -187,5 +213,13 @@ int aml_canvas_cache_init(struct aml_vcodec_dev *dev);
 void aml_canvas_cache_put(struct aml_vcodec_dev *dev);
 int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr);
 int aml_uvm_buff_attach(struct vb2_buffer * vb);
+
+void aml_es_mgr_init(struct aml_vcodec_ctx *ctx);
+void aml_es_mgr_release(struct aml_vcodec_ctx *ctx);
+void aml_es_node_add(struct aml_es_mgr *mgr, ulong addr,
+	u32 size, s32 index);
+
+
+
 
 #endif /* _AML_VCODEC_DEC_H_ */

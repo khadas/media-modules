@@ -368,6 +368,7 @@ static int vdec_mpeg12_probe(unsigned long h_vdec,
 	if (ctx->stream_mode) {
 		ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, bs->timestamp);
 		vdec_write_stream_data(adapt_vdec, (u32)bs->addr, size);
+		aml_es_node_add(&ctx->es_mgr, bs->addr, size, bs->index);
 		return 0;
 	}
 
@@ -446,6 +447,7 @@ static int vdec_mpeg12_decode(unsigned long h_vdec,
 	if (ctx->stream_mode) {
 		ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, bs->timestamp);
 		vdec_write_stream_data(vdec, (u32)bs->addr, size);
+		aml_es_node_add(&ctx->es_mgr, bs->addr, size, bs->index);
 		return size;
 	}
 

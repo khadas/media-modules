@@ -9240,6 +9240,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			vdec_vframe_dirty(vdec, hw->chunk);
 			hw->chunk = NULL;
 			mutex_unlock(&hw->chunks_mutex);
+			if (ctx->es_free)
+				ctx->es_free(ctx, vdec->vbuf.buf_rp);
 			vdec_clean_input(vdec);
 		}
 		if ((hw->dec_result == DEC_RESULT_GET_DATA_RETRY) &&
@@ -9396,6 +9398,8 @@ result_done:
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
 		mutex_unlock(&hw->chunks_mutex);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -9430,6 +9434,8 @@ result_done:
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
 		mutex_unlock(&hw->chunks_mutex);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		vdec_clean_input(vdec);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -9479,6 +9485,8 @@ result_done:
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 		hw->chunk = NULL;
 		mutex_unlock(&hw->chunks_mutex);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 	}
 
 	if (p_H264_Dpb->mVideo.dec_picture) {

@@ -2394,6 +2394,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		if (vdec->input.swap_valid)
 			hw->dec_again_cnt = 0;
 		vdec_vframe_dirty(vdec, hw->chunk);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		hw->chunk = NULL;
 		hw->chunk_header_offset = 0;
 		hw->chunk_res_size = 0;
@@ -2430,6 +2432,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		}
 
 		vdec_vframe_dirty(vdec, hw->chunk);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		hw->chunk_header_offset = 0;
 		hw->chunk_res_size = 0;
 		hw->chunk = NULL;
@@ -2483,6 +2487,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			hw->stat &= ~STAT_VDEC_RUN;
 		}
 		vdec_vframe_dirty(vdec, hw->chunk);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		hw->chunk_header_offset = 0;
 		hw->chunk_res_size = 0;
 		hw->chunk = NULL;
@@ -2497,6 +2503,8 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			__func__, hw->disp_num, hw->dec_num);
 	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
 		vdec_vframe_dirty(vdec, hw->chunk);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		hw->chunk = NULL;
 		hw->chunk_header_offset = 0;
 		hw->chunk_res_size = 0;

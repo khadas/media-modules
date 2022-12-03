@@ -12321,6 +12321,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			hevc->chunk = NULL;
 			mutex_unlock(&hevc->chunks_mutex);
 			vdec_clean_input(vdec);
+			if (ctx->es_free)
+				ctx->es_free(ctx, vdec->vbuf.buf_rp);
 		}
 
 		if (run_ready(vdec, VDEC_HEVC)) {
@@ -12510,6 +12512,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 	} else if (hevc->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -12557,6 +12561,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 				hevc->chunk = NULL;
 				hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL, "Discard dirty data\n");
 				mutex_unlock(&hevc->chunks_mutex);
+				if (ctx->es_free)
+					ctx->es_free(ctx, vdec->vbuf.buf_rp);
 			} else if ((((error_handle_policy & 0x200) == 0) &&
 						(hevc->pic_list_init_flag == 0))) {
 				check_dirty_data(vdec);
@@ -12598,6 +12604,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 	} else if (hevc->dec_result == DEC_RESULT_FORCE_EXIT) {
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS, "%s: force exit\n", __func__);
 		if (hevc->stat & STAT_VDEC_RUN) {
@@ -12627,6 +12635,8 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		vdec_vframe_dirty(hw_to_vdec(hevc), hevc->chunk);
 		hevc->chunk = NULL;
 		mutex_unlock(&hevc->chunks_mutex);
+		if (ctx->es_free)
+			ctx->es_free(ctx, vdec->vbuf.buf_rp);
 	}
 
 	if (hevc->stat & STAT_VDEC_RUN) {

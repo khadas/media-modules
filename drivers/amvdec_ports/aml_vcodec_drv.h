@@ -800,6 +800,8 @@ struct aml_vcodec_ctx {
 
 	struct vdec_trace		vtr;
 	int dv_id;
+	struct aml_es_mgr	es_mgr;
+	void (*es_free)(struct aml_vcodec_ctx *, ulong);
 };
 
 /**

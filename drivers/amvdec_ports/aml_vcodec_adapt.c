@@ -672,7 +672,7 @@ void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size)
 	}
 }
 
-void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, int fd)
+void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, struct dma_buf *dbuf)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
 	u32 rp_addr;
@@ -682,12 +682,12 @@ void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, int fd)
 	rp_addr = STBUF_READ(&vdec->vbuf, get_rp);
 	v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_OUTPUT, "stream rp_addr is %x\n",rp_addr);
 
-	if (dmabuf_manage_get_type(fd) != DMA_BUF_TYPE_DMX_ES) {
+	if (dmabuf_manage_get_type(dbuf) != DMA_BUF_TYPE_DMX_ES) {
 		pr_err("current dmabuf type is not DMA_BUF_TYPE_DMX_ES\n");
 		return;
 	}
 
-	es_data = (struct dmabuf_dmx_sec_es_data *)dmabuf_manage_get_info(fd, DMA_BUF_TYPE_DMX_ES);
+	es_data = (struct dmabuf_dmx_sec_es_data *)dmabuf_manage_get_info(dbuf, DMA_BUF_TYPE_DMX_ES);
 
 	es_data->buf_rp = rp_addr;
 }
@@ -698,6 +698,8 @@ void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec
 	u32 buf_size = 0;
 
 	buf_size = es_data->buf_end - es_data->buf_start;
+	ada_ctx->ctx->es_mgr.buf_start = es_data->buf_start;
+	ada_ctx->ctx->es_mgr.buf_size = buf_size;
 
 	stream_buffer_set_ext_buf(&vdec->vbuf, es_data->buf_start, buf_size, 0);
 	vdec_init_stbuf_info(vdec);
