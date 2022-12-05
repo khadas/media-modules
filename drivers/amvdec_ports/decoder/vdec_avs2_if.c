@@ -276,6 +276,8 @@ static int vdec_avs2_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* set play mode.*/
 	if (ctx->is_drm_mode)
 		inst->vdec.port.flag |= PORT_FLAG_DRM;
+	if (ctx->output_dma_mode)
+		inst->vdec.port.flag |= PORT_FLAG_DMABUF;
 
 	/* to enable avs2 hw.*/
 	inst->vdec.port.type	= PORT_TYPE_HEVC;

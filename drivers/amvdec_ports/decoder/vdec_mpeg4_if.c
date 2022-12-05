@@ -205,6 +205,8 @@ static int vdec_mpeg4_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* set play mode.*/
 	if (ctx->is_drm_mode)
 		inst->vdec.port.flag |= PORT_FLAG_DRM;
+	if (ctx->output_dma_mode)
+		inst->vdec.port.flag |= PORT_FLAG_DMABUF;
 
 	/* to enable mpeg4 hw.*/
 	inst->vdec.port.type	= PORT_TYPE_VIDEO;

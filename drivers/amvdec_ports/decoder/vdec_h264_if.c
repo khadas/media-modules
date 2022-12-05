@@ -317,6 +317,8 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 	/* set play mode.*/
 	if (ctx->is_drm_mode)
 		inst->vdec.port.flag |= PORT_FLAG_DRM;
+	if (ctx->output_dma_mode)
+		inst->vdec.port.flag |= PORT_FLAG_DMABUF;
 
 	/* probe info from the stream */
 	inst->vsi = vzalloc(sizeof(struct vdec_h264_vsi));

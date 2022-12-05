@@ -77,6 +77,7 @@
 #define AML_V4L2_DEC_PARMS_CONFIG (V4L2_CID_USER_AMLOGIC_BASE + 7)
 #define AML_V4L2_GET_INST_ID (V4L2_CID_USER_AMLOGIC_BASE + 8)
 #define AML_V4L2_SET_STREAM_MODE (V4L2_CID_USER_AMLOGIC_BASE + 9)
+#define AML_V4L2_SET_ES_DMABUF_TYPE (V4L2_CID_USER_AMLOGIC_BASE + 10)
 
 #define V4L2_EVENT_PRIVATE_EXT_VSC_BASE (V4L2_EVENT_PRIVATE_START + 0x2000)
 #define V4L2_EVENT_PRIVATE_EXT_VSC_EVENT (V4L2_EVENT_PRIVATE_EXT_VSC_BASE + 1)
@@ -4262,6 +4263,10 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 				v4l_dbg(ctx, 0, "%s pts_serves_ops is NULL!\n", __func__);
 			}
 		}
+	} else if (ctrl->id == AML_V4L2_SET_ES_DMABUF_TYPE) {
+		ctx->output_dma_mode = ctrl->val;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"set dma buf mode: %x\n", ctrl->val);
 	}
 	return 0;
 }
@@ -4274,6 +4279,18 @@ static const struct v4l2_ctrl_ops aml_vcodec_dec_ctrl_ops = {
 static const struct v4l2_ctrl_config ctrl_st_mode = {
 	.name	= "drm mode",
 	.id	= AML_V4L2_SET_DRMMODE,
+	.ops	= &aml_vcodec_dec_ctrl_ops,
+	.type	= V4L2_CTRL_TYPE_BOOLEAN,
+	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
+	.min	= 0,
+	.max	= 1,
+	.step	= 1,
+	.def	= 0,
+};
+
+static const struct v4l2_ctrl_config ctrl_set_dma_buf_mode = {
+	.name	= "dma buf mode",
+	.id	= AML_V4L2_SET_ES_DMABUF_TYPE,
 	.ops	= &aml_vcodec_dec_ctrl_ops,
 	.type	= V4L2_CTRL_TYPE_BOOLEAN,
 	.flags	= V4L2_CTRL_FLAG_WRITE_ONLY,
@@ -4406,6 +4423,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	ctrl->flags |= V4L2_CTRL_FLAG_VOLATILE;
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_st_mode, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_set_dma_buf_mode, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
