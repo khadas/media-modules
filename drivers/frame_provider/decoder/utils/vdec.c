@@ -89,10 +89,6 @@
 #define PXP_DEBUG
 #endif
 
-#ifdef CONFIG_AMLOGIC_POWER
-#include <linux/amlogic/power_ctrl.h>
-#endif
-
 #ifdef CONFIG_AMLOGIC_IONVIDEO
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
 #endif
