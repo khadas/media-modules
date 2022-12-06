@@ -1641,6 +1641,8 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		if (i > 0) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;
+			if (vdec_stream_based(vdec))
+				vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;
 			vf->timestamp = pic->timestamp;
 			if (v4l2_ctx->second_field_pts_mode) {
 				vf->timestamp = 0;
@@ -2215,7 +2217,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 		disp_pic = &hw->pics[index];
 		info = hw->pics[index].buffer_info;
-		if (disp_pic->pts_valid && hw->lastpts64 == disp_pic->pts64)
+		if ((input_frame_based(hw_to_vdec(hw))) && disp_pic->pts_valid && hw->lastpts64 == disp_pic->pts64)
 			disp_pic->pts_valid = false;
 		if (disp_pic->pts_valid)
 			hw->lastpts64 = disp_pic->pts64;

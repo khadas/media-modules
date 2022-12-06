@@ -1349,8 +1349,8 @@ static void aml_vdec_worker(struct work_struct *work)
 		int offset = vb->planes[0].data_offset;
 		buf.addr = es_data->data_start + offset;
 		buf.size = vb->planes[0].bytesused - offset;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x\n",
-			buf.addr, buf.size, offset, es_data->data_start);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x ts 0x%llu\n",
+			buf.addr, buf.size, offset, es_data->data_start, vb->timestamp);
 	} else {
 		buf.addr	= aml_vb->addr ? aml_vb->addr : sg_dma_address(aml_vb->out_sgt->sgl);
 		buf.size	= vb->planes[0].bytesused;
@@ -2083,11 +2083,9 @@ out:
 		aml_es_node_expand(mgr);
 }
 
-void aml_es_node_del(struct aml_es_mgr *mgr, struct aml_es_node *packet)
+void aml_es_node_del(struct aml_es_mgr *mgr, struct aml_es_node *packet, bool flag)
 {
 	struct aml_es_node *cur_packet, *tmp;
-
-	mutex_lock(&mgr->mutex);
 
 	if (list_empty(&mgr->used_que)) {
 		v4l_dbg(mgr->ctx, 0, "%s, empty used que!\n", __func__);
@@ -2097,22 +2095,33 @@ void aml_es_node_del(struct aml_es_mgr *mgr, struct aml_es_node *packet)
 	list_for_each_entry_safe(cur_packet, tmp, &mgr->used_que, node) {
 		if (cur_packet == packet) {
 			list_del(&packet->node);
-			list_add_tail(&packet->node, &mgr->free_que);
-			mgr->used_num--;
-			mgr->free_num++;
-			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
-				"used_num(%d), free_num(%d)\n",
-				__func__, packet->index, packet->ref_mark,
-				packet->addr, mgr->used_num,
-				mgr->free_num);
-			packet->index = INVALID_IDX;
+			if (flag == 0) {
+				mgr->used_num--;
+				v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+					"%s: delete, vb_idx(%d), ref_mark(%d), addr(0x%lx) "
+					"used_num(%d), free_num(%d)\n",
+					__func__, packet->index, packet->ref_mark,
+					packet->addr, mgr->used_num,
+					mgr->free_num);
+				vfree(packet);
+			} else {
+				list_add_tail(&packet->node, &mgr->free_que);
+				mgr->used_num--;
+				mgr->free_num++;
+				v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
+					"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
+					"used_num(%d), free_num(%d)\n",
+					__func__, packet->index, packet->ref_mark,
+					packet->addr, mgr->used_num,
+					mgr->free_num);
+				packet->index = INVALID_IDX;
+			}
+
 			break;
 		}
 	}
-
 out:
-	mutex_unlock(&mgr->mutex);
+	return;
 }
 
 static struct aml_es_node *get_consumed_es_node(struct aml_es_mgr *mgr, ulong rp)
@@ -2187,7 +2196,7 @@ void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 {
 	struct aml_es_node *packet;
 	struct vb2_v4l2_buffer *vb = NULL;
-
+	bool flag = 0;
 	for (;;) {
 		packet = get_consumed_es_node(&ctx->es_mgr, addr);
 		if (packet == NULL)
@@ -2198,13 +2207,18 @@ void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 				"Fail to get vb!\n");
 			return;
 		}
-		v4l2_set_rp_addr(ctx->ada_ctx, vb->vb2_buf.planes[0].dbuf);
-		if (packet->ref_mark)
+		mutex_lock(&ctx->es_mgr.mutex);
+		if (packet->ref_mark) {
 			ref_unmark(packet);
-		else {
+			flag = 0;
+		} else {
+			mutex_unlock(&ctx->es_mgr.mutex);
 			aml_recycle_dma_buffers(ctx, packet->index);
+			mutex_lock(&ctx->es_mgr.mutex);
+			flag = 1;
 		}
-		aml_es_node_del(&ctx->es_mgr, packet);
+		aml_es_node_del(&ctx->es_mgr, packet, flag);
+		mutex_unlock(&ctx->es_mgr.mutex);
 	}
 }
 
@@ -3835,8 +3849,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		src_mem.addr = es_data->data_start + offset;
 		src_mem.size = vb->planes[0].bytesused - offset;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x\n",
-		src_mem.addr, src_mem.size, offset, es_data->data_start);
+
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x pts 0x%llu\n",
+			src_mem.addr, src_mem.size, offset, es_data->data_start, vb->timestamp);
+
 	} else {
 		src_mem.addr	= buf->addr ? buf->addr :
 				sg_dma_address(buf->out_sgt->sgl);

@@ -204,7 +204,7 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 		del_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
 		list_del(&del_ptn->node);
 		if (ptsserver_debuglevel >= 1) {
-			pts_pr_info(index,"Checkin delete node size:%d pts:0x%x pts_64:%llx\n",
+			pts_pr_info(index,"Checkin delete node size:%d pts:0x%x pts_64:%llu\n",
 								del_ptn->offset,
 								del_ptn->pts,
 								del_ptn->pts_64);
@@ -227,7 +227,7 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 
 	pInstance->mListSize++;
 	if (!pInstance->mPtsCheckinStarted) {
-		pts_pr_info(index,"-->Checkin(First) ListSize:%d CheckinPtsSize(%d)-> offset:0x%x pts(32:0x%x 64:%lld)\n",
+		pts_pr_info(index,"-->Checkin(First) ListSize:%d CheckinPtsSize(%d)-> offset:0x%x pts(32:0x%x 64:%llu)\n",
 							pInstance->mListSize,
 							mCheckinPtsSize->size,
 							ptn->offset,ptn->pts,
@@ -245,7 +245,7 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 								pInstance->mListSize,
 								pInstance->mLastCheckinOffset,
 								pInstance->mLastCheckinSize);
-		pts_pr_info(index,"Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%x 64:%llx)\n",
+		pts_pr_info(index,"Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%x 64:%llu)\n",
 							mCheckinPtsSize->size,
 							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
 							ptn->offset,
@@ -282,14 +282,14 @@ void ptsserver_delete_invalid_pts_node(ptsserver_ins* pInstance, pts_node* ptn){
 		if (ptn_cur == ptn)
 			break;
 		if (ptn->offset > ptn_cur->offset) {
+			if (ptsserver_debuglevel >= 1 ||
+				!pInstance->mPtsCheckoutStarted) {
+				pts_pr_info(0,"delete invalid node offset:0x%x pts(32:0x%x 64:%llu)\n",
+					ptn_cur->offset,ptn_cur->pts,ptn_cur->pts_64);
+			}
 			list_del(&ptn_cur->node);
 			vfree(ptn_cur);
 			pInstance->mListSize--;
-			if (ptsserver_debuglevel >= 1 ||
-				!pInstance->mPtsCheckoutStarted) {
-				pts_pr_info(0,"delete invalid node offset:0x%x pts(32:0x%x 64:%llx)\n",
-					ptn_cur->offset,ptn_cur->pts,ptn_cur->pts_64);
-			}
 		}
 	}
 }
@@ -371,7 +371,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				} else if (/*cur_offset > ptn->offset && */offsetAbs > 251658240) {
 					// > 240M (15M*16)
 					if (ptsserver_debuglevel >= 1) {
-						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%llx\n",
+						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%llu\n",
 											i,
 											offsetAbs,
 											ptn->offset,
@@ -396,7 +396,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
 			if (ptsserver_debuglevel >= 1 ||
 				!pInstance->mPtsCheckoutStarted) {
-				pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llx)\n",
+				pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
 									pInstance->mListSize,number,offsetDiff,
 									find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
 			}
@@ -430,7 +430,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 					mCheckoutPtsOffset->pts = find_ptn->pts;
 					mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
 					if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
-						pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llx)\n",
+						pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
 							pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
 					ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
 				}
@@ -447,7 +447,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			pInstance->mLastCheckoutPts = pInstance->mLastCheckoutPts + pInstance->mDecoderDuration;
 			pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mDecoderDuration * 1000 / 96;
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkout fail mDecoderDuration:%d pts(32:%d 64:%llx)\n",
+				pts_pr_info(index,"Checkout fail mDecoderDuration:%d pts(32:%d 64:%llu)\n",
 									pInstance->mDecoderDuration,
 									pInstance->mLastCheckoutPts,
 									pInstance->mLastCheckoutPts64);
@@ -460,7 +460,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mFrameDuration64;
 			}
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkout fail FrameDuration(32:%d 64:%lld) pts(32:%d 64:%llx)\n",
+				pts_pr_info(index,"Checkout fail FrameDuration(32:%d 64:%lld) pts(32:%d 64:%llu)\n",
 									pInstance->mFrameDuration,
 									pInstance->mFrameDuration64,
 									pInstance->mLastCheckoutPts,
@@ -501,7 +501,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 									pInstance->mPtsCheckoutFailCount + 1);
 
 			if (ptsserver_debuglevel > 1) {
-				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%llx)\n",
+				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%llu)\n",
 									FrameDur,
 									FrameDur64,
 									pInstance->mDoubleCheckFrameDuration,
@@ -525,7 +525,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			}
 			if (pInstance->mDoubleCheckFrameDurationCount > pInstance->kDoubleCheckThreshold) {
 				if (ptsserver_debuglevel > 1) {
-					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%llx)\n",
+					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%llu)\n",
 										pInstance->mDoubleCheckFrameDurationCount,
 										pInstance->mDoubleCheckFrameDuration,
 										pInstance->mDoubleCheckFrameDuration64);
@@ -617,7 +617,7 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
 
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"peek ok ListSize:%d find:%d offset(diff:%d L:0x%x C:0x%x) pts(32:0x%x 64:%llx)\n",
+				pts_pr_info(index,"peek ok ListSize:%d find:%d offset(diff:%d L:0x%x C:0x%x) pts(32:0x%x 64:%llu)\n",
 									pInstance->mListSize,number,offsetDiff,
 									find_ptn->offset ,cur_offset,find_ptn->pts, find_ptn->pts_64);
 			}

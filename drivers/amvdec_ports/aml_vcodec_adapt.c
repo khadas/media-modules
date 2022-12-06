@@ -671,7 +671,7 @@ void vdec_write_stream_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size)
 		vdec_dump_strea_data(ada_ctx, addr, size);
 	}
 }
-
+#if 0
 void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, struct dma_buf *dbuf)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -691,7 +691,7 @@ void v4l2_set_rp_addr(struct aml_vdec_adapt *ada_ctx, struct dma_buf *dbuf)
 
 	es_data->buf_rp = rp_addr;
 }
-
+#endif
 void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec_es_data *es_data, int offset)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -701,7 +701,7 @@ void v4l2_set_ext_buf_addr(struct aml_vdec_adapt *ada_ctx, struct dmabuf_dmx_sec
 	ada_ctx->ctx->es_mgr.buf_start = es_data->buf_start;
 	ada_ctx->ctx->es_mgr.buf_size = buf_size;
 
-	stream_buffer_set_ext_buf(&vdec->vbuf, es_data->buf_start, buf_size, 0);
+	stream_buffer_set_ext_buf(&vdec->vbuf, es_data->buf_start, buf_size, ada_ctx->ctx->is_drm_mode);
 	vdec_init_stbuf_info(vdec);
 	ada_ctx->ctx->pts_serves_ops->first_checkin(ada_ctx->ctx->output_pix_fmt, ada_ctx->ctx->ptsserver_id,
 		es_data->data_start + offset, es_data->buf_start);
