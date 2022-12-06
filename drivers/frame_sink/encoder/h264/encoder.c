@@ -3157,9 +3157,9 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 		enc_pr(LOG_INFO, "wq->pic.encoder_height:%d, request fmt=%d\n",
 		      wq->pic.encoder_height, wq->request.fmt);
 
-		if (((wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720) ||
+		if (/*((wq->pic.encoder_width >= 1280 && wq->pic.encoder_height >= 720) ||
 			(wq->pic.encoder_width >= 720 && wq->pic.encoder_height >= 1280))
-			&& wq->request.fmt == FMT_RGBA8888/* && wq->pic.color_space != GE2D_FORMAT_BT601*/) {
+			&& */wq->request.fmt == FMT_RGBA8888/* && wq->pic.color_space != GE2D_FORMAT_BT601*/) {
 			wq->request.scale_enable = 1;
 			wq->request.src_w = wq->pic.encoder_width;
 			wq->request.src_h = wq->pic.encoder_height;
