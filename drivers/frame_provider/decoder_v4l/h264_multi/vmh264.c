@@ -6565,7 +6565,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		if ((hw->error_proc_policy & 0x10000) &&
 			(hw->cur_picture_slice_count > 1) &&
-			(hw->multi_slice_pic_flag == 1 ||
+			((hw->multi_slice_pic_flag == 1) ||
 			((hw->multi_slice_pic_flag == 0) && (first_mb_in_slice == 0)))) {
 
 			dpb_print(DECODE_ID(hw), 0,
