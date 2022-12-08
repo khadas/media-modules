@@ -2158,6 +2158,32 @@ int release_buf_spec_num(struct vdec_s *vdec, int buf_spec_num)
 	return 0;
 }
 
+void h264_mmu_box_free_idx_tail(struct vdec_h264_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+	if (hw->mmu_enable
+		&& hw->frame_busy && hw->frame_done) {
+		long used_4k_num;
+		hevc_sao_wait_done(hw);
+		if (hw->hevc_cur_buf_idx != 0xffff) {
+			used_4k_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
+			if (used_4k_num >= 0) {
+				struct aml_buf *aml_buf = index_to_afbc_aml_buf(hw, hw->hevc_cur_buf_idx);
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_MMU_DETAIL,
+					"release unused buf , used_4k_num %ld index %d\n",
+					used_4k_num, hw->hevc_cur_buf_idx);
+
+				ctx->cal_compress_buff_info(used_4k_num, ctx);
+				hevc_mmu_dma_check(hw_to_vdec(hw));
+				decoder_mmu_box_free_idx_tail(aml_buf->fbc->mmu,
+					aml_buf->fbc->index, used_4k_num);
+				hw->hevc_cur_buf_idx = 0xffff;
+			}
+		}
+	}
+}
+
 int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -6976,6 +7002,7 @@ pic_done_proc:
 		vh264_pic_done_proc(vdec);
 
 		if (hw->frmbase_cont_flag) {
+			h264_mmu_box_free_idx_tail(hw);
 			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 			if (!have_free_buf_spec(vdec)) {
 				hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
@@ -9356,26 +9383,7 @@ result_done:
 			}
 		}
 
-		if (hw->mmu_enable
-			&& hw->frame_busy && hw->frame_done) {
-			long used_4k_num;
-			hevc_sao_wait_done(hw);
-			if (hw->hevc_cur_buf_idx != 0xffff) {
-				used_4k_num = (READ_VREG(HEVC_SAO_MMU_STATUS) >> 16);
-				if (used_4k_num >= 0) {
-					struct aml_buf *aml_buf = index_to_afbc_aml_buf(hw, hw->hevc_cur_buf_idx);
-					dpb_print(DECODE_ID(hw), PRINT_FLAG_MMU_DETAIL,
-						"release unused buf , used_4k_num %ld index %d\n",
-						used_4k_num, hw->hevc_cur_buf_idx);
-
-					ctx->cal_compress_buff_info(used_4k_num, ctx);
-					hevc_mmu_dma_check(hw_to_vdec(hw));
-					decoder_mmu_box_free_idx_tail(aml_buf->fbc->mmu,
-						aml_buf->fbc->index, used_4k_num);
-					hw->hevc_cur_buf_idx = 0xffff;
-				}
-			}
-		}
+		h264_mmu_box_free_idx_tail(hw);
 
 		decode_frame_count[DECODE_ID(hw)]++;
 		if (hw->dpb.mSlice.slice_type == I_SLICE) {
