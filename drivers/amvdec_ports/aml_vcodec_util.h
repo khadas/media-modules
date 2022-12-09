@@ -21,7 +21,12 @@
 #define _AML_VCODEC_UTIL_H_
 
 #include <linux/types.h>
+
+#ifdef __KERNEL__
+#include <uapi/linux/videodev2.h>
+#else
 #include <uapi/linux/time.h>
+#endif
 
 #include "aml_buf_core.h"
 #include "aml_task_chain.h"
