@@ -11549,7 +11549,8 @@ static int __init amvdec_av1_driver_init_module(void)
 	for (i = 0; i < WORK_BUF_SPEC_NUM; i++)
 		init_buff_spec(NULL, &aom_workbuff_spec[i]);
 
-	pr_debug("amvdec_av1 module init\n");
+	if (debug & PRINT_FLAG_VDEC_DETAIL)
+		pr_info("amvdec_av1 module init\n");
 
 	error_handle_policy = 0;
 

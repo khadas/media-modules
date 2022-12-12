@@ -176,7 +176,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->dv_id = -1;
 
 	mutex_unlock(&dev->dev_mutex);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "%s decoder %lx\n",
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR, "%s decoder %lx\n",
 		dev_name(&dev->plat_dev->dev), (ulong)ctx);
 
 	return 0;
@@ -204,7 +204,7 @@ static int fops_vcodec_release(struct file *file)
 	struct aml_vcodec_dev *dev = video_drvdata(file);
 	struct aml_vcodec_ctx *ctx = fh_to_ctx(file->private_data);
 
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "release decoder %lx\n", (ulong) ctx);
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR, "release decoder %lx\n", (ulong) ctx);
 	mutex_lock(&dev->dev_mutex);
 
 	aml_es_mgr_release(ctx);
@@ -713,7 +713,8 @@ static struct platform_driver aml_vcodec_dec_driver = {
 
 static int __init amvdec_ports_init(void)
 {
-	pr_info("v4l dec module init\n");
+	v4l_dbg(0, V4L_DEBUG_CODEC_BUFMGR,
+		"v4l dec module init\n");
 
 	if (platform_driver_register(&aml_vcodec_dec_driver)) {
 		pr_err("failed to register v4l dec driver\n");

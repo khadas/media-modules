@@ -4010,7 +4010,8 @@ static struct mconfig_node mmpeg12_node;
 
 static int __init ammvdec_mpeg12_driver_init_module(void)
 {
-	pr_info("ammvdec_mpeg12 module init\n");
+	debug_print(0, PRINT_FLAG_DEC_DETAIL,
+		"ammvdec_mpeg12 module init\n");
 
 	if (platform_driver_register(&ammvdec_mpeg12_driver)) {
 		pr_info("failed to register ammvdec_mpeg12 driver\n");

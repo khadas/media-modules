@@ -3294,7 +3294,8 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 		aml_buf_done(&ctx->bm, aml_buf,BUF_USER_DEC);
 
-		pr_info("[%d] H264 EOS notify.\n", ctx->id);
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+			"[%d] H264 EOS notify.\n", ctx->id);
 	}
 
 	return 0;
@@ -5056,7 +5057,7 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 	size /= pic_size;
 	size = imin(size, 16);
-	dpb_print(DECODE_ID(hw), 0, "level_idc = %d pic_size = %d size = %d\n",
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "level_idc = %d pic_size = %d size = %d\n",
 		level_idc, pic_size, size);
 	if (p_H264_Dpb->bitstream_restriction_flag) {
 		if ((int)p_H264_Dpb->max_dec_frame_buffering > size) {
@@ -5237,7 +5238,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		hw->seq_info2 = seq_info2;
 		hw->seq_info3 = seq_info3;
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"AV_SCRATCH_1 = %x, AV_SCRATCH_2 = %x, AV_SCRATCH_B: = %x\r\n",
 			seq_info2, hw->seq_info, seq_info3);
 		dpb_init_global(&hw->dpb,
@@ -5309,10 +5310,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->frame_width = hw->frame_width - crop_right;
 		hw->frame_height = hw->frame_height - crop_bottom;
 
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"chroma_format_idc = %d frame_mbs_only_flag %d, crop_bottom %d,  frame_height %d,\n",
 			chroma_format_idc, frame_mbs_only_flag, crop_bottom, hw->frame_height);
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"mb_height %d,crop_right %d, frame_width %d, mb_width %d\n",
 			mb_height, crop_right,
 			hw->frame_width, mb_width);
@@ -5340,14 +5341,14 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			hevc_mcr_sao_global_hw_init(hw,
 				(hw->mb_width << 4), (hw->mb_height << 4));
 
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"mb height/widht/total: %x/%x/%x level_idc %x max_ref_num %x\n",
 			mb_height, mb_width, mb_total,
 			level_idc, max_reference_size);
 
 		p_H264_Dpb->colocated_buf_size = mb_total * 96;
 
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"restriction_flag=%d, max_dec_frame_buffering=%d, dec_dpb_size=%d num_reorder_frames %d used_reorder_dpb_size_margin %d\n",
 			hw->bitstream_restriction_flag,
 			hw->max_dec_frame_buffering,
@@ -5376,7 +5377,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		if (hw->no_poc_reorder_flag)
 			hw->dpb.dec_dpb_size = 1;
-		dpb_print(DECODE_ID(hw), 0,
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"%s active_buf_spec_num %d dec_dpb_size %d collocate_buf_num %d\r\n",
 			__func__, active_buffer_spec_num,
 			hw->dpb.dec_dpb_size,
@@ -5397,7 +5398,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			i = get_buf_spec_by_canvas_pos(hw, 0);
 
 			if (i != -1) {
-				pr_info("v4l: delay alloc the buffer.\n");
+				dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+					"v4l: delay alloc the buffer.\n");
 			}
 		} else {
 			if (hw->double_write_mode) {
@@ -7949,9 +7951,11 @@ static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset)
 
 	hw->first_i_policy = first_i_policy;
 
-	pr_info("H264 sysinfo: %dx%d duration=%d, pts_outside=%d\n",
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+			"H264 sysinfo: %dx%d duration=%d, pts_outside=%d\n",
 		hw->frame_width, hw->frame_height, hw->frame_dur, hw->pts_outside);
-	pr_debug("sync_outside=%d, use_idr_framerate=%d, is_used_v4l: %d\n",
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
+			"sync_outside=%d, use_idr_framerate=%d, is_used_v4l: %d\n",
 		hw->sync_outside, hw->use_idr_framerate, hw->is_used_v4l);
 
 	if (i_only_flag & 0x100)
@@ -8237,7 +8241,7 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 		hw->fw_mmu = NULL;
 	}
 
-	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "%s\n", __func__);
 	return 0;
 }
 
@@ -8896,7 +8900,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 
 	dec_dpb_size = get_dec_dpb_size(hw , mb_width, mb_height, level_idc);
 
-	dpb_print(DECODE_ID(hw), 0,
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 		"v4l restriction:%d, max buffering:%d, DPB size:%d, reorder frames:%d, margin:%d\n",
 		hw->bitstream_restriction_flag,
 		hw->max_dec_frame_buffering,
@@ -9009,7 +9013,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		}
 	}
 
-	dpb_print(DECODE_ID(hw), 0,
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 		"Res:%dx%d, DPB size:%d, margin:%d, scan:%s\n",
 		ps->visible_width, ps->visible_height,
 		ps->dpb_frames, ps->dpb_margin,
@@ -10025,7 +10029,7 @@ static void reset(struct vdec_s *vdec)
 		(struct vdec_h264_hw_s *)vdec->private;
 	int i;
 
-	pr_info("vmh264 reset\n");
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "vmh264 reset\n");
 
 	cancel_work_sync(&hw->work);
 	cancel_work_sync(&hw->notify_work);
@@ -10056,7 +10060,7 @@ static void reset(struct vdec_s *vdec)
 	atomic_set(&hw->vf_get_count, 0);
 	atomic_set(&hw->vf_put_count, 0);
 
-	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "%s\n", __func__);
 }
 
 static void h264_reconfig(struct vdec_h264_hw_s *hw)
@@ -10160,7 +10164,7 @@ static void h264_reset_bufmgr_v4l(struct vdec_s *vdec, int flush_flag)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 
 	mutex_lock(&reset_mutex);
-	dpb_print(DECODE_ID(hw), 0, "%s frame count %d to skip %d\n\n",
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "%s frame count %d to skip %d\n\n",
 		__func__, hw->decode_pic_count+1,
 	hw->skip_frame_count);
 
@@ -10347,7 +10351,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 			hw->error_proc_policy = error_proc_policy;
 		}
 		if (hw->discard_dv_data)
-			dpb_print(DECODE_ID(hw), 0, "discard dv data\n");
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "discard dv data\n");
 	} else {
 		hw->double_write_mode = double_write_mode;
 		hw->error_proc_policy = error_proc_policy;
@@ -10432,7 +10436,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		}
 	}
 
-	dpb_print(DECODE_ID(hw), 0,
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 		"%s mmu_enable %d double_write_mode 0x%x\n",
 		__func__, hw->mmu_enable, hw->double_write_mode);
 
@@ -10529,7 +10533,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		}
 	}
 
-	dpb_print(DECODE_ID(hw), 0, "ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL, "ammvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
 		pdata->mem_start, hw->buf_offset, hw->cma_alloc_addr);
 
 	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
@@ -10744,7 +10748,9 @@ static struct mconfig_node hm264_node;
 
 static int __init ammvdec_h264_driver_init_module(void)
 {
-	pr_info("ammvdec_h264 module init\n");
+	dpb_print(0, PRINT_FLAG_DEC_DETAIL,
+		"ammvdec_h264 module init\n");
+
 	if (platform_driver_register(&ammvdec_h264_driver)) {
 		pr_info("failed to register ammvdec_h264 driver\n");
 		return -ENODEV;

@@ -85,8 +85,11 @@
 #define VF_BUFFER_IDX(n)	(1 + n)
 #define DCAC_BUFF_START_ADDR	0x01f00000
 
+static u32 debug;
 
 #define PUT_INTERVAL        (HZ/100)
+
+#define PRINT_FLAG_VDEC_STATUS		0x20000000
 
 #if 1	/* /MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6 */
 /* TODO: move to register headers */
@@ -1422,7 +1425,8 @@ static struct codec_profile_t amvdec_vc1_profile = {
 
 static int __init amvdec_vc1_driver_init_module(void)
 {
-	pr_debug("amvdec_vc1 module init\n");
+	if (debug & PRINT_FLAG_VDEC_STATUS)
+		pr_info("amvdec_vc1 module init\n");
 
 	if (platform_driver_register(&amvdec_vc1_driver)) {
 		pr_err("failed to register amvdec_vc1 driver\n");

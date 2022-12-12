@@ -5204,7 +5204,7 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 		      &p_H264_Dpb->mSPS, &p_H264_Dpb->mSlice);
 
 	if (p_Dpb->num_ref_frames != p_H264_Dpb->mSPS.num_ref_frames) {
-		dpb_print(p_H264_Dpb->decoder_index, 0,
+		dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
 		"num_ref_frames change from %d to %d\r\n",
 			p_Dpb->num_ref_frames, p_H264_Dpb->mSPS.num_ref_frames);
 		p_Dpb->num_ref_frames = p_H264_Dpb->mSPS.num_ref_frames;

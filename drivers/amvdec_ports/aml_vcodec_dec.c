@@ -1107,6 +1107,9 @@ void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)
 	struct v4l_compressed_buffer_info *buffer = &ctx->compressed_buf_info;
 	u64 used_page_sum = buffer->used_page_sum;
 
+	if (!(debug_mode & V4L_DEBUG_CODEC_COUNT))
+		return;
+
 	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &pic)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"get pic info err\n");
@@ -1115,9 +1118,9 @@ void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)
 
 	outq = aml_vdec_get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
 
-	pr_info("\n==== Show mmu buffer info ======== \n");
+	pr_info("==== Show mmu buffer info ======== \n");
 	if (buffer->recycle_num == 0) {
-		pr_info("\nNo valid info \n");
+		pr_info("No valid info \n");
 		return;
 	}
 	mutex_lock(&ctx->compressed_buf_info_lock);
@@ -1148,7 +1151,7 @@ void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)
 	}
 
 	mutex_unlock(&ctx->compressed_buf_info_lock);
-	pr_info("\n==== End Show mmu buffer info ======== \n");
+	pr_info("==== End Show mmu buffer info ========");
 }
 
 static void reconfig_vpp_status(struct aml_vcodec_ctx *ctx)
@@ -1693,7 +1696,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 		v4l2_m2m_try_schedule(ctx->m2m_ctx);//pay attention
 		ctx->receive_cmd_stop = true;
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"%s, receive cmd stop and prepare flush pipeline.\n", __func__);
 		break;
 
@@ -1703,7 +1706,7 @@ static int vidioc_decoder_cmd(struct file *file, void *priv,
 			V4L2_BUF_TYPE_VIDEO_CAPTURE);
 		vb2_clear_last_buffer_dequeued(dst_vq);//pay attention
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"%s, receive cmd start.\n", __func__);
 		break;
 
@@ -1816,7 +1819,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if (ctx->dv_id < 0) {
 			dv_inst_map(&ctx->dv_id);
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 				"%s: dv_inst_map ctx %p, dv_id %d\n",__func__, ctx, ctx->dv_id);
 		}
 #endif
@@ -3571,7 +3574,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	if (ctx->dv_id >= 0) {
 		dv_inst_unmap(ctx->dv_id);
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 				"%s: dv_inst_unmap ctx %p, dv_id %d\n", __func__, ctx, ctx->dv_id);
 	}
 #endif
@@ -4210,7 +4213,7 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 	case AML_V4L2_GET_BITDEPTH:
 		ctrl->val = ctx->picinfo.bitdepth;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"bitdepth: %d\n", ctrl->val);
 		break;
 	case AML_V4L2_DEC_PARMS_CONFIG:
@@ -4242,7 +4245,7 @@ static int aml_vdec_try_s_v_ctrl(struct v4l2_ctrl *ctrl)
 			"set duration: %x\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE) {
 		ctx->cache_input_buffer_num = ctrl->val;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"cache_input_buffer_num: %d\n", ctrl->val);
 	} else if (ctrl->id == AML_V4L2_DEC_PARMS_CONFIG) {
 		vidioc_vdec_s_parm_ext(ctrl, ctx);

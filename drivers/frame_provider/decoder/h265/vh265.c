@@ -14069,7 +14069,9 @@ static int __init amvdec_h265_driver_init_module(void)
 		(p_buf_info->end_adr - p_buf_info->start_adr
 		 + 0xffff) & (~0xffff);
 
-	pr_debug("amvdec_h265 module init\n");
+	if (debug & PRINT_FLAG_VDEC_DETAIL)
+		pr_info("amvdec_h265 module init\n");
+
 	error_handle_policy = 0;
 
 #ifdef ERROR_HANDLE_DEBUG

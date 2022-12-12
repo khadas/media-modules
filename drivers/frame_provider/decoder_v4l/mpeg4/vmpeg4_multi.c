@@ -3100,7 +3100,8 @@ static struct codec_profile_t amvdec_mpeg4_profile = {
 
 static int __init ammvdec_mpeg4_driver_init_module(void)
 {
-	pr_info("%s \n", __func__);
+	mmpeg4_debug_print(0, PRINT_FLAG_DEC_DETAIL,
+		"%s \n", __func__);
 
 	if (platform_driver_register(&ammvdec_mpeg4_driver)) {
 		pr_err("failed to register ammvdec_mpeg4 driver\n");

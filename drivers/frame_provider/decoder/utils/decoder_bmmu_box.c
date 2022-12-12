@@ -31,6 +31,7 @@
 #include <linux/slab.h>
 #include <linux/amlogic/media/codec_mm/codec_mm_scatter.h>
 #include <linux/platform_device.h>
+#include "vdec.h"
 
 //#include <linux/amlogic/media/video_sink/video_keeper.h>
 #include "decoder_bmmu_box.h"
@@ -122,7 +123,8 @@ void *decoder_bmmu_box_alloc_box(const char *name,
 	tvp_flags = (mem_flags & CODEC_MM_FLAGS_TVP) ?
 		CODEC_MM_FLAGS_TVP : 0;
 
-	pr_debug("decoder_bmmu_box_alloc_box, tvp_flags = %x\n", tvp_flags);
+	if (vdec_get_debug() & VDEC_DBG_DETAIL_INFO)
+		pr_debug("decoder_bmmu_box_alloc_box, tvp_flags = %x\n", tvp_flags);
 
 	size = sizeof(struct decoder_bmmu_box) + sizeof(struct codec_mm_s *) *
 		   max_num;

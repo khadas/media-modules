@@ -113,9 +113,10 @@ int get_firmware_data(unsigned int format, char *buf)
 	struct fw_mgr_s *mgr = g_mgr;
 	struct fw_info_s *info;
 
-	pr_info("[%s], the fw (%s) will be loaded...\n",
-		tee_enabled() ? "TEE" : "LOCAL",
-		get_fw_format_name(format));
+	if (debug)
+		pr_info("[%s], the fw (%s) will be loaded...\n",
+			tee_enabled() ? "TEE" : "LOCAL",
+			get_fw_format_name(format));
 
 	if (tee_enabled())
 		return 0;

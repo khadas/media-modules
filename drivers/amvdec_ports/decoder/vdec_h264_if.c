@@ -346,7 +346,7 @@ static int vdec_h264_init(struct aml_vcodec_ctx *ctx, unsigned long *h_vdec)
 		goto err;
 	}
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
 		"H264 Instance >> %lx", (ulong) inst);
 
 	return 0;
@@ -958,8 +958,8 @@ static void get_param_config_info(struct vdec_h264_inst *inst,
 
 	parms->parms_status |= inst->parms.parms_status;
 
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"parms status: %u\n", parms->parms_status);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"v4l config parms status: %u\n", parms->parms_status);
 }
 
 static void get_param_comp_buf_info(struct vdec_h264_inst *inst,
@@ -1079,7 +1079,7 @@ static void set_param_hdr_info(struct vdec_h264_inst *inst,
 			V4L2_CONFIG_PARM_DECODE_HDRINFO;
 		aml_vdec_dispatch_event(inst->ctx,
 			V4L2_EVENT_SRC_CH_HDRINFO);
-		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
 			"H264 set HDR infos\n");
 	}
 }

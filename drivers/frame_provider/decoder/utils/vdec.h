@@ -265,6 +265,12 @@ enum vformat_t;
 #define VDEC_DATA_MAX_INSTANCE_NUM (MAX_INSTANCE_MUN * 2)
 #define VDEC_DATA_NUM 64
 
+#define VDEC_DBG_SCHED_PRIO	(0x1)
+#define VDEC_DBG_ALWAYS_LOAD_FW	(0x2)
+#define VDEC_DBG_CANVAS_STATUS	(0x4)
+#define VDEC_DBG_DETAIL_INFO	(0x8)
+#define VDEC_DBG_ENABLE_FENCE	(0x100)
+
 struct vdec_data_s {
 	void *private_data;
 	atomic_t  use_count;
@@ -666,6 +672,9 @@ extern int vdec_core_release(struct vdec_s *vdec, unsigned long mask);
 extern bool vdec_core_with_input(unsigned long mask);
 
 extern void vdec_core_finish_run(struct vdec_s *vdec, unsigned long mask);
+
+extern u32 vdec_get_debug(void);
+
 
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);

@@ -30,6 +30,7 @@
 #include "../../../common/media_clock/switch/amports_gate.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include "../../../common/media_clock/clk/clk.h"
+#include "vdec.h"
 
 #define HEVC_TEST_LIMIT		(100)
 #define GXBB_REV_A_MINOR	(0xa)
@@ -93,8 +94,10 @@ static void pm_vdec_power_switch(struct pm_pd_s *pd, int id, bool on)
 	else
 		pm_runtime_put_sync(dev);
 
-	pr_debug("the %-15s power %s\n",
-		pd[id].name, on ? "on" : "off");
+	if (vdec_get_debug() & VDEC_DBG_DETAIL_INFO)
+		pr_debug("the %-15s power %s\n",
+			pd[id].name, on ? "on" : "off");
+
 }
 
 static int pm_vdec_power_domain_init(struct device *dev)
@@ -121,8 +124,9 @@ static int pm_vdec_power_domain_init(struct device *dev)
 			return -ENODEV;
 		}
 
-		pr_debug("power domain: name: %s, dev: %px, link: %px\n",
-			pd[i].name, pd[i].dev, pd[i].link);
+		if (vdec_get_debug() & VDEC_DBG_DETAIL_INFO)
+			pr_debug("power domain: name: %s, dev: %px, link: %px\n",
+				pd[i].name, pd[i].dev, pd[i].link);
 	}
 
 	return 0;

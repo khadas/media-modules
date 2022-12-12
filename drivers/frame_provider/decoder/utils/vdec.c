@@ -129,10 +129,7 @@ static int rdma_mode = 0x1;
  * 0x4  : vdec canvas debug enable
  * 0x100: enable vdec fence.
  */
-#define VDEC_DBG_SCHED_PRIO	(0x1)
-#define VDEC_DBG_ALWAYS_LOAD_FW	(0x2)
-#define VDEC_DBG_CANVAS_STATUS	(0x4)
-#define VDEC_DBG_ENABLE_FENCE	(0x100)
+
 
 #if 0
 #define HEVC_RDMA_F_CTRL                           0x30f0
@@ -210,7 +207,10 @@ void vdec_frame_rate_uevent(int dur)
 
 	if (unlikely(in_interrupt()))
 		return;
-	pr_info("vdec_frame_rate_uevent %d\n", dur);
+
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_info("vdec_frame_rate_uevent %d\n", dur);
+
 	frame_rate_notify(dur);
 }
 EXPORT_SYMBOL(vdec_frame_rate_uevent);
@@ -822,8 +822,8 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		}
 	} else
 		dec_dmc_port_ctrl(0, input->target);
-
-	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
 }
 
 static void vdec_enable_DMC(struct vdec_s *vdec)
@@ -2581,8 +2581,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	snprintf(dev_name, sizeof(dev_name),
 		"%s%s", pdev_name, is_v4l ? "_v4l": "");
 
-	pr_info("vdec_init, dev_name:%s, vdec_type=%s, format: %d\n",
-		dev_name, vdec_type_str(vdec), vdec->format);
+	pr_info("vdec_init, dev_name:%s, vdec_type=%s, format: %d, total: %d\n",
+		dev_name, vdec_type_str(vdec), vdec->format,atomic_read(&vdec_core->vdec_nr));
 
 	snprintf(vdec->name, sizeof(vdec->name),
 		 "vdec-%d", vdec->id);
@@ -3027,8 +3027,9 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		tee_config_device_state(DMC_DEV_ID_VDEC, 0);
 	}
 	p->dolby_meta_with_el = 0;
-	pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
-		p->vf_provider_name, is_cpu_tm2_revb());
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
+			p->vf_provider_name, is_cpu_tm2_revb());
 
 	mutex_lock(&vdec_mutex);
 	vdec_core->vdec_resource_status |= BIT(p->frame_base_video_path);
@@ -3043,7 +3044,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	}
 	vdec->inst_cnt = vdec_core->inst_cnt;
 	mutex_unlock(&vdec_mutex);
-	pr_debug("vdec_init, inst_cnt = %d, port type 0x%x\n", vdec->inst_cnt, vdec->port->type);
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_debug("vdec_init, inst_cnt = %d, port type 0x%x\n", vdec->inst_cnt, vdec->port->type);
 
 	vdec_input_prepare_bufs(/*prepared buffer for fast playing.*/
 		&vdec->input,
@@ -4119,7 +4121,8 @@ int vdec_source_changed(int format, int width, int height, int fps)
 
 	on_setting = 1;
 	ret = vdec_source_changed_for_clk_set(format, width, height, fps);
-	pr_debug("vdec1 video changed to %d x %d %d fps clk->%dMHZ\n",
+	if (debug & VDEC_DBG_DETAIL_INFO)
+		pr_debug("vdec1 video changed to %d x %d %d fps clk->%dMHZ\n",
 			width, height, fps, vdec_clk_get(VDEC_1));
 	on_setting = 0;
 	return ret;
@@ -6033,7 +6036,8 @@ static int vdec_probe(struct platform_device *pdev)
 			pr_err("vdec power manager init failed\n");
 			return r;
 		}
-		pr_debug("vdec power init success!\n");
+		if (debug & VDEC_DBG_DETAIL_INFO)
+			pr_debug("vdec power init success!\n");
 	}
 
 	return 0;

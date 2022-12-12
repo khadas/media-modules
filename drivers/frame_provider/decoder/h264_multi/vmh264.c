@@ -11486,8 +11486,9 @@ static struct mconfig_node hm264_node;
 
 static int __init ammvdec_h264_driver_init_module(void)
 {
+	dpb_print(0, PRINT_FLAG_VDEC_DETAIL,
+		"ammvdec_h264 module init\n");
 
-	pr_info("ammvdec_h264 module init\n");
 	if (platform_driver_register(&ammvdec_h264_driver)) {
 		pr_info("failed to register ammvdec_h264 driver\n");
 		return -ENODEV;

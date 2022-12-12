@@ -284,7 +284,7 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 
 	mutex_lock(&bc->mutex);
 
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO,
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, core st:%d, core ref:%d, free:%d\n",
 		__func__,
 		bc->state,
