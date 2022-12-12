@@ -207,9 +207,6 @@ static int fops_vcodec_release(struct file *file)
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR, "release decoder %lx\n", (ulong) ctx);
 	mutex_lock(&dev->dev_mutex);
-
-	aml_es_mgr_release(ctx);
-
 	aml_thread_stop(ctx);
 	wait_vcodec_ending(ctx);
 	vb2_queue_release(&ctx->m2m_ctx->cap_q_ctx.q);

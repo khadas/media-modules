@@ -1978,7 +1978,11 @@ struct vb2_v4l2_buffer *aml_get_vb_by_index(struct aml_vcodec_ctx *ctx,
 	struct vb2_queue *q = NULL;
 
 	q = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-	vb = to_vb2_v4l2_buffer(q->bufs[index]);
+	if (q)
+		vb = to_vb2_v4l2_buffer(q->bufs[index]);
+	else
+		v4l_dbg(ctx, 0,
+				"vb queue is released!\n");
 
 	return vb;
 }
@@ -2020,10 +2024,11 @@ void  aml_es_node_expand(struct aml_es_mgr *mgr)
 			aml_recycle_dma_buffers(mgr->ctx, packet->index);
 			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
 				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
-				"used_num(%d), free_num(%d) dbuf(%px)\n",
+				"used_num(%d), free_num(%d), dbuf(%px)\n",
 				__func__, packet->index,
 				packet->ref_mark, packet->addr,
-				mgr->used_num, mgr->free_num, packet->dbuf);
+				mgr->used_num, mgr->free_num,
+				packet->dbuf);
 			break;
 		}
 	}
@@ -2188,11 +2193,17 @@ void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 		if (packet == NULL)
 			break;
 		vb = aml_get_vb_by_index(ctx, packet->index);
+		if (vb == NULL) {
+			v4l_dbg(ctx, 0,
+				"Fail to get vb!\n");
+			return;
+		}
 		v4l2_set_rp_addr(ctx->ada_ctx, vb->vb2_buf.planes[0].dbuf);
 		if (packet->ref_mark)
 			ref_unmark(packet);
-		else
+		else {
 			aml_recycle_dma_buffers(ctx, packet->index);
+		}
 		aml_es_node_del(&ctx->es_mgr, packet);
 	}
 }
@@ -3594,6 +3605,7 @@ void aml_v4l_ctx_release(struct kref *kref)
 	if (ctx->stream_mode) {
 		ctx->set_ext_buf_flg = false;
 		ptsserver_ins_release(ctx->ptsserver_id);
+		aml_es_mgr_release(ctx);
 	}
 
 	kfree(ctx);

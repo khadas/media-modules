@@ -2862,6 +2862,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			if ((i > 0) && v4l2_ctx->second_field_pts_mode) {
 				vf->timestamp = 0;
 			}
+			if (vdec_stream_based(vdec) && (i > 0))
+				vf->pts_us64 = frame->pts64;
+
 			vf->index = VF_INDEX(frame->index, buffer_index);
 		}
 
@@ -9194,6 +9197,32 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 	return ret;
 }
 
+void vh264_report_pts(struct vdec_h264_hw_s *hw)
+{
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	u32 offset_lo, offset_hi;
+	u32 offset;
+	struct checkoutptsoffset pts_st;
+
+	offset_lo  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_LO];
+	offset_hi  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_HI];
+
+	offset = offset_lo | offset_hi << 16;
+
+	if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, offset, &pts_st)) {
+		ctx->current_timestamp = pts_st.pts_64;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
+		"pts cal_offset current pts:0x%x pts_64:%llx\n",
+		pts_st.pts, pts_st.pts_64);
+	} else {
+		dpb_print(DECODE_ID(hw), 0, "pts cal_offset fail\n");
+		ctx->current_timestamp = 0;
+	}
+	vdec_v4l_post_error_frame_event(ctx);
+}
+
+
 static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from)
 {
@@ -9264,6 +9293,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			if (!v4l_res_change(hw, param1, param2, param3, param4)) {
 				if (!hw->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
+
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_DEC_DETAIL,
 						"h264 parsered csd data\n");
@@ -9272,6 +9302,12 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						param3, param4, &ps) < 0) {
 						dpb_print(DECODE_ID(hw), 0,
 							"set parameters error\n");
+						if (vdec_stream_based(vdec)) {
+							vh264_report_pts(hw);
+							hw->dec_result = DEC_RESULT_DONE;
+							vdec_schedule_work(&hw->work);
+						}
+						return;
 					}
 					hw->v4l_params_parsed = true;
 					if (hw->double_write_mode != 0x10) {
