@@ -5547,7 +5547,9 @@ static int get_idle_pos(struct hevc_state_s *hevc)
 			(pic->referenced == 0) &&
 			(pic->output_ready == 0) &&
 			(((pic->height == hevc->pic_h) &&
-			(pic->width == hevc->pic_w)) || hevc->resolution_change) &&
+			(pic->width == hevc->pic_w)) ||
+			(hevc->resolution_change) ||
+			(!hevc->first_pic_flag && hevc->eos)) &&
 			(pic->vf_ref == 0) && !hevc->m_PIC[i]->cma_alloc_addr)
 			break;
 	}
@@ -9218,6 +9220,8 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		}
 	}
 
+	hw->eos = true;
+
 	pic = v4l_get_new_pic(hw, NULL);
 	if (NULL == pic) {
 		pr_err("[%d] H265 EOS get free buff fail.\n", ctx->id);
@@ -9236,8 +9240,6 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
-
-	hw->eos = true;
 
 	pr_info("[%d] H265 EOS notify.\n", ctx->id);
 
