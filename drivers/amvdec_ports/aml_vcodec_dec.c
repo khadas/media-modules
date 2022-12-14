@@ -1486,11 +1486,6 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 	/* clean output cache and decoder status . */
 	if (ctx->state > AML_STATE_INIT)
 		aml_vdec_reset(ctx);
-
-	/* pause the job and clean trans status. */
-	while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
-		v4l2_m2m_job_pause(ctx->dev->m2m_dev_dec, ctx->m2m_ctx);
-	}
 }
 
 void aml_thread_capture_worker(struct aml_vcodec_ctx *ctx)
