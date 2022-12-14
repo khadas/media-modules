@@ -1257,6 +1257,7 @@ struct VP9Decoder_s {
 	ulong frame_mmu_map_handle;
 	ulong stage_mmu_map_handle;
 	ulong rdma_mem_handle;
+	bool timeout;
 };
 
 static int vp9_print(struct VP9Decoder_s *pbi,
@@ -1603,8 +1604,6 @@ static void start_process_time(struct VP9Decoder_s *pbi)
 
 static void timeout_process(struct VP9Decoder_s *pbi)
 {
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
-
 	pbi->timeout_num++;
 	if (pbi->process_busy) {
 		vp9_print(pbi,
@@ -1613,9 +1612,8 @@ static void timeout_process(struct VP9Decoder_s *pbi)
 	}
 	amhevc_stop();
 	vp9_print(pbi, 0, "%s decoder timeout\n", __func__);
-	if (vdec_frame_based(hw_to_vdec(pbi)))
-		vdec_v4l_post_error_frame_event(ctx);
 
+	pbi->timeout = true;
 	pbi->dec_result = DEC_RESULT_DONE;
 	reset_process_time(pbi);
 	vdec_schedule_work(&pbi->work);
@@ -8520,8 +8518,8 @@ static void vp9_buf_ref_process_for_exception(struct VP9Decoder_s *pbi)
 		aml_buf = (struct aml_buf *)pbi->m_BUF[cur_idx].v4l_ref_buf_addr;
 
 		vp9_print(pbi, 0,
-			"%s dma addr 0x%lx\n",
-			__func__, frame_bufs[cur_idx].buf.cma_alloc_addr);
+			"process_for_exception: dma addr(0x%lx)\n",
+			frame_bufs[cur_idx].buf.cma_alloc_addr);
 
 		aml_buf = (struct aml_buf *)pbi->m_BUF[cur_idx].v4l_ref_buf_addr;
 
@@ -9930,6 +9928,12 @@ static void vp9_work(struct work_struct *work)
 				dump_hit_rate(pbi);
 		}
 #endif
+
+		if (pbi->timeout && vdec_frame_based(vdec)) {
+			vp9_buf_ref_process_for_exception(pbi);
+			vdec_v4l_post_error_frame_event(ctx);
+			pbi->timeout = false;
+		}
 		pbi->slice_idx++;
 		pbi->frame_count++;
 		pbi->process_state = PROC_STATE_INIT;
@@ -10474,6 +10478,7 @@ static void run_front(struct vdec_s *vdec)
 	WRITE_VREG(HEVC_DECODE_SIZE, size);
 	WRITE_VREG(HEVC_DECODE_COUNT, pbi->slice_idx);
 	pbi->init_flag = 1;
+	pbi->cur_idx = INVALID_IDX;
 
 	vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
 		"%s: start hevc (%x %x %x)\n",

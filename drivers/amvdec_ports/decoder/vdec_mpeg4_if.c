@@ -566,6 +566,14 @@ static void set_pic_info(struct vdec_mpeg4_inst *inst,
 	inst->vsi->pic = *pic;
 }
 
+static void set_param_post_event(struct vdec_mpeg4_inst *inst, u32 *event)
+{
+	aml_vdec_dispatch_event(inst->ctx, *event);
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
+		"mpeg4 post event: %d\n", *event);
+}
+
+
 static int vdec_mpeg4_set_param(unsigned long h_vdec,
 	enum vdec_set_param_type type, void *in)
 {
@@ -589,6 +597,10 @@ static int vdec_mpeg4_set_param(unsigned long h_vdec,
 
 	case SET_PARAM_PIC_INFO:
 		set_pic_info(inst, in);
+		break;
+
+	case SET_PARAM_POST_EVENT:
+		set_param_post_event(inst, in);
 		break;
 
 	default:

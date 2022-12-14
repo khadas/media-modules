@@ -6398,8 +6398,8 @@ static void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 		}
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-			"%s dma addr 0x%lx\n",
-			__func__, hw->buffer_spec[buf_spec_num].buf_adr);
+			"process_for_exception: dma addr(0x%lx)\n",
+			hw->buffer_spec[buf_spec_num].buf_adr);
 
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -7406,8 +7406,6 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 static void timeout_process(struct vdec_h264_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	/*
 	 * In this very timeout point,the vh264_work arrives,
@@ -7429,8 +7427,6 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 		hevc_set_frame_done(hw);
 		hevc_sao_wait_done(hw);
 	}
-
-	vdec_v4l_post_error_frame_event(ctx);
 
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout, DPB_STATUS_REG 0x%x\n", __func__, READ_VREG(DPB_STATUS_REG));
@@ -9632,11 +9628,17 @@ static void vh264_timeout_work(struct work_struct *work)
 	struct vdec_h264_hw_s *hw = container_of(work,
 		struct vdec_h264_hw_s, timeout_work);
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (work_pending(&hw->work))
 		return;
 
 	hw->timeout_processing = 1;
+	if (vdec_frame_based(vdec)) {
+		buf_ref_process_for_exception(hw);
+		vdec_v4l_post_error_frame_event(ctx);
+	}
 	vh264_work_implement(hw, vdec, 1);
 }
 

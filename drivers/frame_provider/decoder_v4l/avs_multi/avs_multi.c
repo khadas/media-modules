@@ -551,6 +551,7 @@ static void reset_process_time(struct vdec_avs_hw_s *hw);
 static void start_process_time(struct vdec_avs_hw_s *hw);
 static void vavs_save_regs(struct vdec_avs_hw_s *hw);
 static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw);
+void avs_buf_ref_process_for_exception(struct vdec_avs_hw_s *hw);
 
 
 struct vdec_avs_hw_s *ghw;
@@ -1011,10 +1012,10 @@ static void clear_pts_buf(struct vdec_avs_hw_s *hw)
 	int i;
 	debug_print(hw, PRINT_FLAG_PTS, "%s\n",	__func__);
 	for (i = 0; i < hw->vf_buf_num_used; i++) {
-		hw->pic_pts[hw->decoding_index].pts = 0;
-		hw->pic_pts[hw->decoding_index].pts64 = 0;
-		hw->pic_pts[hw->decoding_index].timestamp = 0;
-		hw->pic_pts[hw->decoding_index].decode_pic_count = 0;
+		hw->pic_pts[i].pts = 0;
+		hw->pic_pts[i].pts64 = 0;
+		hw->pic_pts[i].timestamp = 0;
+		hw->pic_pts[i].decode_pic_count = 0;
 	}
 }
 
@@ -2684,6 +2685,10 @@ static void vavs_work(struct work_struct *work)
 #ifdef DEBUG_MULTI_FRAME_INS
 			msleep(delay);
 #endif
+		if (hw->reset_decode_flag) {
+			avs_buf_ref_process_for_exception(hw);
+			vdec_v4l_post_error_frame_event(ctx);
+		}
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN
 		&& (hw_to_vdec(hw)->next_status != VDEC_STATUS_DISCONNECTED)) {
@@ -2794,6 +2799,10 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 	int i;
 	unsigned long flags;
 	struct vframe_s *vf;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	u64 current_timestamp = ctx->current_timestamp;
+
 	spin_lock_irqsave(&lock, flags);
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		vf = &hw->vfpool[i].vf;
@@ -2806,6 +2815,27 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		hw->ref_use[i] = 0;
 		hw->buf_use[i] = 0;
 	}
+
+
+	if (!hw->vf_ref[hw->refs[0]]) {
+		hw->ref_use[hw->refs[0]]++;
+		hw->vf_ref[hw->refs[0]]++;
+		if (ctx->vpp_is_need && hw->interlace_flag)
+			hw->vf_ref[hw->refs[0]]++;
+		ctx->current_timestamp = hw->pic_pts[hw->refs[0]].timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
+	}
+
+	if (!hw->vf_ref[hw->refs[1]]) {
+		hw->ref_use[hw->refs[1]]++;
+		hw->vf_ref[hw->refs[1]]++;
+		if (ctx->vpp_is_need && hw->interlace_flag)
+			hw->vf_ref[hw->refs[1]]++;
+		ctx->current_timestamp = hw->pic_pts[hw->refs[1]].timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
+	}
+
+	ctx->current_timestamp = current_timestamp;
 	hw->refs[0] = -1;
 	hw->refs[1] = -1;
 	if (error_handle_policy & 0x2) {
@@ -2837,8 +2867,6 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 static void timeout_process(struct vdec_avs_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->process_busy) {
 		pr_info("%s, process busy\n", __func__);
@@ -2849,9 +2877,6 @@ static void timeout_process(struct vdec_avs_hw_s *hw)
 		pr_err("avs multi work on busy\n");
 		return;
 	}
-
-	if (vdec_frame_based(hw_to_vdec(hw)))
-		vdec_v4l_post_error_frame_event(ctx);
 
 	amvdec_stop();
 	if (error_handle_policy & 0x1) {
@@ -3855,6 +3880,41 @@ static int v4l_res_change(struct vdec_avs_hw_s *hw)
 	return ret;
 }
 
+void avs_buf_ref_process_for_exception(struct vdec_avs_hw_s *hw)
+{
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *aml_buf;
+	s32 index = hw->decoding_index;
+
+	if (index < 0) {
+		debug_print(hw, 0,
+			"[ERR]cur_idx is invalid!\n");
+		return;
+	}
+
+	aml_buf = (struct aml_buf *)hw->pics[index].v4l_ref_buf_addr;
+	if (aml_buf == NULL) {
+		debug_print(hw, 0,
+			"[ERR]fb is NULL!\n");
+		return;
+	}
+
+	debug_print(hw, 0,
+			"process_for_exception: dma addr(0x%lx)\n",
+			hw->pics[index].cma_alloc_addr);
+
+	aml_buf_put_ref(&ctx->bm, aml_buf);
+	aml_buf_put_ref(&ctx->bm, aml_buf);
+	if (ctx->vpp_is_need && hw->interlace_flag) {
+		aml_buf_put_ref(&ctx->bm, aml_buf);
+	}
+
+	hw->vfbuf_use[index] = 0;
+	hw->ref_use[index] = 0;
+	hw->pics[index].v4l_ref_buf_addr = 0;
+	hw->pics[index].cma_alloc_addr = 0;
+}
+
 static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 		struct vdec_avs_hw_s *hw =
@@ -4150,11 +4210,11 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					if (reg) {
 						hw->buf_use[hw->decoding_index]++;
 					}
-					if (vdec_frame_based(hw_to_vdec(hw)))
-						vdec_v4l_post_error_frame_event(ctx);
+
+					vdec_v4l_post_error_frame_event(ctx);
 				} else
 					hw->dec_result = DEC_RESULT_AGAIN;
-
+				avs_buf_ref_process_for_exception(hw);
 				debug_print(hw, PRINT_FLAG_DECODING,
 					"%s BUF_EMPTY, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, scratch_8 (AVS_BUFFERIN) 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x, hw->decode_status_skip_pic_done_flag = %d, hw->decode_decode_cont_start_code = 0x%x, AV_SCRATCH_B=0x%x\n",
 					__func__, status_reg, decode_status,

@@ -355,6 +355,7 @@ struct vdec_mpeg12_hw_s {
 	u32 report_field;
 	s32 cur_idx;
 	bool process_busy;
+	bool timeout;
 };
 static void vmpeg12_local_init(struct vdec_mpeg12_hw_s *hw);
 static int vmpeg12_hw_ctx_restore(struct vdec_mpeg12_hw_s *hw);
@@ -1904,8 +1905,8 @@ static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 	}
 
 	debug_print(DECODE_ID(hw), 0,
-			"%s dma addr 0x%lx\n",
-			__func__, hw->pics[index].cma_alloc_addr);
+			"process_for_exception: dma addr(0x%lx)\n",
+			hw->pics[index].cma_alloc_addr);
 
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -2399,6 +2400,12 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		if (vdec->input.swap_valid)
 			hw->dec_again_cnt = 0;
+		if (hw->timeout) {
+			mpeg2_buf_ref_process_for_exception(hw);
+			if (vdec_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
+			hw->timeout = false;
+		}
 		vdec_vframe_dirty(vdec, hw->chunk);
 		if (ctx->es_free)
 			ctx->es_free(ctx, vdec->vbuf.buf_rp);
@@ -2889,8 +2896,6 @@ static void start_process_time_set(struct vdec_mpeg12_hw_s *hw)
 static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	if (hw->process_busy) {
 		pr_debug("%s, process busy\n", __func__);
@@ -2904,9 +2909,8 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 		pr_err("%s mpeg12[%d] timeout_process return before do anything.\n",__func__, vdec->id);
 		return;
 	}
-	if (vdec_frame_based(vdec))
-		vdec_v4l_post_error_frame_event(ctx);
 
+	hw->timeout = true;
 	reset_process_time(hw);
 	amvdec_stop();
 	debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,

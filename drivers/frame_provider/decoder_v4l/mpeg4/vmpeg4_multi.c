@@ -352,6 +352,7 @@ struct vdec_mpeg4_hw_s {
 	u32 report_field;
 	int cur_idx;
 	bool process_busy;
+	bool timeout;
 };
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw);
 static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw);
@@ -1116,8 +1117,8 @@ static void mpeg4_buf_ref_process_for_exception(struct vdec_mpeg4_hw_s *hw)
 	}
 
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
-			"%s dma addr 0x%lx\n",
-			__func__, hw->pic[index].cma_alloc_addr);
+			"process_for_exception: dma addr(0x%lx)\n",
+			hw->pic[index].cma_alloc_addr);
 
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -1269,6 +1270,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		mpeg4_buf_ref_process_for_exception(hw);
 
 		if (vdec_frame_based(vdec)) {
+			vdec_v4l_post_error_frame_event(ctx);
 			vmpeg4_save_hw_context(hw);
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
@@ -1729,6 +1731,12 @@ static void vmpeg4_work(struct work_struct *work)
 	} else if (hw->dec_result == DEC_RESULT_DONE) {
 		if (!hw->ctx_valid)
 			hw->ctx_valid = 1;
+		if (hw->timeout) {
+			mpeg4_buf_ref_process_for_exception(hw);
+			if (vdec_frame_based(vdec))
+				vdec_v4l_post_error_frame_event(ctx);
+			hw->timeout = false;
+		}
 
 		vdec_vframe_dirty(vdec, hw->chunk);
 		hw->chunk = NULL;
@@ -2108,8 +2116,6 @@ static void start_process_time(struct vdec_mpeg4_hw_s *hw)
 
 static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 {
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	if (hw->process_busy) {
 		pr_debug("%s, process_busy\n", __func__);
 		return;
@@ -2125,8 +2131,6 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 		amvdec_stop();
 		hw->stat &= ~STAT_VDEC_RUN;
 	}
-	if (vdec_frame_based(hw_to_vdec(hw)))
-		vdec_v4l_post_error_frame_event(ctx);
 
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"%s decoder timeout %d\n", __func__, hw->timeout_cnt);
@@ -2140,7 +2144,7 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 				get_data_check_sum(hw, hw->chunk->size));
 		}
 	}
-
+	hw->timeout = true;
 	hw->timeout_cnt++;
 	/* timeout: data droped, frame_num inaccurate*/
 	hw->frame_num++;

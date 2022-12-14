@@ -799,6 +799,8 @@ struct AVS2Decoder_s {
 	ulong frame_mmu_map_handle;
 	ulong rdma_mem_handle;
 	ulong cuva_handle;
+	s32 cur_idx;
+	bool timeout;
 };
 
 static int  compute_losless_comp_body_size(
@@ -884,13 +886,10 @@ static void timeout_process(struct AVS2Decoder_s *dec)
 {
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	struct avs2_frame_s *cur_pic = avs2_dec->hc.cur_pic;
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 
 	dec->timeout_num++;
 	amhevc_stop();
-	if (vdec_frame_based(hw_to_vdec(dec)))
-		vdec_v4l_post_error_frame_event(ctx);
+	dec->timeout = true;
 	avs2_print(dec,
 		0, "%s decoder timeout\n", __func__);
 	if (cur_pic)
@@ -1052,6 +1051,7 @@ static int v4l_get_free_fb(struct AVS2Decoder_s *dec)
 	pic->pic_h	= dec->frame_height;
 	free_pic	= pic;
 	free_ref_idx	= pos;
+	dec->cur_idx    = free_ref_idx;
 
 	set_canvas(dec, pic);
 	init_pic_list_hw(dec);
@@ -5425,6 +5425,34 @@ static int v4l_res_change(struct AVS2Decoder_s *dec)
 
 int16_t get_param(uint16_t value, int8_t *print_info);
 
+static void avs2_buf_ref_process_for_exception(struct AVS2Decoder_s *dec)
+{
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
+	struct aml_buf *aml_buf;
+
+	if (dec->cur_idx != INVALID_IDX) {
+		int cur_idx = dec->cur_idx;
+		int buf_idx = avs2_dec->fref[cur_idx]->index;
+
+		avs2_print(dec, 0,
+			"process_for_exception: dma addr(0x%lx)\n",
+			avs2_dec->fref[cur_idx]->cma_alloc_addr);
+
+		aml_buf = (struct aml_buf *)dec->m_BUF[buf_idx].v4l_ref_buf_addr;
+
+		aml_buf_put_ref(&ctx->bm, aml_buf);
+		aml_buf_put_ref(&ctx->bm, aml_buf);
+
+		avs2_dec->fref[cur_idx]->cma_alloc_addr = 0;
+		avs2_dec->fref[cur_idx]->vf_ref = 0;
+		dec->m_BUF[buf_idx].v4l_ref_buf_addr = 0;
+
+		dec->cur_idx = INVALID_IDX;
+	}
+}
+
 static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)data;
@@ -5521,8 +5549,10 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			if (!vdec_frame_based(hw_to_vdec(dec)))
 				dec_again_process(dec);
 			else {
-				if (vdec_frame_based(hw_to_vdec(dec)))
+				if (vdec_frame_based(hw_to_vdec(dec))) {
+					avs2_buf_ref_process_for_exception(dec);
 					vdec_v4l_post_error_frame_event(ctx);
+				}
 				dec->dec_result = DEC_RESULT_DONE;
 				reset_process_time(dec);
 				amhevc_stop();
@@ -6721,6 +6751,12 @@ static void avs2_work(struct work_struct *work)
 		dec->process_state = PROC_STATE_INIT;
 		decode_frame_count[dec->index] = dec->frame_count;
 
+		if (dec->timeout && vdec_frame_based(vdec)) {
+			avs2_buf_ref_process_for_exception(dec);
+			vdec_v4l_post_error_frame_event(ctx);
+			dec->timeout = false;
+		}
+
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,
@@ -7138,6 +7174,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
 	WRITE_VREG(HEVC_DECODE_COUNT, dec->slice_idx);
 	dec->init_flag = 1;
+	dec->cur_idx = INVALID_IDX;
 
 	avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
 		"%s: start hevc (%x %x %x)\n",

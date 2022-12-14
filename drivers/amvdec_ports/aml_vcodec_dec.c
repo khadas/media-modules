@@ -720,7 +720,7 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	}
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
-		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%llx, flag: 0x%x "
+		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%llu, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 		ctx->ada_ctx->frm_name, aml_buf->state, ctx->out_buff_cnt,
 		vb2_buf->index, vb2_buf,

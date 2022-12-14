@@ -892,6 +892,7 @@ struct AV1HW_s {
 	ulong frame_mmu_map_handle;
 	ulong frame_dw_mmu_map_handle;
 	ulong rdma_handle;
+	bool timeout;
 };
 static void av1_dump_state(struct vdec_s *vdec);
 
@@ -1021,8 +1022,6 @@ static void start_process_time(struct AV1HW_s *hw)
 
 static void timeout_process(struct AV1HW_s *hw)
 {
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	reset_process_time(hw);
 	if (hw->process_busy) {
 		av1_print(hw,
@@ -1033,8 +1032,7 @@ static void timeout_process(struct AV1HW_s *hw)
 	}
 	hw->timeout_num++;
 	amhevc_stop();
-	if (vdec_frame_based(hw_to_vdec(hw)))
-		vdec_v4l_post_error_frame_event(ctx);
+	hw->timeout = true;
 
 	av1_print(hw, 0, "%s decoder timeout\n", __func__);
 
@@ -8049,8 +8047,8 @@ static void av1_buf_ref_process_for_exception(struct AV1HW_s *hw)
 		aml_buf = (struct aml_buf *)hw->m_BUF[cur_idx].v4l_ref_buf_addr;
 
 		av1_print(hw, 0,
-			"%s dma addr 0x%lx\n",
-			__func__, frame_bufs[cur_idx].buf.cma_alloc_addr);
+			"process_for_exception: dma addr(0x%lx)\n",
+			frame_bufs[cur_idx].buf.cma_alloc_addr);
 
 		aml_buf = (struct aml_buf *)hw->m_BUF[cur_idx].v4l_ref_buf_addr;
 
@@ -9576,6 +9574,12 @@ static void av1_work(struct work_struct *work)
 		hw->result_done_count++;
 		hw->process_state = PROC_STATE_INIT;
 
+		if (hw->timeout && vdec_frame_based(vdec)) {
+			av1_buf_ref_process_for_exception(hw);
+			vdec_v4l_post_error_frame_event(ctx);
+			hw->timeout = false;
+		}
+
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s (===> %d) dec_result %d (%d) %x %x %x shiftbytes 0x%x decbytes 0x%x\n",
 			__func__,
@@ -10144,6 +10148,7 @@ static void run_front(struct vdec_s *vdec)
 	    config_next_ref_info_hw(hw);
 	hw->config_next_ref_info_flag = 0;
 	hw->init_flag = 1;
+	hw->cur_idx = INVALID_IDX;
 
 	av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
 		"%s: start hw (%x %x %x) HEVC_DECODE_SIZE 0x%x\n",

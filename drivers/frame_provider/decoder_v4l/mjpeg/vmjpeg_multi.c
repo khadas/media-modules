@@ -251,6 +251,7 @@ struct vdec_mjpeg_hw_s {
 	char disp_q_name[32];
 	int force_recycle;
 	bool run_flag;
+	s32 cur_idx;
 };
 
 static void reset_process_time(struct vdec_mjpeg_hw_s *hw);
@@ -853,6 +854,7 @@ static void timeout_process(struct vdec_mjpeg_hw_s *hw)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
+	hw->vfbuf_use[hw->cur_idx]++;
 	vdec_v4l_post_error_frame_event(ctx);
 	amvdec_stop();
 	mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
@@ -1104,7 +1106,7 @@ static int vmjpeg_hw_ctx_restore(struct vdec_mjpeg_hw_s *hw)
 		index = find_free_buffer(hw);
 		if ((index < 0) || (index >= hw->buf_num))
 			return -1;
-
+		hw->cur_idx = index;
 		for (i = 0; i < hw->buf_num; i++) {
 			if (hw->buffer_spec[i].cma_alloc_addr) {
 				config_cav_lut(hw->buffer_spec[i].y_canvas_index,

@@ -9843,8 +9843,8 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 		(struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
 		hevc_print(hevc, 0,
-			"%s dma addr 0x%lx\n",
-			__func__, pic->cma_alloc_addr);
+			"process_for_exception: dma addr(0x%lx)\n",
+			pic->cma_alloc_addr);
 
 		if (pic->pic_struct == 3 || pic->pic_struct == 4)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -11816,8 +11816,6 @@ static void restart_process_time(struct hevc_state_s *hevc)
 
 static void timeout_process(struct hevc_state_s *hevc)
 {
-	struct aml_vcodec_ctx *ctx =
-		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 	/*
 	 * In this very timeout point,the vh265_work arrives,
 	 * or in some cases the system become slow,  then come
@@ -11835,9 +11833,6 @@ static void timeout_process(struct hevc_state_s *hevc)
 	amhevc_stop();
 	read_decode_info(hevc);
 
-	if (vdec_frame_based(hw_to_vdec(hevc)))
-		vdec_v4l_post_error_frame_event(ctx);
-
 	hevc_print(hevc, 0, "%s decoder timeout\n", __func__);
 	check_pic_decoded_error(hevc,
 				hevc->pic_decoded_lcu_idx);
@@ -11846,7 +11841,6 @@ static void timeout_process(struct hevc_state_s *hevc)
 	if (hevc->cur_pic != NULL)
 		hevc->cur_pic->error_mark = 1;
 	hevc->decoded_poc = hevc->curr_POC;
-	hevc->decoding_pic = NULL;
 	hevc->dec_result = DEC_RESULT_DONE;
 	reset_process_time(hevc);
 
@@ -12732,10 +12726,18 @@ static void vh265_timeout_work(struct work_struct *work)
 	struct hevc_state_s *hevc = container_of(work,
 		struct hevc_state_s, timeout_work);
 	struct vdec_s *vdec = hw_to_vdec(hevc);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
 
 	if (work_pending(&hevc->work))
 		return;
 	hevc->timeout_processing = 1;
+	if (vdec_frame_based(vdec)) {
+		vh265_buf_ref_process_for_exception(hevc);
+		vdec_v4l_post_error_frame_event(ctx);
+	}
+
+	hevc->decoding_pic = NULL;
 	vh265_work_implement(hevc, vdec, 1);
 }
 
