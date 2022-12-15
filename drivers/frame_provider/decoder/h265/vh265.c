@@ -3562,13 +3562,8 @@ static int alloc_buf(struct hevc_state_s *hevc)
 
 					index = vdec_data_get_index((ulong)vdec->vdata);
 					if (index >= 0) {
-						hevc->hdr10p_data_buf[i] = vzalloc(HDR10P_BUF_SIZE);
-						if (hevc->hdr10p_data_buf[i] == NULL) {
-							hevc_print(hevc, 0,
-								"alloc %dth hdr10p data failed\n", i);
-						}
+						hevc->hdr10p_data_buf[i] = vdec->vdata->data[index].hdr10p_data_buf;
 						vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
-						vdec->vdata->data[index].hdr10p_data_buf = hevc->hdr10p_data_buf[i];
 						INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
 						decoder_bmmu_box_add_callback_func(hevc->bmmu_box, i, (void *)&vdec->vdata->release_callback[i]);
 					} else {
