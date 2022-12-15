@@ -1328,8 +1328,9 @@ static struct vframe_s *vavs_vf_get(void *op_arg)
 
 static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 {
+	struct vdec_s *vdec = op_arg;
 	struct vdec_avs_hw_s *hw =
-	(struct vdec_avs_hw_s *)op_arg;
+	(struct vdec_avs_hw_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct aml_buf *aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
@@ -3494,7 +3495,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(hw), hw);
+			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
@@ -3592,7 +3593,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(hw), hw);
+			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
@@ -3705,7 +3706,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		ATRACE_COUNTER(hw->disp_q_name, kfifo_len(&hw->display_q));
 
 		if (v4l2_ctx->is_stream_off) {
-			vavs_vf_put(vavs_vf_get(hw), hw);
+			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}

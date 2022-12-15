@@ -4198,7 +4198,8 @@ static void avs2_recycle_dec_resource(void *priv,
 
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
-	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
+	struct vdec_s *vdec = op_arg;
+	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = dec->v4l2_ctx;
 	struct aml_buf *aml_buf;
 
@@ -4650,12 +4651,12 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
 				if (v4l2_ctx->is_stream_off) {
-					vavs2_vf_put(vavs2_vf_get(dec), dec);
+					vavs2_vf_put(vavs2_vf_get(pvdec), pvdec);
 				} else {
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
-				vavs2_vf_put(vavs2_vf_get(dec), dec);
+				vavs2_vf_put(vavs2_vf_get(pvdec), pvdec);
 		}
 	}
 	return 0;
@@ -5890,7 +5891,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		if (!dec->m_ins_flag)
 			dec->slice_idx++;
 
-		if (dec->m_ins_flag && ret
+		if (dec->m_ins_flag && ret > 0
 			&& dec->avs2_dec.hc.cur_pic->cuva_data_buf != NULL)
 			release_cuva_data(dec->avs2_dec.hc.cur_pic);
 

@@ -2385,7 +2385,7 @@ static int get_free_buf_count(struct VP9Decoder_s *pbi)
 				return false;
 			}
 
-			pbi->aml_buf->task->attach(pbi->aml_buf->task, &task_dec_ops, pbi);
+			pbi->aml_buf->task->attach(pbi->aml_buf->task, &task_dec_ops, hw_to_vdec(pbi));
 			pbi->aml_buf->state = FB_ST_DECODER;
 		}
 
@@ -6944,7 +6944,8 @@ static struct vframe_s *vvp9_vf_peek(void *op_arg)
 static struct vframe_s *vvp9_vf_get(void *op_arg)
 {
 	struct vframe_s *vf;
-	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
+	struct vdec_s *vdec = op_arg;
+	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)vdec->private;
 
 	if (step == 2)
 		return NULL;
@@ -7023,7 +7024,8 @@ static void vp9_recycle_dec_resource(void *priv,
 
 static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 {
-	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
+	struct vdec_s *vdec = op_arg;
+	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	struct aml_buf *aml_buf;
 
@@ -7529,13 +7531,13 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			pvdec->vdec_fps_detec(pvdec->id);
 			if (without_display_mode == 0) {
 				if (v4l2_ctx->is_stream_off) {
-					vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+					vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);
 				} else {
 					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
-				vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+				vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);
 		} else {
 			pbi->stat |= VP9_TRIGGER_FRAME_DONE;
 			hevc_source_changed(VFORMAT_VP9, 196, 196, 30);
@@ -10208,7 +10210,7 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 			return false;
 		}
 
-		pbi->aml_buf->task->attach(pbi->aml_buf->task, &task_dec_ops, pbi);
+		pbi->aml_buf->task->attach(pbi->aml_buf->task, &task_dec_ops, hw_to_vdec(pbi));
 		pbi->aml_buf->state = FB_ST_DECODER;
 	}
 

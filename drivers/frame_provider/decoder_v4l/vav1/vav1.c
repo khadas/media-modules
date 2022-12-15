@@ -1781,7 +1781,7 @@ static int get_free_buf_count(struct AV1HW_s *hw)
 			if (!hw->aml_buf) {
 				return false;
 			}
-			hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw);
+			hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
 			hw->aml_buf->state = FB_ST_DECODER;
 		}
 
@@ -5812,7 +5812,8 @@ static struct vframe_s *vav1_vf_peek(void *op_arg)
 static struct vframe_s *vav1_vf_get(void *op_arg)
 {
 	struct vframe_s *vf;
-	struct AV1HW_s *hw = (struct AV1HW_s *)op_arg;
+	struct vdec_s *vdec = op_arg;
+	struct AV1HW_s *hw = (struct AV1HW_s *)vdec->private;
 
 	if (step == 2)
 		return NULL;
@@ -5879,7 +5880,8 @@ static void av1_recycle_dec_resource(void *priv,
 
 static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 {
-	struct AV1HW_s *hw = (struct AV1HW_s *)op_arg;
+	struct vdec_s *vdec = op_arg;
+	struct AV1HW_s *hw = (struct AV1HW_s *)vdec->private;
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct aml_buf *aml_buf;
@@ -6422,13 +6424,13 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		vdec_fill_vdec_frame(hw_to_vdec(hw), &hw->vframe_qos, &tmp4x, vf, pic_config->hw_decode_time);
 		if (without_display_mode == 0) {
 			if (v4l2_ctx->is_stream_off) {
-				vav1_vf_put(vav1_vf_get(hw), hw);
+				vav1_vf_put(vav1_vf_get(vdec), vdec);
 			} else {
 				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
 		} else
-			vav1_vf_put(vav1_vf_get(hw), hw);
+			vav1_vf_put(vav1_vf_get(vdec), vdec);
 	}
 
 	return 0;
@@ -9861,7 +9863,7 @@ static bool is_available_buffer(struct AV1HW_s *hw)
 		if (!hw->aml_buf) {
 			return false;
 		}
-		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw);
+		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
 		hw->aml_buf->state = FB_ST_DECODER;
 	}
 
