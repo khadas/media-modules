@@ -103,6 +103,7 @@ struct vdec_input_s {
 	u64 sequence;
 	unsigned start;
 	unsigned size;
+	unsigned long last_wp;
 	int default_block_size;
 	int data_size;
 	int frame_max_size;

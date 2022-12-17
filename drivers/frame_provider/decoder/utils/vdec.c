@@ -500,6 +500,26 @@ void vdec_data_release(struct codec_mm_s *mm, struct codec_mm_cb_s *cb)
 }
 EXPORT_SYMBOL(vdec_data_release);
 
+#ifdef DEBUG_PORT
+
+dbg_data_wr debug_port_func_data_wr;
+dbg_info_up debug_port_func_info_up;
+
+void vdec_debug_port_register(dbg_data_wr data_write, dbg_info_up info_update)
+{
+	debug_port_func_data_wr = data_write;
+	debug_port_func_info_up = info_update;
+}
+EXPORT_SYMBOL(vdec_debug_port_register);
+
+void vdec_debug_port_unregister(void)
+{
+	debug_port_func_data_wr = NULL;
+	debug_port_func_info_up = NULL;
+}
+EXPORT_SYMBOL(vdec_debug_port_unregister);
+#endif
+
 unsigned long vdec_canvas_lock(void)
 {
 	unsigned long flags;
@@ -1744,7 +1764,15 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 			/* set endian */
 			SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
 		}
-
+#ifdef DEBUG_PORT
+		if (debug_port_func_data_wr) {
+			if (input->last_wp != (block->start + chunk->offset)) {
+				debug_port_func_data_wr((void *)(block->start + chunk->offset),
+					chunk->size, vdec->id, (1 << 16) | 3);
+			}
+			input->last_wp = block->start + chunk->offset;
+		}
+#endif
 		*p = chunk;
 		return chunk->size;
 
@@ -1908,6 +1936,24 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 				__func__, input->size, wp, rp, fifo_len, size);
 			size = 0;
 		}
+#ifdef DEBUG_PORT
+		if (debug_port_func_data_wr) {
+			if (wp >= input->last_wp) {
+				debug_port_func_data_wr((void *)input->last_wp,
+					wp - input->last_wp,
+					vdec->id, (1 << 16) | 3);
+			} else {
+				debug_port_func_data_wr((void *)input->last_wp,
+					vdec->vbuf.buf_start + vdec->vbuf.buf_size - input->last_wp,
+					vdec->id, (1 << 16) | 3);
+				debug_port_func_data_wr((void *)vdec->vbuf.buf_start,
+					wp - vdec->vbuf.buf_start,
+					vdec->id, (1 << 16) | 3);
+			}
+		}
+#endif
+		input->last_wp = wp;
+
 		ATRACE_COUNTER(vdec->stream_rp, rp);
 		return size;
 	}

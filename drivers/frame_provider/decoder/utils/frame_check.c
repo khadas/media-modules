@@ -685,6 +685,10 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 	} else {
 		int wr_size;
 
+		if (debug_port_func_data_wr) {
+			debug_port_func_data_wr(dump->buf_addr, mgr->size_pic, mgr->id, 1);
+		}
+
 		/* dump for dec pic not in isr */
 		if (dump->yuv_fp == NULL) {
 			dump->yuv_fp = file_open(O_CREAT | O_WRONLY | O_TRUNC,
@@ -710,6 +714,19 @@ static int crc_store(struct pic_check_mgr_t *mgr, struct vframe_s *vf,
 	char *crc_addr = NULL;
 	int comp_frame = 0, comp_crc_y, comp_crc_uv;
 	struct pic_check_t *check = &mgr->pic_check;
+
+	if (debug_port_func_data_wr) {
+		crc_addr = vzalloc(SIZE_CRC);
+
+		if (crc_addr) {
+			ret = snprintf(crc_addr, SIZE_CRC,
+				"%08d: %08x %08x\n", mgr->frame_cnt, crc_y, crc_uv);
+
+			debug_port_func_data_wr(crc_addr, strlen(crc_addr), mgr->id, 2);
+			vfree(crc_addr);
+			crc_addr = NULL;
+		}
+	}
 
 	mgr->yuvsum += crc_uv;
 	mgr->yuvsum += crc_y;
@@ -1124,6 +1141,10 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		dbg_print(0, "size changed, %x-->%x [%d x %d]\n",
 			mgr->last_size_pic, mgr->size_pic,
 			vf->width, vf->height);
+		if (debug_port_func_info_up) {
+			debug_port_func_info_up(mgr->id, vdec->format, vf);
+		}
+
 		/* for slt, if no compare crc file, use the
 		 * cmp crc from amstream ioctl write */
 		load_user_cmp_crc(mgr);
@@ -1664,6 +1685,8 @@ ssize_t dump_yuv_store(struct class *class,
 
 	return size;
 }
+EXPORT_SYMBOL(dump_yuv_store);
+
 
 ssize_t dump_yuv_show(struct class *class,
 		struct class_attribute *attr, char *buf)
@@ -1704,6 +1727,7 @@ ssize_t frame_check_store(struct class *class,
 
 	return size;
 }
+EXPORT_SYMBOL(frame_check_store);
 
 ssize_t frame_check_show(struct class *class,
 		struct class_attribute *attr, char *buf)

@@ -679,7 +679,6 @@ extern void vdec_core_finish_run(struct vdec_s *vdec, unsigned long mask);
 
 extern u32 vdec_get_debug(void);
 
-
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);
 #endif
@@ -771,5 +770,17 @@ unsigned long vdec_power_lock(struct vdec_s *vdec);
 
 void vdec_power_unlock(struct vdec_s *vdec, unsigned long flags);
 
+#define DEBUG_PORT
+#ifdef DEBUG_PORT
+typedef int (*dbg_info_up)(int, int, struct vframe_s *);
+typedef int (*dbg_data_wr)(const void *, int, int, int);
+
+extern dbg_data_wr debug_port_func_data_wr;
+extern dbg_info_up debug_port_func_info_up;
+
+void vdec_debug_port_register(dbg_data_wr data_write, dbg_info_up info_update);
+
+void vdec_debug_port_unregister(void);
+#endif
 
 #endif				/* VDEC_H */

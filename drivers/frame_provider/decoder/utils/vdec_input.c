@@ -539,6 +539,7 @@ int vdec_input_set_buffer(struct vdec_input_s *input, u32 start, u32 size)
 	input->start = start;
 	input->size = size;
 	input->swap_rp = start;
+	input->last_wp = start;
 
 	if (vdec_secure(input->vdec))
 		input->swap_page_phys = codec_mm_alloc_for_dma("SWAP",
