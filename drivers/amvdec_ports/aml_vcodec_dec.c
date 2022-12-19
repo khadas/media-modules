@@ -1445,8 +1445,8 @@ static void aml_vdec_worker(struct work_struct *work)
 	} else {
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_11, buf.size);
 		/* decoder is lack of resource, retry after short delay */
-		if (vdec_get_instance_num() < 2)
-			usleep_range(2000, 4000);
+		//if (vdec_get_instance_num() < 2)
+		usleep_range(2000, 4000);
 	}
 
 	v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
