@@ -1,11 +1,13 @@
 Major_V=6
-Minor_V=2
-BaseChangeId=I4fbaec8fca500961bea8776fdbb2174524563da7
+Minor_V=3
+BaseChangeId=Ifd69ca9ed3003f2bb31b463ab25392958f327700
 
 
 #history version
+#V6.2 Release Notes
+#Release_ChangeId_V6_2=I38197e6c418dee6183605006ca63b85337be2b19
 #V6.1 Release Notes
-#Release_ChangeId_V6_1=I0d3c81da04b619ca6cd71b5f0263a5adf694d13c
+#Release_ChangeId_V6_1=I3343779b4ad29ab1be55a002fbc43ecdbc440993
 #Support T7C, T3 
 #Support new DOS Reg management
 #V6.0 Release Notes
