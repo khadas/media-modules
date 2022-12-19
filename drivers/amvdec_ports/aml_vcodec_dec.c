@@ -1347,7 +1347,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		int offset = vb->planes[0].data_offset;
 		buf.addr = es_data->data_start + offset;
 		buf.size = vb->planes[0].bytesused - offset;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "stream update wp 0x%x + sz 0x%x offset 0x%x ori start 0x%x\n",
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x\n",
 			buf.addr, buf.size, offset, es_data->data_start);
 	} else {
 		buf.addr	= aml_vb->addr ? aml_vb->addr : sg_dma_address(aml_vb->out_sgt->sgl);
@@ -3715,7 +3715,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 			"IN__BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%lld, "
-			"dma addr: %lx Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
+			"dma addr: %llx Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",
 			ctx->ada_ctx->frm_name,
 			aml_buf->state,
 			ctx->in_buff_cnt,
@@ -3756,7 +3756,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			if (buf->addr &&
 				buf->addr != sg_dma_address(buf->out_sgt->sgl)) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
-					"vb2 dma addr update(0x%lx --> 0x%x)\n",
+					"vb2 dma addr update(0x%llx --> 0x%lx)\n",
 					sg_dma_address(buf->out_sgt->sgl), buf->addr);
 			}
 		} else
@@ -3806,7 +3806,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		src_mem.addr = es_data->data_start + offset;
 		src_mem.size = vb->planes[0].bytesused - offset;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "update wp 0x%x + sz 0x%x offset 0x%x ori start 0x%x\n",
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x\n",
 		src_mem.addr, src_mem.size, offset, es_data->data_start);
 	} else {
 		src_mem.addr	= buf->addr ? buf->addr :

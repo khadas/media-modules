@@ -5931,7 +5931,7 @@ void vdec_mm_dma_flush(ulong phys, u32 size)
 
 	buf = codec_mm_vmap(phys, size);
 	if (!buf) {
-		pr_err("%s fail!\n");
+		pr_err("%s fail!\n", __func__);
 		return;
 	}
 

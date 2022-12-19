@@ -2364,7 +2364,7 @@ static int v4l_alloc_and_config_pic(struct AVS2Decoder_s *dec,
 		pr_info("comp_body_size %x comp_buf_size %x ",
 			pic->comp_body_size,
 			pic->buf_size);
-		pr_info("dw_y_adr %lx, pic_config->dw_u_v_adr =%lx\n",
+		pr_info("dw_y_adr %x, pic_config->dw_u_v_adr =%x\n",
 			pic->dw_y_adr,
 			pic->dw_u_v_adr);
 	}

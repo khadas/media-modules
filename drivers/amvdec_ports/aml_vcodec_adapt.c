@@ -640,9 +640,9 @@ void vdec_dump_strea_data(struct aml_vdec_adapt *ada_ctx, u32 addr, u32 size)
 		dump(file_name, stbuf_vaddr, first_size);
 
 		codec_mm_unmap_phyaddr(stbuf_vaddr);
-		pr_info("dump es buffer (%lx, %u)\n", addr, first_size);
+		pr_info("dump es buffer (%x, %u)\n", addr, first_size);
 	} else {
-		pr_err("es buffer (%lx, %u) vmap fail\n", addr, first_size);
+		pr_err("es buffer (%x, %u) vmap fail\n", addr, first_size);
 	}
 
 	if (second_size) {
