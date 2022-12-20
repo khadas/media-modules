@@ -1171,12 +1171,9 @@ static void reconfig_vpp_status(struct aml_vcodec_ctx *ctx)
 
 static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 {
-	struct aml_vcodec_dev *dev = ctx->dev;
-
 	if (!is_input_ready(ctx->ada_ctx)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"the decoder input has not ready.\n");
-		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 		return 0;
 	}
 
@@ -1206,56 +1203,28 @@ static int is_vdec_ready(struct aml_vcodec_ctx *ctx)
 	return 1;
 }
 
-static bool is_enough_work_items(struct aml_vcodec_ctx *ctx)
-{
-	struct aml_vcodec_dev *dev = ctx->dev;
-
-	if (vdec_frame_number(ctx->ada_ctx) >= WORK_ITEMS_MAX) {
-		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
-		return false;
-	}
-
-	return true;
-}
-
 void dmabuff_recycle_worker(struct work_struct *work)
 {
 	struct aml_vcodec_ctx *ctx =
-		container_of(work, struct aml_vcodec_ctx, dmabuff_recycle_work);
+		container_of(work, struct aml_vcodec_ctx, es_wkr_out);
 	struct vb2_v4l2_buffer *vb = NULL;
 	struct aml_v4l2_buf *buf = NULL;
-	unsigned long flags;
 
-	for (;;) {
-		spin_lock_irqsave(&ctx->dmabuff_recycle_lock, flags);
-		if (!kfifo_get(&ctx->dmabuff_recycle, &vb)) {
-			spin_unlock_irqrestore(&ctx->dmabuff_recycle_lock, flags);
-			break;
-		}
-		spin_unlock_irqrestore(&ctx->dmabuff_recycle_lock, flags);
+	if (ctx->es_wkr_stop ||
+		!kfifo_get(&ctx->dmabuff_recycle, &vb))
+		return;
 
-		buf = container_of(vb, struct aml_v4l2_buf, vb);
+	buf = container_of(vb, struct aml_v4l2_buf, vb);
 
-		if (ctx->is_out_stream_off)
-			continue;
+	v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
+		"recycle buff idx: %d, vbuf: %lx\n", vb->vb2_buf.index,
+		buf->addr ? buf->addr: (ulong)sg_dma_address(buf->out_sgt->sgl));
 
-		if (wait_event_interruptible_timeout
-			(ctx->wq, buf->used == false,
-			 msecs_to_jiffies(200)) == 0) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"wait recycle dma buff timeout.\n");
-		}
+	vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_9, vb->vb2_buf.index);
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-			"recycle buff idx: %d, vbuf: %lx\n", vb->vb2_buf.index,
-			buf->addr ? buf->addr: (ulong)sg_dma_address(buf->out_sgt->sgl));
-
-		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_9, vb->vb2_buf.index);
-
-		if (vb->vb2_buf.state != VB2_BUF_STATE_ERROR)
-			v4l2_buff_done(vb, buf->error ? VB2_BUF_STATE_ERROR :
-				VB2_BUF_STATE_DONE);
-	}
+	if (vb->vb2_buf.state != VB2_BUF_STATE_ERROR)
+		v4l2_buff_done(vb, buf->error ? VB2_BUF_STATE_ERROR :
+			VB2_BUF_STATE_DONE);
 }
 
 void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle)
@@ -1264,12 +1233,25 @@ void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle)
 	struct vb2_v4l2_buffer *vb = NULL;
 	struct vb2_queue *q = NULL;
 	int index = handle & 0xf;
-	unsigned long flags;
+	ulong flags;
 
-	if (ctx->is_out_stream_off) {
+retry:
+	spin_lock_irqsave(&ctx->es_wkr_slock, flags);
+
+	if (ctx->es_wkr_stop) {
+		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
+
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"ignore buff idx: %d streamoff\n", index);
 		return;
+	}
+
+	if (work_pending(&ctx->es_wkr_out)) {
+		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
+
+		flush_work(&ctx->es_wkr_out);
+
+		goto retry;
 	}
 
 	q = v4l2_m2m_get_vq(ctx->m2m_ctx,
@@ -1277,17 +1259,17 @@ void aml_recycle_dma_buffers(struct aml_vcodec_ctx *ctx, u32 handle)
 
 	vb = to_vb2_v4l2_buffer(q->bufs[index]);
 
-	spin_lock_irqsave(&ctx->dmabuff_recycle_lock, flags);
 	kfifo_put(&ctx->dmabuff_recycle, vb);
-	spin_unlock_irqrestore(&ctx->dmabuff_recycle_lock, flags);
 
-	queue_work(dev->decode_workqueue, &ctx->dmabuff_recycle_work);
+	queue_work(dev->decode_workqueue, &ctx->es_wkr_out);
+
+	spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
 }
 
 static void aml_vdec_worker(struct work_struct *work)
 {
 	struct aml_vcodec_ctx *ctx =
-		container_of(work, struct aml_vcodec_ctx, decode_work);
+		container_of(work, struct aml_vcodec_ctx, es_wkr_in);
 	struct aml_vcodec_dev *dev = ctx->dev;
 	struct aml_v4l2_buf *aml_vb;
 	struct vb2_v4l2_buffer *vb2_v4l2;
@@ -1295,12 +1277,6 @@ static void aml_vdec_worker(struct work_struct *work)
 	struct aml_vcodec_mem buf;
 	bool res_chg = false;
 	int ret;
-
-	if (ctx->state < AML_STATE_INIT ||
-		ctx->state > AML_STATE_FLUSHED) {
-		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
-		goto out;
-	}
 
 	if (!is_vdec_ready(ctx)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -1317,10 +1293,6 @@ static void aml_vdec_worker(struct work_struct *work)
 
 	vb = (struct vb2_buffer *)vb2_v4l2;
 
-	/*this case for google, but some frames are droped on ffmpeg, so disabled temp.*/
-	if (0 && !is_enough_work_items(ctx))
-		goto out;
-
 	aml_vb = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
 	if (aml_vb->lastframe) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
@@ -1336,7 +1308,6 @@ static void aml_vdec_worker(struct work_struct *work)
 		mutex_unlock(&ctx->state_lock);
 
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 
 		/* sets eos data for vdec input. */
 		aml_vdec_flush_decoder(ctx);
@@ -1364,13 +1335,11 @@ static void aml_vdec_worker(struct work_struct *work)
 	buf.meta_ptr	= (ulong)aml_vb->meta_data;
 
 	if (!buf.vaddr && !buf.addr) {
-		v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
+		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"id=%d src_addr is NULL.\n", vb->index);
 		goto out;
 	}
-
-	aml_vb->used = true;
 
 	/* v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 		"size: 0x%zx, crc: 0x%x\n",
@@ -1390,27 +1359,19 @@ static void aml_vdec_worker(struct work_struct *work)
 
 	ret = vdec_if_decode(ctx, &buf, &res_chg);
 	if (ret > 0) {
-		/*
-		 * we only return src buffer with VB2_BUF_STATE_DONE
-		 * when decode success without resolution change.
-		 */
-		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if ((ctx->stream_mode) || ctx->output_dma_mode) {
-			wake_up_interruptible(&ctx->wq);
-		} else {
+		/* frame mode and non-dbuf mode. */
+		if (!ctx->stream_mode && !ctx->output_dma_mode) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_8, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_DONE);
 		}
 	} else if (ret && ret != -EAGAIN) {
-		aml_vb->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if ((ctx->stream_mode) || ctx->output_dma_mode) {
-			wake_up_interruptible(&ctx->wq);
-		} else {
+		/* frame mode and non-dbuf mode. */
+		if (!ctx->stream_mode && !ctx->output_dma_mode) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_10, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_ERROR);
@@ -1418,42 +1379,12 @@ static void aml_vdec_worker(struct work_struct *work)
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"error processing src data. %d.\n", ret);
-	} else if (res_chg) {
-		aml_vb->used = false;
-		aml_vdec_pic_info_update(ctx);
-		/*
-		 * On encountering a resolution change in the stream.
-		 * The driver must first process and decode all
-		 * remaining buffers from before the resolution change
-		 * point, so call flush decode here
-		 */
-		mutex_lock(&ctx->state_lock);
-		if (ctx->state == AML_STATE_ACTIVE) {
-			ctx->state = AML_STATE_FLUSHING;// prepare flushing
-			vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_STATE,
-				"vcodec state (AML_STATE_FLUSHING-RESCHG)\n");
-		}
-		mutex_unlock(&ctx->state_lock);
-
-		ctx->v4l_resolution_change = true;
-		while (ctx->m2m_ctx->job_flags & TRANS_RUNNING) {
-			v4l2_m2m_job_pause(dev->m2m_dev_dec, ctx->m2m_ctx);
-		}
-
-		aml_vdec_flush_decoder(ctx);
-
-		goto out;
 	} else {
+		/* ES frame write again. */
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_11, buf.size);
-		/* decoder is lack of resource, retry after short delay */
-		//if (vdec_get_instance_num() < 2)
-		usleep_range(2000, 4000);
 	}
-
-	v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 out:
-	return;
+	v4l2_m2m_job_finish(dev->m2m_dev_dec, ctx->m2m_ctx);
 }
 
 static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
@@ -1472,7 +1403,6 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 	}
 out:
 	complete(&ctx->comp);
-	return;
 }
 
 void stop_pipeline(struct aml_vcodec_ctx *ctx)
@@ -1495,8 +1425,8 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 	ctx->is_stream_off = true;
 
 	/* flush output buffer worker. */
-	cancel_work_sync(&ctx->decode_work);
-	cancel_work_sync(&ctx->dmabuff_recycle_work);
+	cancel_work_sync(&ctx->es_wkr_in);
+	cancel_work_sync(&ctx->es_wkr_out);
 
 	/* clean output cache and decoder status . */
 	if (ctx->state > AML_STATE_INIT)
@@ -1827,6 +1757,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 		ctx->is_stream_off = false;
 	} else {
 		ctx->is_out_stream_off = false;
+		ctx->es_wkr_stop = false;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if (ctx->dv_id < 0) {
@@ -2305,7 +2236,7 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	ctx->m2m_ctx->q_lock = &ctx->dev->dev_mutex;
 	ctx->fh.m2m_ctx = ctx->m2m_ctx;
 	ctx->fh.ctrl_handler = &ctx->ctrl_hdl;
-	INIT_WORK(&ctx->decode_work, aml_vdec_worker);
+	INIT_WORK(&ctx->es_wkr_in, aml_vdec_worker);
 	ctx->colorspace = V4L2_COLORSPACE_REC709;
 	ctx->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
 	ctx->quantization = V4L2_QUANTIZATION_DEFAULT;
@@ -3809,17 +3740,13 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		return;
 	}
 
-	buf->used = true;
 	vb2_v4l2 = to_vb2_v4l2_buffer(vb);
 	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
 	if (buf->lastframe) {
 		/* This shouldn't happen. Just in case. */
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"Invalid flush buffer.\n");
-		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		if ((ctx->stream_mode) || ctx->output_dma_mode)
-			wake_up_interruptible(&ctx->wq);
 
 		return;
 	}
@@ -3851,12 +3778,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	src_mem.meta_ptr = (ulong)buf->meta_data;
 
 	if (vdec_if_probe(ctx, &src_mem, NULL)) {
-		buf->used = false;
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-		if ((ctx->stream_mode) || ctx->output_dma_mode) {
-			wake_up_interruptible(&ctx->wq);
-		} else {
+		/* frame mode and non-dbuf mode. */
+		if (!ctx->stream_mode && !ctx->output_dma_mode) {
 			v4l2_buff_done(to_vb2_v4l2_buffer(vb),
 				VB2_BUF_STATE_DONE);
 		}
@@ -3868,12 +3793,10 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	 * If on model dmabuf must remove the buffer
 	 * because this data has been consumed by hw.
 	 */
-	buf->used = false;
 	v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
-	if ((ctx->stream_mode) || ctx->output_dma_mode) {
-		wake_up_interruptible(&ctx->wq);
-	} else if (ctx->param_sets_from_ucode) {
+	/* frame mode and non-dbuf mode. */
+	if (!ctx->stream_mode && !ctx->output_dma_mode) {
 		v4l2_buff_done(to_vb2_v4l2_buffer(vb),
 			VB2_BUF_STATE_DONE);
 	}
@@ -4109,12 +4032,15 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 
 	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
 		struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
-		unsigned long flags;
+		ulong flags;
 
-		cancel_work_sync(&ctx->dmabuff_recycle_work);
-		spin_lock_irqsave(&ctx->dmabuff_recycle_lock, flags);
+		spin_lock_irqsave(&ctx->es_wkr_slock, flags);
+		ctx->es_wkr_stop = true;
+		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
+
+		cancel_work_sync(&ctx->es_wkr_in);
+		cancel_work_sync(&ctx->es_wkr_out);
 		INIT_KFIFO(ctx->dmabuff_recycle);
-		spin_unlock_irqrestore(&ctx->dmabuff_recycle_lock, flags);
 
 		while ((vb2_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx)))
 			v4l2_buff_done(vb2_v4l2, VB2_BUF_STATE_ERROR);
@@ -4148,7 +4074,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 			aml_vdec_reset(ctx);
 		}
 
-		cancel_work_sync(&ctx->decode_work);
 		mutex_lock(&ctx->capture_buffer_lock);
 		INIT_KFIFO(ctx->capture_buffer);
 		mutex_unlock(&ctx->capture_buffer_lock);
@@ -4184,20 +4109,26 @@ static void m2mops_vdec_device_run(void *priv)
 {
 	struct aml_vcodec_ctx *ctx = priv;
 	struct aml_vcodec_dev *dev = ctx->dev;
+	ulong flags;
 
-	if (ctx->output_thread_ready)
-		queue_work(dev->decode_workqueue, &ctx->decode_work);
+	spin_lock_irqsave(&ctx->es_wkr_slock, flags);
+	if (ctx->es_wkr_stop) {
+		spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
+		return;
+	}
+
+	queue_work(dev->decode_workqueue, &ctx->es_wkr_in);
+
+	spin_unlock_irqrestore(&ctx->es_wkr_slock, flags);
 }
 
 static int m2mops_vdec_job_ready(void *m2m_priv)
 {
 	struct aml_vcodec_ctx *ctx = m2m_priv;
 
-	if (ctx->state < AML_STATE_PROBE ||
-		ctx->state > AML_STATE_FLUSHED)
-		return 0;
-
-	return 1;
+	return (ctx->es_wkr_stop ||
+		!is_input_ready(ctx->ada_ctx) ||
+		vdec_input_full(ctx->ada_ctx)) ? 0 : 1;
 }
 
 static void m2mops_vdec_job_abort(void *priv)

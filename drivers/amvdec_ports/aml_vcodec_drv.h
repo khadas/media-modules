@@ -630,7 +630,7 @@ struct canvas_cache {
  * @queue: waitqueue that can be used to wait for this context to finish.
  * @state_lock: protect the codec status.
  * @state: state of the context.
- * @decode_work: decoder work be used to output buffer.
+
  * @output_thread_ready: indicate the output thread ready.
  * @cap_pool: capture buffers are remark in the pool.
  * @vdec_thread_list: vdec thread be used to capture.
@@ -661,8 +661,10 @@ struct canvas_cache {
  * @buf_used_count: means that decode allocate how many buffs from v4l.
  * @wq: wait recycle dma buffer finish.
  * @cap_wq: the wq used for wait capture buffer.
- * @dmabuff_recycle_lock: protect the lock dmabuff free.
- * @dmabuff_recycle_work: used for recycle dmabuff.
+ * @es_wkr_in: Used to write es buffer from v4l2 core to decoder.
+ * @es_wkr_out: Used to recover the es buffer consumed by the decoder.
+ * @es_wkr_slock: Ensure the data access security of the es buffer work queue.
+ * @es_wkr_stop: Indicates that the es work queue stops working.
  * @dmabuff_recycle: kfifo used for store vb buff.
  * @capture_buffer: kfifo used for store capture vb buff.
  * @mmu_box: mmu_box of context.
@@ -701,7 +703,6 @@ struct aml_vcodec_ctx {
 	wait_queue_head_t		queue;
 	struct mutex			state_lock;
 	enum aml_instance_state		state;
-	struct work_struct		decode_work;
 	bool				output_thread_ready;
 	struct v4l_buff_pool		cap_pool;
 	struct list_head		vdec_thread_list;
@@ -735,9 +736,13 @@ struct aml_vcodec_ctx {
 	int				buf_used_count;
 	wait_queue_head_t		wq, cap_wq, post_done_wq;
 	struct mutex			capture_buffer_lock;
-	spinlock_t			dmabuff_recycle_lock;
 	struct mutex			buff_done_lock;
-	struct work_struct		dmabuff_recycle_work;
+
+	struct work_struct		es_wkr_in;
+	struct work_struct		es_wkr_out;
+	spinlock_t			es_wkr_slock;
+	bool				es_wkr_stop;
+
 	DECLARE_KFIFO(dmabuff_recycle, struct vb2_v4l2_buffer *, 32);
 	DECLARE_KFIFO(capture_buffer, struct vb2_v4l2_buffer *, 32);
 

@@ -100,12 +100,12 @@ static int fops_vcodec_open(struct file *file)
 	mutex_init(&ctx->compressed_buf_info_lock);
 	spin_lock_init(&ctx->slock);
 	spin_lock_init(&ctx->tsplock);
-	spin_lock_init(&ctx->dmabuff_recycle_lock);
+	spin_lock_init(&ctx->es_wkr_slock);
 	init_completion(&ctx->comp);
 	init_waitqueue_head(&ctx->wq);
 	init_waitqueue_head(&ctx->cap_wq);
 	init_waitqueue_head(&ctx->post_done_wq);
-	INIT_WORK(&ctx->dmabuff_recycle_work, dmabuff_recycle_worker);
+	INIT_WORK(&ctx->es_wkr_out, dmabuff_recycle_worker);
 	INIT_KFIFO(ctx->dmabuff_recycle);
 	INIT_KFIFO(ctx->capture_buffer);
 	atomic_set(&ctx->vpp_cache_num, 0);
@@ -616,7 +616,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 	}
 
 	dev->decode_workqueue =
-		alloc_ordered_workqueue("output-worker",
+		alloc_ordered_workqueue("dec-worker",
 			__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_HIGHPRI);
 	if (!dev->decode_workqueue) {
 		dev_err(&pdev->dev, "Failed to create decode workqueue\n");

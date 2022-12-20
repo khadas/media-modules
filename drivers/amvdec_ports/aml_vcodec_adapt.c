@@ -18,6 +18,7 @@
  * Description:
  */
 #include <linux/types.h>
+#include <media/v4l2-mem2mem.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
@@ -445,11 +446,15 @@ bool vdec_input_full(struct aml_vdec_adapt *ada_ctx)
 	struct vdec_s *vdec = ada_ctx->vdec;
 	struct aml_vcodec_ctx *ctx = ada_ctx->ctx;
 
+	/* The driver ignores the stream ctrl if in stream mode. */
+	if (vdec_stream_based(vdec))
+		return false;
+
 	return (vdec->input.have_frame_num > ctx->cache_input_buffer_num) ? true : false;
 }
 
-int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
-	const char *buf, unsigned int count, u64 timestamp, ulong meta_ptr)
+int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx, const char *buf,
+	unsigned int count, u64 timestamp, ulong meta_ptr, chunk_free free)
 {
 	int ret = -1;
 	struct vdec_s *vdec = ada_ctx->vdec;
@@ -460,7 +465,7 @@ int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
 	/* set metadata */
 	vdec_set_metadata(vdec, meta_ptr);
 
-	ret = vdec_write_vframe(vdec, buf, count);
+	ret = vdec_write_vframe(vdec, buf, count, free, ada_ctx->ctx);
 
 	if (slow_input) {
 		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -493,7 +498,11 @@ void vdec_vframe_input_free(void *priv, u32 handle)
 {
 	struct aml_vcodec_ctx *ctx = priv;
 
-	aml_recycle_dma_buffers(ctx, handle);
+	if (ctx->output_dma_mode)
+		aml_recycle_dma_buffers(ctx, handle);
+
+	if (!vdec_input_full(ctx->ada_ctx))
+		v4l2_m2m_try_schedule(ctx->m2m_ctx);
 }
 
 int vdec_vframe_write_with_dma(struct aml_vdec_adapt *ada_ctx,

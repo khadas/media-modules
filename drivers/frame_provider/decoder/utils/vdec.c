@@ -1471,9 +1471,10 @@ int vdec_set_receive_id(struct vdec_s *vdec, int receive_id)
 EXPORT_SYMBOL(vdec_set_receive_id);
 
 /* add frame data to input chain */
-int vdec_write_vframe(struct vdec_s *vdec, const char *buf, size_t count)
+int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
+			size_t count, chunk_free free, void* priv)
 {
-	return vdec_input_add_frame(&vdec->input, buf, count);
+	return vdec_input_add_frame(&vdec->input, buf, count, free, priv);
 }
 EXPORT_SYMBOL(vdec_write_vframe);
 

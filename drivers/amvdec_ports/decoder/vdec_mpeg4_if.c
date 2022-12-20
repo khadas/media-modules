@@ -300,7 +300,8 @@ static int parse_stream_ucode(struct vdec_mpeg4_inst *inst,
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write(vdec, buf, size, timestamp, 0);
+	ret = vdec_vframe_write(vdec, buf, size, timestamp, 0,
+				vdec_vframe_input_free);
 	if (ret < 0) {
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"write frame data failed. err: %d\n", ret);
@@ -422,12 +423,12 @@ static void vdec_mpeg4_deinit(unsigned long h_vdec)
 }
 
 static int vdec_write_nalu(struct vdec_mpeg4_inst *inst,
-	u8 *buf, u32 size, u64 ts)
+	u8 *buf, u32 size, u64 ts, chunk_free free)
 {
 	int ret = 0;
 	struct aml_vdec_adapt *vdec = &inst->vdec;
 
-	ret = vdec_vframe_write(vdec, buf, size, ts, 0);
+	ret = vdec_vframe_write(vdec, buf, size, ts, 0, free);
 
 	return ret;
 }
@@ -456,7 +457,8 @@ static int vdec_mpeg4_decode(unsigned long h_vdec,
 				s->data,
 				s->len,
 				bs->timestamp,
-				0);
+				0,
+				vdec_vframe_input_free);
 		} else if (bs->model == VB2_MEMORY_DMABUF ||
 			bs->model == VB2_MEMORY_USERPTR) {
 			ret = vdec_vframe_write_with_dma(vdec,
@@ -465,7 +467,8 @@ static int vdec_mpeg4_decode(unsigned long h_vdec,
 				vdec_vframe_input_free, inst->ctx);
 		}
 	} else {
-		ret = vdec_write_nalu(inst, buf, size, bs->timestamp);
+		ret = vdec_write_nalu(inst, buf, size, bs->timestamp,
+				vdec_vframe_input_free);
 	}
 
 	return ret;
