@@ -202,6 +202,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mSyncInfo.state = MEDIASYNC_INIT;
 			pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
 			pInstance->mute_flag = false;
+			pInstance->mVideoSmoothTag = false;
 			pInstance->mSourceType = TS_DEMOD;
 			pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
 			pInstance->mRef++;
@@ -835,6 +836,7 @@ long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type) {
 	}
 
 	pInstance->mSourceClockType = type;
+	pInstance->mStcParmUpdateCount++;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -2688,6 +2690,44 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_p
 	return ret;
 }
 
+
+long mediasync_ins_set_video_smooth_tag(s32 sSyncInsId, s32 sSmooth_tag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	pInstance->mVideoSmoothTag = sSmooth_tag;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_get_video_smooth_tag(s32 sSyncInsId, s32* spSmooth_tag) {
+	mediasync_ins* pInstance = NULL;
+	s32 index = get_index_from_sync_id(sSyncInsId);
+	if (index < 0 || index >= MAX_INSTANCE_NUM)
+		return -1;
+
+	mutex_lock(&(vMediaSyncInsList[index].m_lock));
+	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		return -1;
+	}
+
+	*spSmooth_tag = pInstance->mVideoSmoothTag;
+	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
 
 module_param(media_sync_debug_level, uint, 0664);
 MODULE_PARM_DESC(media_sync_debug_level, "\n mediasync debug level\n");
