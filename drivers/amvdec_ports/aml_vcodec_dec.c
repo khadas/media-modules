@@ -1473,6 +1473,19 @@ out:
 	return;
 }
 
+void stop_pipeline(struct aml_vcodec_ctx *ctx)
+{
+	if (ctx->ge2d) {
+		aml_v4l2_ge2d_thread_stop(ctx->ge2d);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "ge2d stop.\n");
+	}
+
+	if (ctx->vpp) {
+		aml_v4l2_vpp_thread_stop(ctx->vpp);
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO, "vpp stop\n");
+	}
+}
+
 void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 {
 	/* disable queue output item to worker. */
@@ -1486,6 +1499,8 @@ void wait_vcodec_ending(struct aml_vcodec_ctx *ctx)
 	/* clean output cache and decoder status . */
 	if (ctx->state > AML_STATE_INIT)
 		aml_vdec_reset(ctx);
+
+	stop_pipeline(ctx);
 }
 
 void aml_thread_capture_worker(struct aml_vcodec_ctx *ctx)
