@@ -660,10 +660,8 @@ static int video_port_init(struct port_priv_s *priv,
 
 	return 0;
 err:
-	if (vdec->slave)
-		vdec_release(vdec->slave);
-	if (vdec)
-		vdec_release(vdec);
+	vdec_release(vdec->slave);
+	vdec_release(vdec);
 	priv->vdec = NULL;
 
 	return r;
@@ -1430,8 +1428,12 @@ static int amstream_open(struct inode *inode, struct file *file)
 {
 	s32 i;
 	struct stream_port_s *s;
-	struct stream_port_s *port = &ports[iminor(inode)];
+	struct stream_port_s *port;
 	struct port_priv_s *priv;
+
+	if (iminor(inode) >= (sizeof(ports) / sizeof(struct stream_port_s)))
+		return -1;
+	port = &ports[iminor(inode)];
 
 	VDEC_PRINT_FUN_LINENO(__func__, __LINE__);
 	if (vdec_get_debug_flags() & 0x10000000)
@@ -2530,7 +2532,6 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 										&tmpbuf[m],
 										sizeof(struct vframe_counter_s_old))) {
 								r = -EFAULT;
-								kfree(tmpbuf);
 								mutex_unlock(&amstream_mutex);
 								break;
 							}
@@ -2556,7 +2557,6 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 									&tmpbuf[i].qos,
 									sizeof(struct vframe_qos_s))) {
 							r = -EFAULT;
-							kfree(tmpbuf);
 							mutex_unlock(&amstream_mutex);
 							break;
 						}
@@ -2573,7 +2573,7 @@ static long amstream_do_ioctl_new(struct port_priv_s *priv,
 	case AMSTREAM_IOC_GET_AVINFO:
 		{
 			struct av_param_info_t  __user *uarg = (void *)arg;
-			struct av_info_t  av_info;
+			struct av_info_t  av_info = {0};
 			int delay;
 			u32 avgbps;
 			if (this->type & PORT_TYPE_VIDEO) {
@@ -2717,7 +2717,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 
 	case AMSTREAM_IOC_VB_STATUS:
 		if (this->type & PORT_TYPE_VIDEO) {
-			struct am_io_param para;
+			struct am_io_param para = {0};
 			struct am_io_param *p = &para;
 			struct stream_buf_s *buf = NULL;
 
@@ -2768,7 +2768,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 
 	case AMSTREAM_IOC_AB_STATUS:
 		if (this->type & PORT_TYPE_AUDIO) {
-			struct am_io_param para;
+			struct am_io_param para = {0};
 			struct am_io_param *p = &para;
 			struct stream_buf_s *buf = &bufs[BUF_TYPE_AUDIO];
 
@@ -2871,7 +2871,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			return -EINVAL;
 		{
 			struct vdec_info_statistic_s v_statistic;
-			struct am_io_param para;
+			struct am_io_param para = {0};
 			struct am_io_param *p = &para;
 
 			memset(&v_statistic, 0, sizeof(v_statistic));
@@ -2926,7 +2926,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			return -ENODEV;
 		else {
 			struct adec_status astatus;
-			struct am_io_param para;
+			struct am_io_param para = {0};
 			struct am_io_param *p = &para;
 
 			amstream_adec_status(&astatus);
@@ -3438,7 +3438,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 		break;
 	}
 	case AMSTREAM_IOC_GET_STBUF_STATUS: {
-		struct stream_buffer_status st;
+		struct stream_buffer_status st = {0};
 		struct stream_buf_s *pbuf = NULL;
 
 		if (priv->vdec == NULL) {
