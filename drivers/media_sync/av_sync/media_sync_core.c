@@ -36,7 +36,6 @@
 #define MAX_DYNAMIC_INSTANCE_NUM 10
 #define MAX_INSTANCE_NUM 40
 #define MAX_CACHE_TIME_MS (60*1000)
-#define mediasync_pr_info(number,fmt,args...) pr_info("[%d] " fmt, number,##args)
 
 
 /*
@@ -49,9 +48,30 @@ static u32 media_sync_user_debug_level = 0;
 
 static u32 media_sync_debug_level = 0;
 
-MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
-u64 last_system;
-u64 last_pcr;
+#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_debug_level) {pr_info("[%d_%d_%d][%s:%d] " fmt, inst->mSyncId,inst->mSyncIndex,inst->mUId,__func__,__LINE__,##args);}
+#define mediasync_pr_error(fmt,args...) {pr_info("[%s:%d] err " fmt,__func__,__LINE__,##args);}
+#define valid_pts(pts) ((pts) > 0)
+#define PTS_TYPE_AUDIO 0
+#define PTS_TYPE_VIDEO 1
+#define DEFAULT_TRIGGER_DISCONTINUE_THRESHOLD 630000//(7000 * 90)
+#define DEFAULT_FRAME_SEGMENT_THRESHOLD 45000//(500 * 90)
+#define ABSSUB(a, b) (((a) >= (b)) ? ((a) - (b)) : ((b) - (a)))
+
+typedef struct Media_Sync_Manage {
+	mediasync_ins* pInstance;
+	struct mutex m_lock;
+} MediaSyncManager;
+
+static MediaSyncManager vMediaSyncInsList[MAX_INSTANCE_NUM];
+static u32 g_inst_uid = 1;
+static u64 last_system;
+static u64 last_pcr;
+
+#define VIDEO_FRAME_LIST_SIZE  (8192 * 2)
+#define AUDIO_FRAME_LIST_SIZE  (8192 * 2)
+#ifndef PAGE_SIZE
+# define PAGE_SIZE 4096
+#endif
 
 #if IS_ENABLED(CONFIG_AMLOGIC_DVB_DMX)
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
@@ -76,23 +96,113 @@ static long get_index_from_sync_id(s32 sSyncInsId)
 
 	if (sSyncInsId < MAX_DYNAMIC_INSTANCE_NUM) {
 		for (temp = 0; temp < MAX_DYNAMIC_INSTANCE_NUM; temp++) {
-			if (vMediaSyncInsList[temp].pInstance != NULL && sSyncInsId == temp) {
-				index = temp;
-				return index;
-			}
-		}
-	}
-
-	for (temp = MAX_DYNAMIC_INSTANCE_NUM; temp < MAX_INSTANCE_NUM; temp++) {
-		if (vMediaSyncInsList[temp].pInstance != NULL) {
-			if (sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncInsId) {
+			if (vMediaSyncInsList[temp].pInstance != NULL && sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncId) {
 				index = temp;
 				break;
 			}
 		}
 	}
+	if (index == -1) {
+		for (temp = MAX_DYNAMIC_INSTANCE_NUM; temp < MAX_INSTANCE_NUM; temp++) {
+			if (vMediaSyncInsList[temp].pInstance != NULL) {
+				if (sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncId) {
+					index = temp;
+					break;
+				}
+			}
+		}
+	}
 
 	return index;
+}
+
+static MediaSyncManager* get_media_sync_manager(s32 sSyncInsId,const char* from,int line) {
+	MediaSyncManager* ret = NULL;
+	if (sSyncInsId >= 0) {
+		s32 index;
+		for (index = 0; index < MAX_INSTANCE_NUM; index++) {
+			if (vMediaSyncInsList[index].pInstance != NULL && sSyncInsId == vMediaSyncInsList[index].pInstance->mSyncId) {
+				ret = &vMediaSyncInsList[index];
+				break;
+			}
+		}
+	}
+	if (ret == NULL) {
+		mediasync_pr_error("Invalid sSyncInsId:%d from %s:%d\n",sSyncInsId,from,line);
+	}
+	return ret;
+}
+
+static void free_frame_list(struct frame_table_s *ptable)
+{
+#ifdef SIMPLE_ALLOC_LIST
+	if (0) {		/*don't free,used a static memory */
+		kfree(ptable->pts_recs);
+		ptable->pts_recs = NULL;
+	}
+#else
+	unsigned long *p = ptable->pages_list;
+	void *onepage = (void *)p[0];
+
+	while (onepage) {
+		free_page((unsigned long)onepage);
+		p++;
+		onepage = (void *)p[0];
+	}
+	kfree(ptable->pages_list);
+	ptable->pages_list = NULL;
+#endif
+	INIT_LIST_HEAD(&ptable->valid_list);
+	INIT_LIST_HEAD(&ptable->free_list);
+}
+
+static int alloc_frame_list(struct frame_table_s *ptable)
+{
+	int i;
+	int page_nums;
+
+	INIT_LIST_HEAD(&ptable->valid_list);
+	INIT_LIST_HEAD(&ptable->free_list);
+#ifdef SIMPLE_ALLOC_LIST
+	if (!ptable->pts_recs) {
+		ptable->pts_recs = kcalloc(ptable->rec_num,
+				sizeof(struct frame_rec_s),
+				GFP_KERNEL);
+	}
+	if (!ptable->pts_recs) {
+		ptable->status = 0;
+		return -ENOMEM;
+	}
+	for (i = 0; i < ptable->rec_num; i++)
+		list_add_tail(&ptable->pts_recs[i].list, &ptable->free_list);
+	return 0;
+#else
+	page_nums = div_u64(ptable->rec_num * sizeof(struct frame_rec_s), PAGE_SIZE);
+	if (div_u64(PAGE_SIZE, sizeof(struct frame_rec_s)) != 0) {
+		page_nums = div_u64((ptable->rec_num + page_nums +
+			 1) * sizeof(struct frame_rec_s), PAGE_SIZE);
+	}
+	ptable->pages_list = kzalloc((page_nums + 1) * sizeof(void *),
+				GFP_KERNEL);
+	if (!ptable->pages_list)
+		return -ENOMEM;
+	for (i = 0; i < page_nums; i++) {
+		int j;
+		void *one_page = (void *)__get_free_page(GFP_KERNEL);
+		struct frame_rec_s *recs = one_page;
+
+		if (!one_page)
+			goto error_alloc_pages;
+		for (j = 0; j < div_u64(PAGE_SIZE, sizeof(struct frame_rec_s)); j++)
+			list_add_tail(&recs[j].list, &ptable->free_list);
+		ptable->pages_list[i] = (unsigned long)one_page;
+	}
+	ptable->pages_list[page_nums] = 0;
+	return 0;
+error_alloc_pages:
+	free_frame_list(ptable);
+#endif
+	return -ENOMEM;
 }
 
 static u64 get_stc_time_us(s32 sSyncInsId)
@@ -167,237 +277,424 @@ static s64 get_system_time_us(void) {
 	return TimeUs;
 }
 
-long mediasync_init(void) {
-	int index = 0;
-	for (index = 0; index < MAX_INSTANCE_NUM; index++) {
-		vMediaSyncInsList[index].pInstance = NULL;
-		mutex_init(&(vMediaSyncInsList[index].m_lock));
-	}
-	return 0;
-}
+static mediasync_frameinfo_inner check_apts_valid(mediasync_ins* pInstance,int64_t pts) {
+	mediasync_frameinfo_inner ret;
+	struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
 
-long mediasync_ins_alloc(s32 sDemuxId,
-			s32 sPcrPid,
-			s32 *sSyncInsId,
-			mediasync_ins **pIns){
-	s32 index = 0;
-	mediasync_ins* pInstance = NULL;
-	pInstance = kmalloc(sizeof(mediasync_ins), GFP_KERNEL|__GFP_ZERO);
-	if (pInstance == NULL) {
-		return -1;
-	}
-
-	for (index = 0; index < MAX_DYNAMIC_INSTANCE_NUM; index++) {
-		mutex_lock(&(vMediaSyncInsList[index].m_lock));
-		if (vMediaSyncInsList[index].pInstance == NULL) {
-			vMediaSyncInsList[index].pInstance = pInstance;
-			pInstance->mSyncInsId = index;
-			*sSyncInsId = index;
-			pr_info("mediasync_ins_alloc index:%d, demuxid:%d.\n", index, sDemuxId);
-
-			pInstance->mDemuxId = sDemuxId;
-			pInstance->mPcrPid = sPcrPid;
-			mediasync_ins_init_syncinfo(pInstance->mSyncInsId);
-			pInstance->mHasAudio = -1;
-			pInstance->mHasVideo = -1;
-			pInstance->mVideoWorkMode = 0;
-			pInstance->mFccEnable = 0;
-			pInstance->mSourceClockType = UNKNOWN_CLOCK;
-			pInstance->mSyncInfo.state = MEDIASYNC_INIT;
-			pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
-			pInstance->mute_flag = false;
-			pInstance->mVideoSmoothTag = false;
-			pInstance->mSourceType = TS_DEMOD;
-			pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
-			pInstance->mRef++;
-			pInstance->mStcParmUpdateCount = 0;
-			pInstance->mAudioCacheUpdateCount = 0;
-			pInstance->mVideoCacheUpdateCount = 0;
-			pInstance->isVideoFrameAdvance = 0;
-			pInstance->mLastCheckSlopeSystemtime = 0;
-			pInstance->mLastCheckSlopeDemuxPts = 0;
-			pInstance->mLastCheckPcrSlope = 0;
-			snprintf(pInstance->atrace_video,
-				sizeof(pInstance->atrace_video), "msync_v_%d", *sSyncInsId);
-			snprintf(pInstance->atrace_audio,
-				sizeof(pInstance->atrace_audio), "msync_a_%d", *sSyncInsId);
-			snprintf(pInstance->atrace_pcrscr,
-				sizeof(pInstance->atrace_pcrscr), "msync_s_%d", *sSyncInsId);
-
-			mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-			break;
-		}
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-	}
-
-	if (index == MAX_DYNAMIC_INSTANCE_NUM) {
-		kfree(pInstance);
-		return -1;
-	}
-
-	*pIns = pInstance;
-
-	return 0;
-}
-
-
-long mediasync_ins_delete(s32 sSyncInsId) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL)
-		return -1;
-
-	kfree(pInstance);
-	vMediaSyncInsList[index].pInstance = NULL;
-	return 0;
-}
-
-long mediasync_ins_binder(s32 sSyncInsId,
-			mediasync_ins **pIns) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-		return -1;
-	}
-
-	pInstance->mRef++;
-	*pIns = pInstance;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-
-	return 0;
-}
-
-long mediasync_static_ins_binder(s32 sSyncInsId,
-			mediasync_ins **pIns) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	s32 temp_ins;
-	if (index >= 0 && index < MAX_DYNAMIC_INSTANCE_NUM)
-		return mediasync_ins_binder(sSyncInsId, pIns);
-
-	if (index >= MAX_DYNAMIC_INSTANCE_NUM && index < MAX_INSTANCE_NUM) {
-		mutex_lock(&(vMediaSyncInsList[index].m_lock));
-		pInstance = vMediaSyncInsList[index].pInstance;
-		if (pInstance == NULL) {
-			mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-			return -1;
-		}
-		pInstance->mRef++;
-		*pIns = pInstance;
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-	} else if (index < 0 || index >= MAX_INSTANCE_NUM) {
-		pInstance = kzalloc(sizeof(mediasync_ins), GFP_KERNEL);
-		if (pInstance == NULL) {
-			return -1;
-		}
-
-		for (temp_ins = MAX_DYNAMIC_INSTANCE_NUM; temp_ins < MAX_INSTANCE_NUM; temp_ins++) {
-			mutex_lock(&(vMediaSyncInsList[temp_ins].m_lock));
-			if (vMediaSyncInsList[temp_ins].pInstance == NULL) {
-				vMediaSyncInsList[temp_ins].pInstance = pInstance;
-				pInstance->mSyncInsId = sSyncInsId;
-				pr_info("mediasync_static_ins_binder alloc InsId:%d, index:%d.\n", sSyncInsId, temp_ins);
-
-				//TODO add demuxID and pcr pid
-				pInstance->mDemuxId = -1;
-				pInstance->mPcrPid = -1;
-				mediasync_ins_init_syncinfo(pInstance->mSyncInsId);
-				pInstance->mHasAudio = -1;
-				pInstance->mHasVideo = -1;
-				pInstance->mVideoWorkMode = 0;
-				pInstance->mFccEnable = 0;
-				pInstance->mSourceClockType = UNKNOWN_CLOCK;
-				pInstance->mSyncInfo.state = MEDIASYNC_INIT;
-				pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
-				pInstance->mute_flag = false;
-				pInstance->mSourceType = TS_DEMOD;
-				pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
-				pInstance->mRef++;
-				snprintf(pInstance->atrace_video,
-					sizeof(pInstance->atrace_video), "msync_v_%d", sSyncInsId);
-				snprintf(pInstance->atrace_audio,
-					sizeof(pInstance->atrace_audio), "msync_a_%d", sSyncInsId);
-				snprintf(pInstance->atrace_pcrscr,
-					sizeof(pInstance->atrace_pcrscr), "msync_s_%d", sSyncInsId);
-
-				*pIns = pInstance;
-				mutex_unlock(&(vMediaSyncInsList[temp_ins].m_lock));
-				break;
+	ret.frameid = 0;
+	if (!list_empty(&pTable->valid_list) && valid_pts(pts)) {
+		if (pts == pTable->mLastCheckedPts && pTable->mLastCheckedFrame.frameid != 0) {
+			ret = pTable->mLastCheckedFrame;
+		} else {
+			struct frame_rec_s *rec = NULL;
+			struct frame_rec_s *next = NULL;
+			int loop_cnt = 0;
+			list_for_each_entry_safe(rec,next, &pTable->valid_list, list) {
+				loop_cnt++;
+				if (pts >= rec->frame_info.framePts && pts < (rec->frame_info.framePts + rec->frame_info.frameduration)) {
+					ret = rec->frame_info;
+					mediasync_pr_info(5,pInstance,"found aFrame:[%llx,%lld],diff:%lld, pts:%llx,loop:%d",\
+						ret.framePts,ret.frameid,div_u64((ret.framePts-pts),90),pts,loop_cnt);
+					pTable->mLastCheckedPts = pts;
+					pTable->mLastCheckedFrame = ret;
+					break;
+				}
 			}
-			mutex_unlock(&(vMediaSyncInsList[temp_ins].m_lock));
 		}
+	}
+	if (ret.frameid == 0) {
+		if (pts >= pTable->mLastQueued.framePts && pts < pTable->mLastQueued.framePts + pTable->mLastQueued.frameduration) {
+			ret = pTable->mLastQueued;
+		}
+	}
+	if (ret.frameid == 0) {
+		mediasync_pr_info(0,pInstance,"apts invalid:%llx, count:%d, min:%llx, in:%llx, out:%llx",\
+			pts, pTable->mFrameCount, pTable->mMinPtsFrame.framePts,\
+			pTable->mLastQueued.framePts,pInstance->mSyncInfo.curAudioInfo.framePts);
+	}
+	return ret;
+}
 
+static mediasync_frameinfo_inner check_vpts_valid(mediasync_ins* pInstance,int64_t pts) {
+	mediasync_frameinfo_inner ret;
+	struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+
+	ret.frameid = 0;
+	if (!list_empty(&pTable->valid_list) && valid_pts(pts)) {
+		if (pts == pTable->mLastCheckedPts && pTable->mLastCheckedFrame.frameid != 0) {
+			ret = pTable->mLastCheckedFrame;
+		} else {
+			struct frame_rec_s *rec = NULL;
+			struct frame_rec_s *next = NULL;
+			int loop_cnt = 0;
+			list_for_each_entry_safe_reverse(rec, next, &pTable->valid_list, list) {
+				loop_cnt++;
+				if (pts >= rec->frame_info.framePts && pts < next->frame_info.framePts) {
+					ret = rec->frame_info;
+					mediasync_pr_info(5,pInstance,"found vFrame:[%llx,%llx],diff:%lld, pts:%llx,loop:%d",\
+						ret.framePts,ret.frameid,div_u64((ret.framePts-pts),90),pts,loop_cnt);
+					pTable->mLastCheckedPts = pts;
+					pTable->mLastCheckedFrame = ret;
+					break;
+				}
+			}
+		}
+	}
+	if (ret.frameid == 0) {
+		mediasync_pr_info(0,pInstance,"vpts invalid:%llx, count:%d, min:%llx, in:%llx, out:%llx",\
+			pts, pTable->mFrameCount, pTable->mMinPtsFrame.framePts,\
+			pTable->mLastQueued.framePts, pInstance->mSyncInfo.curVideoInfo.framePts);
 	}
 
+	return ret;
+}
+
+static void clear_frame_list(mediasync_ins* pInstance, struct frame_table_s* pTable) {
+	struct frame_rec_s *rec = NULL;
+	struct frame_rec_s *next = NULL;
+	list_for_each_entry_safe(rec,next, &pTable->valid_list, list) {
+		list_move_tail(&rec->list, &pTable->free_list);
+	}
+	pTable->mCacheInfo.cacheDuration = 0;
+	pTable->mCacheInfo.cacheSize = 0;
+	pTable->mFrameCount = 0;
+	pTable->current_frame_id = 1;
+	pTable->mLastQueued.framePts = -1;
+	pTable->mLastQueued.remainedduration = -1;
+	pTable->mLastQueued.frameid = -1;
+	pTable->mLastQueued.frameSystemTime = -1;
+	pTable->mLastProcessedPts = -1;
+	pTable->mMinPtsFrame = pTable->mLastQueued;
+	mediasync_pr_info(0,pInstance,"type:%s\n",(pTable->mTableType == PTS_TYPE_AUDIO) ? "audio":"video");
+}
+
+static void update_audio_cache(mediasync_ins* pInstance,int64_t pts, int64_t duration_add) {
+	struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
+	if (duration_add > 0) {
+		//called from queueAudioFrame
+		pTable->mCacheInfo.cacheDuration += duration_add;
+	} else {
+		//called from AudioProcess,need erase expired frames,but can simple update total cache with erased frames and remained duration in current frame
+		if (list_empty(&pTable->valid_list) || !valid_pts(pts)) {
+			if (pts >= pTable->mLastQueued.framePts && pts < (pTable->mLastQueued.framePts + pTable->mLastQueued.frameduration)) {
+				pTable->mCacheInfo.cacheDuration = pts - pTable->mLastQueued.framePts;
+			} else {
+				pTable->mCacheInfo.cacheDuration = 0;
+			}
+		} else {
+			struct frame_rec_s *rec = NULL;
+			struct frame_rec_s *next = NULL;
+			mediasync_frameinfo_inner frameinfo_l;
+			frameinfo_l = check_apts_valid(pInstance, pts);
+			if (frameinfo_l.frameid != 0) {
+				list_for_each_entry_safe(rec,next, &pTable->valid_list, list) {
+					if (rec->frame_info.frameid < frameinfo_l.frameid) {
+						mediasync_pr_info(1,pInstance,"expired aFrame erased:[%llx,%llx] to [%llx,%llx] time:%lld ms, maxid:%llx",\
+							rec->frame_info.framePts, rec->frame_info.frameid, frameinfo_l.framePts,\
+							frameinfo_l.frameid, div_u64((rec->frame_info.framePts-frameinfo_l.framePts), 90), pTable->current_frame_id);
+						pTable->mCacheInfo.cacheDuration -= rec->frame_info.remainedduration;
+						if (next != NULL) {
+							pTable->mMinPtsFrame = next->frame_info;
+						} else {
+							pTable->mMinPtsFrame = rec->frame_info;
+						}
+						list_move_tail(&rec->list, &pTable->free_list);
+						pTable->mFrameCount--;
+						break;
+					} else if (rec->frame_info.frameid == frameinfo_l.frameid) {
+						pTable->mCacheInfo.cacheDuration -= rec->frame_info.remainedduration;
+						rec->frame_info.remainedduration = rec->frame_info.frameduration - (pts - rec->frame_info.framePts);
+						pTable->mCacheInfo.cacheDuration += rec->frame_info.remainedduration;
+						mediasync_pr_info(2,pInstance,"aFrame multi frame es:[%llx,%llx],to pts:%lld ms,duration:%d/%d ms",\
+							rec->frame_info.framePts, rec->frame_info.frameid, div_u64((pts-rec->frame_info.framePts), 90),\
+							div_u64(rec->frame_info.remainedduration, 90), div_u64(rec->frame_info.frameduration, 90));
+						pTable->mMinPtsFrame = rec->frame_info;
+						break;
+					}
+				}
+			}
+		}
+	}
+	mediasync_pr_info(1,pInstance,"(%s)aCache:%d ms(%d) pts:[%llx,%llx,%llx], a_add:%lld ms, interval:%d ms",\
+		(duration_add > 0) ? "+":"-", div_u64(pTable->mCacheInfo.cacheDuration, 90),\
+		pTable->mFrameCount, pTable->mMinPtsFrame.framePts, pts, pTable->mLastQueued.framePts, div_u64(duration_add, 90),div_u64(pTable->mLastQueued.frameduration, 90));
+}
+
+static void update_video_cache(mediasync_ins* pInstance,int64_t pts, int64_t duration_add) {
+	mediasync_frameinfo_inner minelement;
+	mediasync_frameinfo_inner maxelement;
+	int segment_size = 0;
+	struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+
+	minelement.framePts = -1;
+	maxelement.framePts = -1;
+	if (!valid_pts(pts)) {
+		pTable->mCacheInfo.cacheDuration = 0;
+	} else {
+		struct frame_rec_s *rec = NULL;
+		struct frame_rec_s *next = NULL;
+		mediasync_frameinfo_inner frameinfo_l;
+		int64_t diff_pts_2_seg_min_pts = 0;//current pts maybe not exactly the minpts in the segment,so cache should remove this diff
+		pTable->mCacheInfo.cacheDuration = 0;
+		//first erase expired frames
+		frameinfo_l = check_vpts_valid(pInstance, pts);
+		if (frameinfo_l.frameid != 0) {
+			struct frame_rec_s *rec = NULL;
+			struct frame_rec_s *next = NULL;
+			list_for_each_entry_safe(rec,next, &pTable->valid_list, list) {
+				if (rec->frame_info.frameid < frameinfo_l.frameid) {
+					mediasync_pr_info(1,pInstance,"vFrame erased:[%llx,%llx]",\
+						rec->frame_info.framePts,rec->frame_info.frameid);
+					list_move_tail(&rec->list, &pTable->free_list);
+					pTable->mFrameCount--;
+				}
+			}
+		}
+		//then calculate total video cache
+		segment_size++;
+		list_for_each_entry_safe(rec, next, &pTable->valid_list, list) {
+			if (!valid_pts(minelement.framePts)) {
+				minelement = maxelement = rec->frame_info;
+			}
+			if (!list_entry_is_head(next, &pTable->valid_list, list)) {
+				if (rec->frame_info.framePts - next->frame_info.framePts > DEFAULT_FRAME_SEGMENT_THRESHOLD) {
+					pInstance->mVideoInfo.cacheDuration += maxelement.framePts - minelement.framePts;
+					if (pts >= minelement.framePts && pts <= maxelement.framePts) {
+						diff_pts_2_seg_min_pts = pts - minelement.framePts;
+					}
+					mediasync_pr_info(1,pInstance,"video segment jump back %lldms,%llx->%llx,id:%llx->%llx, seg_cache:%d(%d)/%dms",\
+						div_u64((rec->frame_info.framePts - next->frame_info.framePts), 90), rec->frame_info.framePts, next->frame_info.framePts,\
+						rec->frame_info.frameid, next->frame_info.frameid, (int)div_u64((maxelement.framePts - minelement.framePts),90), segment_size,\
+						div_u64(pTable->mCacheInfo.cacheDuration, 90));
+					if (pTable->mMinPtsFrame.framePts < minelement.framePts) {
+						pTable->mMinPtsFrame = minelement;
+					}
+					maxelement = minelement = next->frame_info;
+					segment_size = 0;
+				}
+				else if (rec->frame_info.framePts > maxelement.framePts) {
+					maxelement = rec->frame_info;
+				}
+				else if (rec->frame_info.framePts < minelement.framePts) {
+					minelement = rec->frame_info;
+				}
+				segment_size++;
+			}
+		}
+		if (pts >= minelement.framePts && pts <= maxelement.framePts) {
+			diff_pts_2_seg_min_pts = pts - minelement.framePts;
+		}
+		if (pTable->mMinPtsFrame.framePts < minelement.framePts) {
+			pTable->mMinPtsFrame = minelement;
+		}
+		pTable->mCacheInfo.cacheDuration += maxelement.framePts - minelement.framePts;
+		pTable->mCacheInfo.cacheDuration -= diff_pts_2_seg_min_pts;
+
+		if (pTable->mCacheInfo.cacheDuration < 0)
+			pTable->mCacheInfo.cacheDuration = 0;
+	}
+	mediasync_pr_info(1,pInstance,"(%s)vCache:%d ms(%d) pts:[%llx,%llx,%llx] v_add:%lld ms",\
+		(duration_add != 0) ? "+":"-", div_u64(pTable->mCacheInfo.cacheDuration, 90),\
+		pTable->mFrameCount, pTable->mMinPtsFrame.framePts, pts, pTable->mLastQueued.framePts, div_u64(duration_add, 90));
+}
+
+static void insert_video_frame_to_list(mediasync_ins* pInstance,mediasync_frameinfo *frame_info,int64_t v_add) {
+	struct frame_rec_s *frame = NULL;
+	struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+	if (list_empty(&pTable->free_list)) {
+		mediasync_pr_info(0,pInstance,"frame list is full,count:%d",pTable->mFrameCount);
+		clear_frame_list(pInstance, pTable);
+	}
+	frame = list_first_entry(&pTable->free_list,struct frame_rec_s, list);
+	list_del(&frame->list);
+	if (frame != NULL) {
+		frame->frame_info.framePts = frame_info->framePts;
+		frame->frame_info.frameSystemTime = frame_info->frameSystemTime;
+		frame->frame_info.frameid = pTable->current_frame_id;
+		pTable->current_frame_id++;
+		mediasync_pr_info(2,pInstance,"frame_info:[%llx,%llx],v_add:%lldms",\
+			frame->frame_info.framePts,frame->frame_info.frameid,div_u64(v_add, 90));
+
+		if (list_empty(&pTable->valid_list)) {
+			list_add_tail(&frame->list, &pTable->valid_list);
+		} else {
+			bool done = false;
+			struct frame_rec_s *rec = NULL;
+			struct frame_rec_s *next = NULL;
+			struct frame_rec_s *frame_swapid_head = list_first_entry(&pTable->valid_list, struct frame_rec_s, list);
+			list_for_each_entry_safe(rec,
+				next, &pTable->valid_list, list) {
+				if (!list_is_last(&next->list, &pTable->valid_list) &&
+					(rec->frame_info.framePts - next->frame_info.framePts) >
+					DEFAULT_TRIGGER_DISCONTINUE_THRESHOLD) {
+					frame_swapid_head = next;
+				}
+				if (frame_info->framePts == rec->frame_info.framePts) {
+					//do not insert the same pts
+					mediasync_pr_info(5,pInstance,"same pts %llx,%lldd",\
+						rec->frame_info.framePts, rec->frame_info.frameid);
+					done = true;
+					break;
+				} else if (frame_info->framePts > rec->frame_info.framePts) {
+					if (!list_is_last(&next->list, &pTable->valid_list) &&
+						(rec->frame_info.framePts - next->frame_info.framePts) <
+						DEFAULT_TRIGGER_DISCONTINUE_THRESHOLD) {
+						//short jump back should be B frame,we sort frameid by pts
+						uint64_t tmpid = frame_swapid_head->frame_info.frameid;
+						struct frame_rec_s* rec1 = frame_swapid_head;
+						mediasync_pr_info(5,pInstance,"update frameid %llx:%llx->%llx",\
+							frame_swapid_head->frame_info.framePts,frame_swapid_head->frame_info.frameid,frame->frame_info.frameid);
+						frame_swapid_head->frame_info.frameid = frame->frame_info.frameid;
+						rec1 = list_next_entry(rec1, list);
+						while (rec1 != next) {
+							uint64_t tmp;
+							mediasync_pr_info(5,pInstance,"update frameid %llx:%llx->%llx",\
+								rec1->frame_info.framePts,rec1->frame_info.frameid,tmpid);
+							tmp = rec1->frame_info.frameid;
+							rec1->frame_info.frameid = tmpid;
+							tmpid = tmp;
+							rec1 = list_next_entry(rec1, list);
+						}
+						frame->frame_info.frameid = tmpid;
+					}
+					list_add(&frame->list, rec->list.prev);
+					done = true;
+					break;
+				}
+			}
+#if 0
+			{
+				//just for debug,list all frames in list
+				int count = 0;
+				mediasync_pr_info(pInstance->mSyncIndex,"******dump list start******");
+				list_for_each_entry_safe(rec,
+					next, &pTable->valid_list, list) {
+					mediasync_pr_info(pInstance->mSyncIndex,"frame[%llx,%llx]",\
+					rec->frame_info.framePts,rec->frame_info.frameid);
+					count++;
+					if (count > 10) {
+						break;
+					}
+				}
+				mediasync_pr_info(pInstance->mSyncIndex,"******dump list end  ******");
+			}
+#endif
+			if (!done) {
+				//this frame jump back,all pts in the list is larger than this pts
+				list_add_tail(&frame->list, &pTable->valid_list);
+			}
+		}
+		pTable->mLastQueued = frame->frame_info;
+		if (!valid_pts(pTable->mMinPtsFrame.framePts) || pTable->mMinPtsFrame.framePts > pTable->mLastQueued.framePts) {
+			pTable->mMinPtsFrame = pTable->mLastQueued;
+		}
+		pTable->mFrameCount++;
+	}
+}
+
+static long mediasync_ins_set_queue_audio_info_l(mediasync_ins* pInstance, mediasync_frameinfo *info) {
+	mediasync_pr_info(1,pInstance,"queue_audio[%llx,%llx]",\
+			info->framePts,info->frameSystemTime);
+	pInstance->mSyncInfo.queueAudioInfo.framePts = info->framePts;
+	pInstance->mSyncInfo.queueAudioInfo.frameSystemTime = info->frameSystemTime;
+	if (pInstance->mCacheFrames) {
+		struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
+		int64_t a_add;
+		if (!valid_pts(pTable->mLastQueued.framePts)) {
+			a_add = 0;
+		} else if (ABSSUB(info->framePts, pTable->mLastQueued.framePts) > DEFAULT_TRIGGER_DISCONTINUE_THRESHOLD) {
+			//when apts jump,we can not use direct apts diff for frame duration
+			//but we can use average diff for the duration to the last queued frame
+			a_add = pTable->mLastQueued.frameduration;
+		} else {
+			a_add = info->framePts - pTable->mLastQueued.framePts;
+		}
+		if (valid_pts(pTable->mLastQueued.framePts)) {
+			struct frame_rec_s *rec = NULL;
+			//delay one queue to push_back for calculate the frameduration
+			//and when calculating the total duration will consider the pts of mLastQueueFrame
+			if (list_empty(&pTable->free_list)) {
+				mediasync_pr_info(0,pInstance,"frame list is full,count:%d",pTable->mFrameCount);
+				clear_frame_list(pInstance, pTable);
+			}
+			rec = list_first_entry(&pTable->free_list,struct frame_rec_s, list);
+			list_del(&rec->list);
+			if (rec != NULL) {
+				rec->frame_info.framePts = pTable->mLastQueued.framePts;
+				rec->frame_info.frameSystemTime = pTable->mLastQueued.frameSystemTime;
+				rec->frame_info.frameid = pTable->mLastQueued.frameid;
+				if (a_add < DEFAULT_FRAME_SEGMENT_THRESHOLD) {
+					rec->frame_info.remainedduration = rec->frame_info.frameduration = a_add;
+				} else {
+					rec->frame_info.remainedduration = rec->frame_info.frameduration = pTable->mLastQueued.frameduration;
+				}
+				list_add_tail(&rec->list, &pTable->valid_list);
+				pTable->mFrameCount++;
+				update_audio_cache(pInstance,pTable->mLastProcessedPts,a_add);
+			}
+		}
+		if (valid_pts(pTable->mLastQueued.framePts)) {
+			if (ABSSUB(a_add,0) < 22500/*250 * 90*/) {
+				if (pTable->mLastQueued.frameduration <= 0) {
+					pTable->mLastQueued.frameduration = a_add;
+				} else {
+					pTable->mLastQueued.frameduration = div_u64((pTable->mLastQueued.frameduration + a_add), 2);
+				}
+			}
+		}
+
+		pTable->mLastQueued.framePts = info->framePts;
+		pTable->mLastQueued.remainedduration = -1;
+		pTable->mLastQueued.frameid = pTable->current_frame_id;
+		pTable->mLastQueued.frameSystemTime = info->frameSystemTime;
+		if (!valid_pts(pTable->mMinPtsFrame.framePts) || pTable->mMinPtsFrame.framePts > pTable->mLastQueued.framePts) {
+			pTable->mMinPtsFrame = pTable->mLastQueued;
+		}
+		pTable->current_frame_id++;
+	}
 	return 0;
 }
 
-long mediasync_ins_unbinder(s32 sSyncInsId) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
+static long mediasync_ins_set_queue_video_info_l(mediasync_ins* pInstance, mediasync_frameinfo* info) {
+	struct frame_table_s* pTable;
+	int64_t v_add;
+	mediasync_pr_info(1,pInstance,"queue_video[%llx,%llx]",\
+			info->framePts,info->frameSystemTime);
+	pInstance->mSyncInfo.queueVideoInfo.framePts = info->framePts;
+	pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = info->frameSystemTime;
 
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL)
-		return -1;
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance->mRef--;
-
-	if (pInstance->mRef > 0 && pInstance->mAVRef == 0)
-		mediasync_ins_reset(sSyncInsId);
-
-	if (pInstance->mRef <= 0)
-		mediasync_ins_delete(sSyncInsId);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	if (pInstance->mCacheFrames) {
+		pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+		if (valid_pts(info->framePts)) {
+			v_add = !valid_pts(pTable->mLastQueued.framePts) ? 0:(info->framePts - pTable->mLastQueued.framePts);
+			insert_video_frame_to_list(pInstance,info,v_add);
+			update_video_cache(pInstance, pTable->mLastProcessedPts, v_add);
+		}
+	}
 	return 0;
 }
 
-long mediasync_ins_reset(s32 sSyncInsId) {
+static long mediasync_ins_delete(s32 sSyncInsId) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	long ret = -1;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL)
-		return -1;
-
-	mediasync_ins_init_syncinfo(pInstance->mSyncInsId);
-	pInstance->mHasAudio = -1;
-	pInstance->mHasVideo = -1;
-	pInstance->mVideoWorkMode = 0;
-	pInstance->mFccEnable = 0;
-	pInstance->mPaused = 0;
-	pInstance->mSourceClockType = UNKNOWN_CLOCK;
-	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
-	pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
-	pInstance->mute_flag = false;
-	pInstance->mSourceType = TS_DEMOD;
-	pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
-	pInstance->mStcParmUpdateCount = 0;
-	pInstance->isVideoFrameAdvance = 0;
-	pr_info("mediasync_ins_reset.");
-
-	return 0;
+	pInstance = pSyncManage->pInstance;
+	if (pInstance != NULL) {
+		mediasync_pr_info(0,pInstance,"");
+		free_frame_list(&pInstance->frame_table[0]);
+		free_frame_list(&pInstance->frame_table[1]);
+		kfree(pInstance);
+		pSyncManage->pInstance = NULL;
+		ret = 0;
+	}
+	return ret;
 }
 
-long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-
-	pInstance = vMediaSyncInsList[index].pInstance;
+static long mediasync_ins_init_syncinfo(mediasync_ins* pInstance) {
 	if (pInstance == NULL)
 		return -1;
 	pInstance->mSyncInfo.state = MEDIASYNC_INIT;
@@ -464,6 +761,244 @@ long mediasync_ins_init_syncinfo(s32 sSyncInsId) {
 	return 0;
 }
 
+static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
+	struct frame_table_s *pTable;
+	if (pInstance != NULL) {
+		mediasync_ins_init_syncinfo(pInstance);
+		pInstance->mHasAudio = -1;
+		pInstance->mHasVideo = -1;
+		pInstance->mVideoWorkMode = 0;
+		pInstance->mFccEnable = 0;
+		pInstance->mPaused = 0;
+		pInstance->mSourceClockType = UNKNOWN_CLOCK;
+		pInstance->mSyncInfo.state = MEDIASYNC_INIT;
+		pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
+		pInstance->mute_flag = false;
+		pInstance->mSourceType = TS_DEMOD;
+		pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
+		pInstance->mStcParmUpdateCount = 0;
+		pInstance->isVideoFrameAdvance = 0;
+		pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
+		clear_frame_list(pInstance, pTable);
+		pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+		clear_frame_list(pInstance, pTable);
+		mediasync_pr_info(0,pInstance,"");
+	}
+}
+
+
+long mediasync_init(void) {
+	int index = 0;
+	for (index = 0; index < MAX_INSTANCE_NUM; index++) {
+		vMediaSyncInsList[index].pInstance = NULL;
+		mutex_init(&(vMediaSyncInsList[index].m_lock));
+	}
+	return 0;
+}
+
+
+long mediasync_ins_alloc(s32 sDemuxId,
+			s32 sPcrPid,
+			s32 *sSyncInsId,
+			mediasync_ins **pIns){
+	s32 index = 0;
+	mediasync_ins* pInstance = NULL;
+	pInstance = kmalloc(sizeof(mediasync_ins), GFP_KERNEL|__GFP_ZERO);
+	if (pInstance == NULL) {
+		return -1;
+	}
+
+	for (index = 0; index < MAX_DYNAMIC_INSTANCE_NUM; index++) {
+		mutex_lock(&(vMediaSyncInsList[index].m_lock));
+		if (vMediaSyncInsList[index].pInstance == NULL) {
+			vMediaSyncInsList[index].pInstance = pInstance;
+			pInstance->mSyncIndex = pInstance->mSyncId = index;
+			pInstance->mUId = g_inst_uid;
+			g_inst_uid++;
+			*sSyncInsId = pInstance->mSyncId;
+			mediasync_pr_info(0,pInstance,"mediasync_ins_alloc index:%d, demuxid:%d.\n", index, sDemuxId);
+
+			pInstance->mDemuxId = sDemuxId;
+			pInstance->mPcrPid = sPcrPid;
+			mediasync_ins_init_syncinfo(pInstance);
+			pInstance->mHasAudio = -1;
+			pInstance->mHasVideo = -1;
+			pInstance->mVideoWorkMode = 0;
+			pInstance->mFccEnable = 0;
+			pInstance->mSourceClockType = UNKNOWN_CLOCK;
+			pInstance->mSyncInfo.state = MEDIASYNC_INIT;
+			pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
+			pInstance->mute_flag = false;
+			pInstance->mSourceType = TS_DEMOD;
+			pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
+			pInstance->mRef++;
+			pInstance->mStcParmUpdateCount = 0;
+			pInstance->mAudioCacheUpdateCount = 0;
+			pInstance->mVideoCacheUpdateCount = 0;
+			pInstance->isVideoFrameAdvance = 0;
+			snprintf(pInstance->atrace_video,
+				sizeof(pInstance->atrace_video), "msync_v_%d", *sSyncInsId);
+			snprintf(pInstance->atrace_audio,
+				sizeof(pInstance->atrace_audio), "msync_a_%d", *sSyncInsId);
+			snprintf(pInstance->atrace_pcrscr,
+				sizeof(pInstance->atrace_pcrscr), "msync_s_%d", *sSyncInsId);
+			pInstance->frame_table[PTS_TYPE_AUDIO].rec_num = AUDIO_FRAME_LIST_SIZE;
+			pInstance->frame_table[PTS_TYPE_VIDEO].rec_num = VIDEO_FRAME_LIST_SIZE;
+			pInstance->frame_table[PTS_TYPE_AUDIO].mTableType = PTS_TYPE_AUDIO;
+			pInstance->frame_table[PTS_TYPE_VIDEO].mTableType = PTS_TYPE_VIDEO;
+			alloc_frame_list(&pInstance->frame_table[PTS_TYPE_AUDIO]);
+			alloc_frame_list(&pInstance->frame_table[PTS_TYPE_VIDEO]);
+			mediasync_ins_reset_l(pInstance);
+			mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+			break;
+		}
+		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	}
+
+	if (index == MAX_DYNAMIC_INSTANCE_NUM) {
+		kfree(pInstance);
+		return -1;
+	}
+
+	*pIns = pInstance;
+
+	return 0;
+}
+
+long mediasync_ins_binder(s32 sSyncInsId,
+			mediasync_ins **pIns) {
+	mediasync_ins* pInstance = NULL;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	mutex_lock(&(pSyncManage->m_lock));
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(pSyncManage->m_lock));
+		return -1;
+	}
+
+	pInstance->mRef++;
+	*pIns = pInstance;
+	mediasync_pr_info(0,pInstance,"mRef:%d,mAVRef:%d",pInstance->mRef,pInstance->mAVRef);
+	mutex_unlock(&(pSyncManage->m_lock));
+
+	return 0;
+}
+
+long mediasync_static_ins_binder(s32 sSyncInsId,
+			mediasync_ins **pIns) {
+	mediasync_ins* pInstance = NULL;
+	s32 temp_ins;
+	long ret = -1;
+	if (sSyncInsId < MAX_DYNAMIC_INSTANCE_NUM && sSyncInsId >= 0) {
+		return mediasync_ins_binder(sSyncInsId, pIns);
+	} else {
+		MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+		if (pSyncManage == NULL) {
+			pInstance = kzalloc(sizeof(mediasync_ins), GFP_KERNEL);
+			if (pInstance == NULL) {
+				return -1;
+			}
+
+			for (temp_ins = MAX_DYNAMIC_INSTANCE_NUM; temp_ins < MAX_INSTANCE_NUM; temp_ins++) {
+				mutex_lock(&(vMediaSyncInsList[temp_ins].m_lock));
+				if (vMediaSyncInsList[temp_ins].pInstance == NULL) {
+					vMediaSyncInsList[temp_ins].pInstance = pInstance;
+					pInstance->mSyncId = sSyncInsId;
+					pInstance->mUId = g_inst_uid;
+					g_inst_uid++;
+					pInstance->mSyncIndex = temp_ins;
+					mediasync_pr_info(0,pInstance,"mediasync_static_ins_binder alloc InsId:%d, index:%d.\n", sSyncInsId, temp_ins);
+
+					//TODO add demuxID and pcr pid
+					pInstance->mDemuxId = -1;
+					pInstance->mPcrPid = -1;
+					pInstance->mHasAudio = -1;
+					pInstance->mHasVideo = -1;
+					pInstance->mVideoWorkMode = 0;
+					pInstance->mFccEnable = 0;
+					pInstance->mSourceClockType = UNKNOWN_CLOCK;
+					pInstance->mSyncInfo.state = MEDIASYNC_INIT;
+					pInstance->mSourceClockState = CLOCK_PROVIDER_NORMAL;
+					pInstance->mute_flag = false;
+					pInstance->mSourceType = TS_DEMOD;
+					pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
+					pInstance->mRef++;
+					snprintf(pInstance->atrace_video,
+						sizeof(pInstance->atrace_video), "msync_v_%d", sSyncInsId);
+					snprintf(pInstance->atrace_audio,
+						sizeof(pInstance->atrace_audio), "msync_a_%d", sSyncInsId);
+					snprintf(pInstance->atrace_pcrscr,
+						sizeof(pInstance->atrace_pcrscr), "msync_s_%d", sSyncInsId);
+
+					pInstance->frame_table[PTS_TYPE_AUDIO].rec_num = AUDIO_FRAME_LIST_SIZE;
+					pInstance->frame_table[PTS_TYPE_VIDEO].rec_num = VIDEO_FRAME_LIST_SIZE;
+					pInstance->frame_table[PTS_TYPE_AUDIO].mTableType = PTS_TYPE_AUDIO;
+					pInstance->frame_table[PTS_TYPE_VIDEO].mTableType = PTS_TYPE_VIDEO;
+					alloc_frame_list(&pInstance->frame_table[PTS_TYPE_AUDIO]);
+					alloc_frame_list(&pInstance->frame_table[PTS_TYPE_VIDEO]);
+					mediasync_ins_reset_l(pInstance);
+					*pIns = pInstance;
+					mutex_unlock(&(vMediaSyncInsList[temp_ins].m_lock));
+					ret = 0;
+					break;
+				}
+				mutex_unlock(&(vMediaSyncInsList[temp_ins].m_lock));
+			}
+		}else {
+			mutex_lock(&(pSyncManage->m_lock));
+			pInstance = pSyncManage->pInstance;
+			if (pInstance != NULL) {
+				pInstance->mRef++;
+				*pIns = pInstance;
+				ret = 0;
+			}
+			mutex_unlock(&(pSyncManage->m_lock));
+		}
+		return ret;
+	}
+}
+
+long mediasync_ins_unbinder(s32 sSyncInsId, s32 sStreamType) {
+	mediasync_ins* pInstance = NULL;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL)
+		return -1;
+	mutex_lock(&(pSyncManage->m_lock));
+	pInstance->mRef--;
+
+	mediasync_pr_info(0,pInstance,"mRef:%d,mAVRef:%d,streamType:%d",pInstance->mRef,pInstance->mAVRef,sStreamType);
+	if (pInstance->mRef > 0 && pInstance->mAVRef == 0)
+		mediasync_ins_reset_l(pInstance);
+
+	if (pInstance->mRef <= 0)
+		mediasync_ins_delete(sSyncInsId);
+	mutex_unlock(&(pSyncManage->m_lock));
+	return 0;
+}
+
+long mediasync_ins_reset(s32 sSyncInsId) {
+	mediasync_ins* pInstance = NULL;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL)
+		return -1;
+
+	mediasync_ins_reset_l(pInstance);
+
+	return 0;
+}
+
 long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				s64 lMediaTime,
 				s64 lSystemTime, bool forceUpdate) {
@@ -501,7 +1036,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
-				pr_info("MEDIA_SYNC_PCRMASTER update time\n");
+				mediasync_pr_info(0,pInstance,"MEDIA_SYNC_PCRMASTER update time\n");
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = current_systemtime;
 				pInstance->mLastStc = current_stc;
@@ -536,7 +1071,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
-				pr_info("mSyncMode:%d update time system diff:%lld media diff:%lld current:%lld\n",
+				mediasync_pr_info(0,pInstance,"mSyncMode:%d update time system diff:%lld media diff:%lld current:%lld\n",
 					pInstance->mSyncMode,
 					diff_system_time,
 					diff_mediatime,
@@ -554,7 +1089,7 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
-				pr_info("mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
+				mediasync_pr_info(0,pInstance,"mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
 					pInstance->mSyncMode,
 					diff_system_time,
 					diff_mediatime,
@@ -993,6 +1528,9 @@ long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo i
 
 	pInstance->mSyncInfo.firstAframeInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstAframeInfo.frameSystemTime = info.frameSystemTime;
+	if (info.framePts == -1 && info.frameSystemTime == -1) {
+		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1033,6 +1571,9 @@ long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo i
 
 	pInstance->mSyncInfo.firstVframeInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstVframeInfo.frameSystemTime = info.frameSystemTime;
+	if (info.framePts == -1 && info.frameSystemTime == -1) {
+		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1097,12 +1638,10 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
-			if (media_sync_debug_level) {
-				pr_info("%s sSyncInsId:%d pcr:%lld frameSystemTime:%lld\n",__func__,
-						sSyncInsId,
-						pcr,
-						pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime);
-			}
+			mediasync_pr_info(1,pInstance,"sSyncInsId:%d pcr:%lld frameSystemTime:%lld\n",
+					sSyncInsId,
+					pcr,
+					pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime);
 		} else {
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
@@ -1179,6 +1718,12 @@ long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	pInstance->mSyncInfo.curAudioInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curAudioInfo.frameSystemTime = info.frameSystemTime;
 	pInstance->mAudioCacheUpdateCount++;
+	pInstance->frame_table[PTS_TYPE_AUDIO].mLastProcessedPts = info.framePts;
+	if (pInstance->mCacheFrames) {
+		if (info.framePts != -1) {
+			update_audio_cache(pInstance,info.framePts,0);
+		}
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1222,6 +1767,12 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = info.frameSystemTime;
 	pInstance->mTrackMediaTime = div_u64(info.framePts * 100 , 9);
 	pInstance->mVideoCacheUpdateCount++;
+	pInstance->frame_table[PTS_TYPE_VIDEO].mLastProcessedPts = info.framePts;
+	if (pInstance->mCacheFrames) {
+		if (info.framePts != -1) {
+			update_video_cache(pInstance,info.framePts,0);
+		}
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1285,12 +1836,10 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 		demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = pcr;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = get_system_time_us();
-		if (media_sync_debug_level) {
-			pr_info("%s sSyncInsId:%d pcr:%lld frameSystemTime:%lld\n",__func__,
-					sSyncInsId,
-					pcr,
-					pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime);
-		}
+		mediasync_pr_info(1,pInstance,"sSyncInsId:%d pcr:%llx frameSystemTime:%llx\n",
+				sSyncInsId,
+				pcr,
+				pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime);
 	} else {
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = -1;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = -1;
@@ -1920,8 +2469,7 @@ long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info
 		return -1;
 	}
 
-	pInstance->mSyncInfo.queueAudioInfo.framePts = info.framePts;
-	pInstance->mSyncInfo.queueAudioInfo.frameSystemTime = info.frameSystemTime;
+	mediasync_ins_set_queue_audio_info_l(pInstance,&info);
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 }
@@ -1938,13 +2486,20 @@ long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* inf
 		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 		return -1;
 	}
+	if (pInstance->mCacheFrames) {
+		struct frame_table_s* pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
+		info->framePts = pTable->mLastQueued.framePts;
+		info->frameSystemTime = pTable->mLastQueued.frameSystemTime;
+	} else {
+		info->framePts = pInstance->mSyncInfo.queueAudioInfo.framePts;
+		info->frameSystemTime = pInstance->mSyncInfo.queueAudioInfo.frameSystemTime;
+	}
 
-	info->framePts = pInstance->mSyncInfo.queueAudioInfo.framePts;
-	info->frameSystemTime = pInstance->mSyncInfo.queueAudioInfo.frameSystemTime;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
 }
+
 
 long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
@@ -1959,8 +2514,7 @@ long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info
 		return -1;
 	}
 
-	pInstance->mSyncInfo.queueVideoInfo.framePts = info.framePts;
-	pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = info.frameSystemTime;
+	mediasync_ins_set_queue_video_info_l(pInstance,&info);
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 
@@ -1980,9 +2534,15 @@ long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* inf
 		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 		return -1;
 	}
-
-	info->framePts = pInstance->mSyncInfo.queueVideoInfo.framePts;
-	info->frameSystemTime = pInstance->mSyncInfo.queueVideoInfo.frameSystemTime;
+	if (pInstance->mCacheFrames) {
+		struct frame_table_s* pTable;
+		pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+		info->framePts = pTable->mLastQueued.framePts;
+		info->frameSystemTime = pTable->mLastQueued.frameSystemTime;
+	} else {
+		info->framePts = pInstance->mSyncInfo.queueVideoInfo.framePts;
+		info->frameSystemTime = pInstance->mSyncInfo.queueVideoInfo.frameSystemTime;
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -1991,6 +2551,7 @@ long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* inf
 /**/
 long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packets_info info) {
 	mediasync_ins* pInstance = NULL;
+	mediasync_frameinfo frameinfo;
 	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -2018,19 +2579,18 @@ long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packet
 	pInstance->mSyncInfo.audioPacketsInfo.isneedupdate = info.isneedupdate;
 	pInstance->mSyncInfo.audioPacketsInfo.packetsPts = info.packetsPts;
 
-	pInstance->mSyncInfo.queueAudioInfo.framePts = info.packetsPts;
-	pInstance->mSyncInfo.queueAudioInfo.frameSystemTime = get_system_time_us();
+	frameinfo.framePts = info.packetsPts;
+	frameinfo.frameSystemTime = get_system_time_us();
 
 	if (pInstance->mSyncInfo.firstAudioPacketsInfo.framePts == -1) {
 		pInstance->mSyncInfo.firstAudioPacketsInfo.framePts = info.packetsPts;
-		pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = get_system_time_us();
+		pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = frameinfo.frameSystemTime;
 	}
 	pInstance->mAudioCacheUpdateCount++;
-	if (media_sync_debug_level) {
-		pr_info("%s sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",__func__,sSyncInsId,
-				pInstance->mSyncInfo.audioPacketsInfo.packetsPts,
-				pInstance->mSyncInfo.audioPacketsInfo.packetsSize);
-	}
+	mediasync_pr_info(1,pInstance,"APts:%llx,Size:%d\n",\
+			pInstance->mSyncInfo.audioPacketsInfo.packetsPts,\
+			pInstance->mSyncInfo.audioPacketsInfo.packetsSize);
+	mediasync_ins_set_queue_audio_info_l(pInstance, &frameinfo);
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 }
@@ -2039,71 +2599,76 @@ EXPORT_SYMBOL(mediasync_ins_set_audio_packets_info);
 void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance, mediasync_audioinfo* info) {
 	int64_t Before_diff = 0;
 	int64_t After_diff = 0;
-	//pr_info("mediasync_ins_get_videoinfo_2 curVideoInfo.framePts :%lld \n",pInstance->mSyncInfo.curVideoInfo.framePts);
-	if (pInstance->mAudioCacheUpdateCount == pInstance->mGetAudioCacheUpdateCount) {
-		info->cacheSize = pInstance->mAudioInfo.cacheSize;
-		info->cacheDuration = pInstance->mAudioInfo.cacheDuration;
-		//pr_info("mGetAudioCacheUpdateCount:%d mAudioCacheUpdateCount:%d\n",pInstance->mGetAudioCacheUpdateCount,pInstance->mAudioCacheUpdateCount);
-		return;
-	}
-	pInstance->mGetAudioCacheUpdateCount = pInstance->mAudioCacheUpdateCount;
-	if (pInstance->mSyncInfo.curAudioInfo.framePts != -1) {
+	if (pInstance->mCacheFrames) {
+		info->cacheDuration = pInstance->frame_table[PTS_TYPE_AUDIO].mCacheInfo.cacheDuration;
+		info->cacheSize = pInstance->frame_table[PTS_TYPE_AUDIO].mCacheInfo.cacheSize;
+	} else {
+		//pr_info("mediasync_ins_get_videoinfo_2 curVideoInfo.framePts :%lld \n",pInstance->mSyncInfo.curVideoInfo.framePts);
+		if (pInstance->mAudioCacheUpdateCount == pInstance->mGetAudioCacheUpdateCount) {
+			info->cacheSize = pInstance->mAudioInfo.cacheSize;
+			info->cacheDuration = pInstance->mAudioInfo.cacheDuration;
+			//pr_info("mGetAudioCacheUpdateCount:%d mAudioCacheUpdateCount:%d\n",pInstance->mGetAudioCacheUpdateCount,pInstance->mAudioCacheUpdateCount);
+			return;
+		}
+		pInstance->mGetAudioCacheUpdateCount = pInstance->mAudioCacheUpdateCount;
+		if (pInstance->mSyncInfo.curAudioInfo.framePts != -1) {
 
-		if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts > pInstance->mSyncInfo.curAudioInfo.framePts) {
-			info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
-									pInstance->mSyncInfo.curAudioInfo.framePts;
-			if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
-				pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
-				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
-				pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
-			}
-		} else {
-			if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
-				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
-
-				Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
-				After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Before_diff + After_diff;
-				// sometimes stream not descramble, lead pts jump, cache_duration will have error
-				if (pInstance->mAudioDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90 * 2)) {
-					pr_info("get_audio_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
-					info->cacheDuration = 0;
+			if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts > pInstance->mSyncInfo.curAudioInfo.framePts) {
+				info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
+										pInstance->mSyncInfo.curAudioInfo.framePts;
+				if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
+					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
+					pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
 				}
 			} else {
-				info->cacheDuration = 0;
-			}
-		}
-	} else {
-		if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts >
-				pInstance->mSyncInfo.firstAudioPacketsInfo.framePts) {
-			info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
-									pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
-			if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
-				pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
-				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
-				pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
+				if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
+					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
+
+					Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curAudioInfo.framePts;
+					After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
+					info->cacheDuration = Before_diff + After_diff;
+					// sometimes stream not descramble, lead pts jump, cache_duration will have error
+					if (pInstance->mAudioDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90 * 2)) {
+						mediasync_pr_info(0,pInstance,"get_audio_cache, cache=%dms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
+						info->cacheDuration = 0;
+					}
+				} else {
+					info->cacheDuration = 0;
+				}
 			}
 		} else {
-			if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
-				pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
-
-				Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
-				After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts  - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Before_diff + After_diff;
-
+			if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts >
+					pInstance->mSyncInfo.firstAudioPacketsInfo.framePts) {
+				info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
+										pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
+				if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = -1;
+					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore = -1;
+					pInstance->mAudioDiscontinueInfo.isDiscontinue = 0;
+				}
 			} else {
-				info->cacheDuration = 0;
+				if (pInstance->mAudioDiscontinueInfo.discontinuePtsAfter != -1 &&
+					pInstance->mAudioDiscontinueInfo.discontinuePtsBefore != -1) {
+
+					Before_diff = pInstance->mAudioDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
+					After_diff = pInstance->mSyncInfo.audioPacketsInfo.packetsPts  - pInstance->mAudioDiscontinueInfo.discontinuePtsAfter;
+					info->cacheDuration = Before_diff + After_diff;
+
+				} else {
+					info->cacheDuration = 0;
+				}
 			}
+
 		}
+		//pr_info("---->audio cacheDuration : %d ms",info->cacheDuration / 90);
+		//info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
+		//info->cacheSize =  pInstance->mAudioInfo.cacheSize;
+
+		pInstance->mAudioInfo.cacheSize = info->cacheSize;
+		pInstance->mAudioInfo.cacheDuration = info->cacheDuration;
 
 	}
-	//pr_info("---->audio cacheDuration : %d ms",info->cacheDuration / 90);
-	//info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
-	//info->cacheSize =  pInstance->mAudioInfo.cacheSize;
-
-	pInstance->mAudioInfo.cacheSize = info->cacheSize;
-	pInstance->mAudioInfo.cacheDuration = info->cacheDuration;
-
 	return;
 }
 
@@ -2129,6 +2694,7 @@ long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* inf
 
 long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packets_info info) {
 	mediasync_ins* pInstance = NULL;
+	mediasync_frameinfo frameinfo;
 	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
@@ -2140,8 +2706,6 @@ long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packet
 		return -1;
 	}
 
-	//pInstance->mSyncInfo.queueVideoInfo.framePts = info.framePts;
-	//pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = info.frameSystemTime;
 	if (pInstance->mVideoInfo.specialSizeCount < 8) {
 		if (info.packetsSize < 15) {
 			pInstance->mVideoInfo.specialSizeCount++;
@@ -2164,21 +2728,17 @@ long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packet
 	pInstance->mSyncInfo.videoPacketsInfo.packetsPts = info.packetsPts;
 	pInstance->mSyncInfo.videoPacketsInfo.packetsSize = info.packetsSize;
 
-	pInstance->mSyncInfo.queueVideoInfo.framePts = info.packetsPts;
-	pInstance->mSyncInfo.queueVideoInfo.frameSystemTime = get_system_time_us();
-	if (media_sync_debug_level) {
-		pr_info("%s sSyncInsId:%d packetsPts:%lld packetsSize:%d framePts:%lld frameSystemTime:%lld\n",
-				__func__,sSyncInsId,
-				pInstance->mSyncInfo.videoPacketsInfo.packetsPts,
-				pInstance->mSyncInfo.videoPacketsInfo.packetsSize,
-				pInstance->mSyncInfo.queueVideoInfo.framePts,
-				pInstance->mSyncInfo.queueVideoInfo.frameSystemTime);
-	}
+	frameinfo.framePts = info.packetsPts;
+	frameinfo.frameSystemTime = get_system_time_us();
+	mediasync_pr_info(1,pInstance,"VPts:%llx,Size:%d\n",
+			info.packetsPts,
+			info.packetsSize);
 	if (pInstance->mSyncInfo.firstVideoPacketsInfo.framePts == -1) {
 		pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.packetsPts;
-		pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = get_system_time_us();
+		pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = frameinfo.frameSystemTime;
 	}
 	pInstance->mVideoCacheUpdateCount++;
+	mediasync_ins_set_queue_video_info_l(pInstance,&frameinfo);
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 
@@ -2190,76 +2750,81 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 	//pr_info("mediasync_ins_get_videoinfo_2 curVideoInfo.framePts :%lld \n",pInstance->mSyncInfo.curVideoInfo.framePts);
 	int64_t Before_diff = 0;
 	int64_t After_diff = 0;
-
-	if (pInstance->mVideoCacheUpdateCount == pInstance->mGetVideoCacheUpdateCount) {
-		info->cacheSize = pInstance->mVideoInfo.cacheSize;
+	if (pInstance->mCacheFrames) {
+		info->cacheDuration = pInstance->frame_table[PTS_TYPE_VIDEO].mCacheInfo.cacheDuration;
+		info->cacheSize = pInstance->frame_table[PTS_TYPE_VIDEO].mCacheInfo.cacheSize;
 		info->specialSizeCount = pInstance->mVideoInfo.specialSizeCount;
-		info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
-		//pr_info("mGetVideoCacheUpdateCount:%d mVideoCacheUpdateCount:%d\n",pInstance->mGetVideoCacheUpdateCount,pInstance->mVideoCacheUpdateCount);
-		return;
-	}
-	pInstance->mGetVideoCacheUpdateCount = pInstance->mVideoCacheUpdateCount;
-	if (pInstance->mSyncInfo.curVideoInfo.framePts != -1) {
+	} else {
+		if (pInstance->mVideoCacheUpdateCount == pInstance->mGetVideoCacheUpdateCount) {
+			info->cacheSize = pInstance->mVideoInfo.cacheSize;
+			info->specialSizeCount = pInstance->mVideoInfo.specialSizeCount;
+			info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
+			//pr_info("mGetVideoCacheUpdateCount:%d mVideoCacheUpdateCount:%d\n",pInstance->mGetVideoCacheUpdateCount,pInstance->mVideoCacheUpdateCount);
+			return;
+		}
+		pInstance->mGetVideoCacheUpdateCount = pInstance->mVideoCacheUpdateCount;
+		if (pInstance->mSyncInfo.curVideoInfo.framePts != -1) {
 
-		if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts > pInstance->mSyncInfo.curVideoInfo.framePts) {
-			info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
-									pInstance->mSyncInfo.curVideoInfo.framePts;
-			if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
-				pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
-				pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
-				pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;
-			}
-		} else {
-			if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
-				pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
-
-				Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
-				After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Before_diff + After_diff;
-
-				// sometimes stream not descramble, lead pts jump, cache_duration will have error
-				if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
-					//pr_info("get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", info->cacheDuration/90);
-					info->cacheDuration = 0;
+			if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts > pInstance->mSyncInfo.curVideoInfo.framePts) {
+				info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
+										pInstance->mSyncInfo.curVideoInfo.framePts;
+				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
+					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
+					pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;
 				}
 			} else {
-				info->cacheDuration = 0;
-			}
-		}
-	} else {
-		if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts >
-				pInstance->mSyncInfo.firstVideoPacketsInfo.framePts) {
-			info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
-									pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
-			if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
-				pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
-				pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
-				pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;
+				if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
+					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
+
+					Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.curVideoInfo.framePts;
+					After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
+					info->cacheDuration = Before_diff + After_diff;
+
+					// sometimes stream not descramble, lead pts jump, cache_duration will have error
+					if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
+						mediasync_pr_info(0,pInstance,"get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
+						info->cacheDuration = 0;
+					}
+				} else {
+					info->cacheDuration = 0;
+				}
 			}
 		} else {
-			if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
-				pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
-
-				Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
-				After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts  - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
-				info->cacheDuration = Before_diff + After_diff;
-
+			if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts >
+					pInstance->mSyncInfo.firstVideoPacketsInfo.framePts) {
+				info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
+										pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
+				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
+					pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = -1;
+					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore = -1;
+					pInstance->mVideoDiscontinueInfo.isDiscontinue = 0;
+				}
 			} else {
-				info->cacheDuration = 0;
+				if (pInstance->mVideoDiscontinueInfo.discontinuePtsAfter != -1 &&
+					pInstance->mVideoDiscontinueInfo.discontinuePtsBefore != -1) {
+
+					Before_diff = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore - pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
+					After_diff = pInstance->mSyncInfo.videoPacketsInfo.packetsPts  - pInstance->mVideoDiscontinueInfo.discontinuePtsAfter;
+					info->cacheDuration = Before_diff + After_diff;
+
+				} else {
+					info->cacheDuration = 0;
+				}
 			}
+
 		}
+		//pr_info("----> cacheDuration : %d ms",info->cacheDuration / 90);
+		//info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
+		info->cacheSize = 0;
+		info->specialSizeCount = pInstance->mVideoInfo.specialSizeCount;
+
+
+		pInstance->mVideoInfo.cacheSize = info->cacheSize;
+		pInstance->mVideoInfo.specialSizeCount = info->specialSizeCount;
+		pInstance->mVideoInfo.cacheDuration = info->cacheDuration;
 
 	}
-	//pr_info("----> cacheDuration : %d ms",info->cacheDuration / 90);
-	//info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
-	info->cacheSize = 0;
-	info->specialSizeCount = pInstance->mVideoInfo.specialSizeCount;
-
-
-	pInstance->mVideoInfo.cacheSize = info->cacheSize;
-	pInstance->mVideoInfo.specialSizeCount = info->specialSizeCount;
-	pInstance->mVideoInfo.cacheDuration = info->cacheDuration;
-
 
 	return;
 }
@@ -2298,8 +2863,13 @@ long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinf
 		return -1;
 	}
 
+	pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.framePts = info.framePts;
+	pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.frameSystemTime = info.frameSystemTime;
 	pInstance->mSyncInfo.firstAudioPacketsInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = info.frameSystemTime;
+	if (info.framePts == -1 && info.frameSystemTime == -1) {
+		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 }
@@ -2316,9 +2886,13 @@ long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinf
 		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 		return -1;
 	}
-
-	info->framePts = pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
-	info->frameSystemTime = pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime;
+	if (pInstance->mCacheFrames) {
+		info->framePts = pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.framePts;
+		info->frameSystemTime = pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.frameSystemTime;
+	} else {
+		info->framePts = pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
+		info->frameSystemTime = pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime;
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -2337,8 +2911,13 @@ long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinf
 		return -1;
 	}
 
+	pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.framePts = info.framePts;
+	pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.frameSystemTime = info.frameSystemTime;
 	pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = info.frameSystemTime;
+	if (info.framePts == -1 && info.frameSystemTime == -1) {
+		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 	return 0;
 
@@ -2356,9 +2935,13 @@ long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinf
 		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 		return -1;
 	}
-
-	info->framePts = pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
-	info->frameSystemTime = pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime;
+	if (pInstance->mCacheFrames) {
+		info->framePts = pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.framePts;
+		info->frameSystemTime = pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.frameSystemTime;
+	} else {
+		info->framePts = pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
+		info->frameSystemTime = pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime;
+	}
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
@@ -2556,7 +3139,7 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 
 		if (media_sync_debug_level >= 1) {
 			mCurPcr = mediasync_ins_get_stc_time(pInstance,CurTimeUs);
-			mediasync_pr_info(pInstance->mSyncInsId,
+			mediasync_pr_info(1,pInstance,
 				"time_diff:%lld pcr_diff:%lld (%lld) slope:%d LastSlope:%d diff: %lld",
 					time_diff,pcr_diff,time_diff*1000 - pcr_diff,
 					slope,
@@ -2583,7 +3166,7 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 				pInstance->mSyncInfo.refClockInfo.frameSystemTime = CurTimeUs;
 				pInstance->mPtsAdjust = 0;
 				pInstance->mStartThreshold = pcr - mCurPcr;
-				mediasync_pr_info(pInstance->mSyncInsId,
+				mediasync_pr_info(0,pInstance,
 					"update time_diff:%lld pcr_diff:%lld (%lld) nowSlope:%d Slope:%d LastCheckSlope : %d offset:%lld ms",
 						time_diff,pcr_diff,time_diff * 1000 - pcr_diff,
 						slope,
@@ -2668,13 +3251,13 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_p
 			}
 
 			if (copy_to_user((void *)ptr,(void*)&info,minSize)) {
-				pr_info("copy_to_user ptr -EFAULT \n");
+				mediasync_pr_info(0,pInstance,"copy_to_user ptr -EFAULT \n");
 				return -EFAULT;
 			}
 
 			mediasyncControl.size = minSize;
 			if (copy_to_user((void *)arg,&mediasyncControl,sizeof(mediasyncControl))) {
-				pr_info("copy_to_user arg -EFAULT \n");
+				mediasync_pr_info(0,pInstance,"copy_to_user arg -EFAULT \n");
 				return -EFAULT;
 			}
 			ret = 0;
@@ -2746,6 +3329,78 @@ long mediasync_ins_get_video_smooth_tag(s32 sSyncInsId, s32* spSmooth_tag) {
 
 	*spSmooth_tag = pInstance->mVideoSmoothTag;
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	return 0;
+}
+
+long mediasync_ins_check_apts_valid(s32 sSyncInsId, s64 apts) {
+	long ret = -1;
+	mediasync_ins* pInstance = NULL;
+	mediasync_frameinfo_inner frame_in;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	mutex_lock(&(pSyncManage->m_lock));
+	frame_in.frameid = 0;
+	pInstance = pSyncManage->pInstance;
+	if (pInstance != NULL) {
+		if (pInstance->mCacheFrames) {
+			frame_in = check_apts_valid(pInstance, apts);
+			ret = frame_in.frameid == 0;
+		} else {
+			ret = 0;
+		}
+	}
+
+	mutex_unlock(&(pSyncManage->m_lock));
+
+	return ret;
+}
+
+long mediasync_ins_check_vpts_valid(s32 sSyncInsId, s64 vpts) {
+	long ret = -1;
+	mediasync_ins* pInstance = NULL;
+	mediasync_frameinfo_inner frame_in;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	mutex_lock(&(pSyncManage->m_lock));
+	frame_in.frameid = 0;
+	pInstance = pSyncManage->pInstance;
+	if (pInstance != NULL) {
+		if (pInstance->mCacheFrames) {
+			frame_in = check_vpts_valid(pInstance, vpts);
+			ret = frame_in.frameid == 0;
+		} else {
+			ret = 0;
+		}
+	}
+
+	mutex_unlock(&(pSyncManage->m_lock));
+
+	return ret;
+}
+
+long mediasync_ins_set_cache_frames(s32 sSyncInsId, s64 cache) {
+	mediasync_ins* pInstance = NULL;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	mutex_lock(&(pSyncManage->m_lock));
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		mutex_unlock(&(pSyncManage->m_lock));
+		return -1;
+	}
+
+	mediasync_pr_info(0,pInstance,"mCacheFrames=%d",cache);
+	pInstance->mCacheFrames = cache;
+	mutex_unlock(&(pSyncManage->m_lock));
 
 	return 0;
 }

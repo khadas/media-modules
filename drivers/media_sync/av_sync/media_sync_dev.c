@@ -58,6 +58,7 @@ typedef struct anchor_time_para {
 
 typedef struct priv_s {
 	s32 mSyncInsId;
+	s32 mStreamType;
 	mediasync_ins *mSyncIns;
 }mediasync_priv_s;
 
@@ -81,9 +82,10 @@ static int mediasync_release(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 
-	if (priv->mSyncInsId != -1) {
-		ret = mediasync_ins_unbinder(priv->mSyncInsId);
+	if (priv->mSyncInsId >= 0) {
+		ret = mediasync_ins_unbinder(priv->mSyncInsId,priv->mStreamType);
 		priv->mSyncInsId = -1;
+		priv->mStreamType = -1;
 		priv->mSyncIns = NULL;
 	}
 	kfree(priv);
@@ -150,6 +152,7 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 			if (priv != NULL) {
 				priv->mSyncInsId = SyncInsId;
 				priv->mSyncIns = SyncIns;
+				priv->mStreamType = -1;
 			}
 
 		break;
@@ -193,7 +196,6 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 			priv->mSyncInsId = SyncInsId;
 			priv->mSyncIns = SyncIns;
 		break;
-
 		case MEDIASYNC_IOC_UPDATE_MEDIATIME:
 			if (copy_from_user((void *)&UpdateTime,
 						(void *)arg,
@@ -1344,6 +1346,49 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 			}
 		break;
 
+	    case MEDIASYNC_IOC_CHECK_APTS_VALID:
+		{
+			s64 pts;
+			if (copy_from_user((void *)&pts,
+					(void *)arg,
+					sizeof(pts)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+			ret = mediasync_ins_check_apts_valid(priv->mSyncInsId,pts);
+		}
+		break;
+
+		case MEDIASYNC_IOC_CHECK_VPTS_VALID:
+		{
+			s64 pts;
+			if (copy_from_user((void *)&pts,
+				(void *)arg,
+				sizeof(pts)))
+				return -1;
+
+			if (priv->mSyncIns == NULL)
+				return -2;
+
+			ret = mediasync_ins_check_vpts_valid(priv->mSyncInsId,pts);
+		}
+		break;
+		case MEDIASYNC_IOC_SET_CACHE_FRAMES:
+		{
+			s64 cache_frame;
+			if (copy_from_user((void *)&cache_frame,
+				(void *)arg,
+				sizeof(cache_frame)))
+				return -EFAULT;
+
+			if (priv->mSyncIns == NULL)
+				return -EFAULT;
+
+			ret = mediasync_ins_set_cache_frames(priv->mSyncInsId,cache_frame);
+		}
+		break;
+
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -1451,6 +1496,9 @@ static long mediasync_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case MEDIASYNC_IOC_EXT_CTRLS:
 		case MEDIASYNC_IOC_SET_VIDEO_SMOOTH_FLAG:
 		case MEDIASYNC_IOC_GET_VIDEO_SMOOTH_FLAG:
+		case MEDIASYNC_IOC_CHECK_APTS_VALID:
+		case MEDIASYNC_IOC_CHECK_VPTS_VALID:
+		case MEDIASYNC_IOC_SET_CACHE_FRAMES:
 			return mediasync_ioctl_inner(file, cmd,(ulong)compat_ptr(arg),1);
 		default:
 			return -EINVAL;

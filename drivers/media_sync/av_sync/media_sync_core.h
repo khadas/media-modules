@@ -90,6 +90,14 @@ typedef struct frameinfo{
 	int64_t frameSystemTime;
 } mediasync_frameinfo;
 
+typedef struct frameinfo_inner{
+	int64_t framePts;
+	int64_t frameSystemTime;
+	uint64_t frameid;
+	int frameduration;
+	int remainedduration;
+}mediasync_frameinfo_inner;
+
 typedef struct video_packets_info{
 	int packetsSize;
 	int64_t packetsPts;
@@ -145,6 +153,11 @@ typedef struct videoinfo{
 	int cacheDuration;
 } mediasync_videoinfo;
 
+typedef struct cacheinfo{
+	int cacheSize;
+	int cacheDuration;
+}mediasync_cacheinfo;
+
 typedef struct audio_format{
 	int samplerate;
 	int datawidth;
@@ -180,8 +193,34 @@ typedef struct update_info{
 	u32 isVideoFrameAdvance;
 } mediasync_update_info;
 
+typedef struct frame_rec_s {
+	struct list_head list;
+	mediasync_frameinfo_inner frame_info;
+} frame_rec_t;
+
+
+typedef struct frame_table_s {
+	int mTableType;
+	int rec_num;
+	uint64_t current_frame_id;
+	struct frame_rec_s *pts_recs;
+	unsigned long *pages_list;
+	mediasync_frameinfo_inner mLastQueued;
+	mediasync_frameinfo_inner mMinPtsFrame;
+	mediasync_cacheinfo mCacheInfo;
+	mediasync_frameinfo mFirstPacket;
+	int64_t mLastProcessedPts;
+	int mFrameCount;
+	int64_t mLastCheckedPts;
+	mediasync_frameinfo_inner mLastCheckedFrame;
+	struct list_head valid_list;
+	struct list_head free_list;
+} frame_table_t;
+
 typedef struct instance{
-	s32 mSyncInsId;
+	s32 mSyncIndex;
+	s32 mSyncId;
+	u32 mUId;
 	s32 mDemuxId;
 	s32 mPcrPid;
 	s32 mPaused;
@@ -198,6 +237,7 @@ typedef struct instance{
 	s64 mUpdateTimeThreshold;
 	s32 mPlayerInstanceId;
 	s32 mVideoSmoothTag;
+	int mCacheFrames;
 	int mHasAudio;
 	int mHasVideo;
 	int mute_flag;
@@ -229,12 +269,8 @@ typedef struct instance{
 	char atrace_video[32];
 	char atrace_audio[32];
 	char atrace_pcrscr[32];
+	struct frame_table_s frame_table[2];
 }mediasync_ins;
-
-typedef struct Media_Sync_Manage {
-	mediasync_ins* pInstance;
-	struct mutex m_lock;
-} MediaSyncManage;
 
 long mediasync_init(void);
 long mediasync_ins_alloc(s32 sDemuxId,
@@ -242,12 +278,11 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			s32 *sSyncInsId,
 			mediasync_ins **pIns);
 
-long mediasync_ins_delete(s32 sSyncInsId);
 long mediasync_ins_binder(s32 sSyncInsId,
 			mediasync_ins **pIns);
 long mediasync_static_ins_binder(s32 sSyncInsId,
 			mediasync_ins **pIns);
-long mediasync_ins_unbinder(s32 sSyncInsId);
+long mediasync_ins_unbinder(s32 sSyncInsId, s32 sStreamType);
 long mediasync_ins_update_mediatime(s32 sSyncInsId,
 					s64 lMediaTime,
 					s64 lSystemTime, bool forceUpdate);
@@ -269,7 +304,6 @@ long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime);
 long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold);
 long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold);
 
-long mediasync_ins_init_syncinfo(s32 sSyncInsId);
 long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type);
 long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type);
 long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state);
@@ -340,6 +374,9 @@ long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info
 long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
 long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
 long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_check_apts_valid(s32 sSyncInsId, s64 apts);
+long mediasync_ins_check_vpts_valid(s32 sSyncInsId, s64 vpts);
+long mediasync_ins_set_cache_frames(s32 sSyncInsId, s64 cache);
 long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr);
 s64 mediasync_ins_get_stc_time(mediasync_ins* pInstance,s64 CurTimeUs);
 void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_info* info);
