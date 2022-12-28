@@ -645,6 +645,9 @@ void aml_v4l2_vpp_recycle(struct aml_v4l2_vpp *vpp, struct aml_v4l2_buf *aml_vb)
 
 	if (!eos && !bypass) {
 		if (vpp->buffer_mode == BUFFER_MODE_ALLOC_BUF) {
+			/*vpp_buf->di_buf.caller_data might point to the vpp that had been destroyed*/
+			if (vpp != vpp_buf->di_buf.caller_data)
+				vpp_buf->di_buf.caller_data = vpp;
 			detach_DI_buffer(vpp_buf);
 		}
 	}
