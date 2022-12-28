@@ -42,7 +42,6 @@
 #include <linux/amlogic/media/canvas/canvas.h>
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
@@ -106,8 +105,8 @@
 #define HEVC_FGS_CTRL                              0x3662
 #define AV1_SKIP_MODE_INFO                         0x316c
 #define AV1_QUANT_WR                               0x3146
-#define   AV1_SEG_W_ADDR                           0x3165
-#define   AV1_SEG_R_ADDR                           0x3166
+#define AV1_SEG_W_ADDR                             0x3165
+#define AV1_SEG_R_ADDR                             0x3166
 #define AV1_REF_SEG_INFO                           0x3171
 #define HEVC_ASSIST_PIC_SIZE_FB_READ               0x300d
 #define PARSER_REF_SCALE_ENBL                      0x316b
@@ -654,7 +653,7 @@ struct AV1HW_s {
 
 	struct device *cma_dev;
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -999,7 +998,7 @@ static void trigger_schedule(struct AV1HW_s *hw)
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
 	if (hw->vdec_cb)
-		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static void reset_process_time(struct AV1HW_s *hw)
@@ -8379,7 +8378,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 			if (hw->low_latency_flag) {
 				av1_postproc(hw);
-				vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_CB);
+				vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_EVENT_CB, 0);
 				if (debug & PRINT_FLAG_VDEC_DETAIL)
 					pr_info("%s AV1 frame done \n", __func__);
 			}
@@ -10168,7 +10167,7 @@ static void run_front(struct vdec_s *vdec)
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct AV1HW_s *hw =
 		(struct AV1HW_s *)vdec->private;
@@ -11230,10 +11229,10 @@ module_param(get_picture_qos, uint, 0664);
 MODULE_PARM_DESC(get_picture_qos, "\n amvdec_av1 get_picture_qos\n");
 
 module_param(force_bufspec, uint, 0664);
-MODULE_PARM_DESC(force_bufspec, "\n amvdec_h265 force_bufspec\n");
+MODULE_PARM_DESC(force_bufspec, "\n amvdec_av1 force_bufspec\n");
 
 module_param(udebug_flag, uint, 0664);
-MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
+MODULE_PARM_DESC(udebug_flag, "\n amvdec_av1 udebug_flag\n");
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 module_param(dv_toggle_prov_name, uint, 0664);

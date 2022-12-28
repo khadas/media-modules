@@ -21,6 +21,7 @@
 #define DECODER_CPU_VER_INFO_H
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
+#include "../register/register.h"
 
 /* majoy chip id define */
 #define MAJOY_ID_MASK (0x000000ff)
@@ -80,12 +81,48 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define REVC_MASK (CHIP_REVC << 8)
 #define REVX_MASK (CHIP_REVX << 8)
 
+#define MAJOR_ID_MASK 0xFF
 #define SUB_ID_MASK (REVB_MASK | REVC_MASK | REVX_MASK)
 
-#define AM_MESON_CPU_MINOR_ID_REVB_G12B	 (REVB_MASK | AM_MESON_CPU_MAJOR_ID_G12B)
+#define AM_MESON_CPU_MINOR_ID_REVB_G12B  (REVB_MASK | AM_MESON_CPU_MAJOR_ID_G12B)
 #define AM_MESON_CPU_MINOR_ID_REVB_TM2   (REVB_MASK | AM_MESON_CPU_MAJOR_ID_TM2)
 #define AM_MESON_CPU_MINOR_ID_S4_S805X2  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S4)
 #define AM_MESON_CPU_MINOR_ID_T7C        (REVC_MASK | AM_MESON_CPU_MAJOR_ID_T7)
+
+/* dos hardware feature define. */
+struct dos_of_dev_s {
+	enum AM_MESON_CPU_MAJOR_ID chip_id;
+
+	reg_compat_func reg_compat;
+
+	/* clock */
+	u32 max_vdec_clock;		//MHz
+
+	u32 max_hevcf_clock;
+
+	u32 max_hevcb_clock;
+
+	bool hevc_clk_combine_flag;
+
+	/* esparser */
+	bool is_hw_parser_support;
+
+	bool is_vdec_canvas_support;
+
+	bool is_support_h264_mmu;
+
+	bool is_hevc_dual_core_mode_support;
+
+	u32 vdec_max_resolution;	//just for h264
+
+	u32 hevc_max_resolution;
+};
+
+/* for dos_of_dev_s max resolution define */
+#define RESOLUTION_1080P  1088
+#define RESOLUTION_4K     2176  //4k
+#define RESOLUTION_8K     4352  //8k
+
 
 /* export functions */
 struct platform_device *initial_dos_device(void);
@@ -100,8 +137,11 @@ int get_cpu_sub_id(void);
 
 bool is_cpu_s4_s805x2(void);
 
-inline bool is_support_new_dos_dev(void);
 bool is_cpu_t7(void);
 bool is_cpu_t7c(void);
+
+inline bool is_support_new_dos_dev(void);
+
+struct dos_of_dev_s *dos_dev_get(void);
 
 #endif

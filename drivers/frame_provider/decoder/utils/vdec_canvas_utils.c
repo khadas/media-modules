@@ -21,7 +21,6 @@
 #include "vdec_canvas_utils.h"
 #include "../../../common/chips/decoder_cpu_ver_info.h"
 #include <linux/amlogic/media/canvas/canvas.h>
-//#include <linux/amlogic/media/utils/vdec_reg.h>
 #include "vdec.h"
 
 static struct canvas_status_s canvas_stat[CANVAS_MAX_SIZE];
@@ -43,6 +42,7 @@ bool is_support_vdec_canvas(void)
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
 		return true;
 	return false;

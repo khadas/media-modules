@@ -42,7 +42,6 @@
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/frame_sync/tsync.h>
 #include <linux/amlogic/media/canvas/canvas.h>
@@ -80,7 +79,6 @@
 
 #define HEVC_SHIFT_LENGTH_PROTECT                  0x313a
 #define HEVC_MPRED_CTRL4                           0x324c
-#define HEVC_MPRED_CTRL9                           0x325b
 #define HEVC_DBLK_CFGD                             0x350d
 #define HEVC_CM_HEADER_START_ADDR                  0x3628
 #define HEVC_DBLK_CFGB                             0x350b
@@ -624,7 +622,7 @@ struct AVS2Decoder_s {
 	spinlock_t buffer_lock;
 	struct device *cma_dev;
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -4247,7 +4245,7 @@ static int vavs2_event_cb(int type, void *data, void *private_data)
 		struct provider_aux_req_s *req = (struct provider_aux_req_s *)data;
 		unsigned char index;
 		unsigned long flags;
-		struct avs2_frame_s *pic;
+		struct avs2_frame_s *pic = NULL;
 
 		if (!req->vf) {
 			req->aux_size = atomic_read(&dec->vf_put_count);
@@ -6821,7 +6819,7 @@ static void avs2_work(struct work_struct *work)
 		vdec_v4l_write_frame_sync(ctx);
 
 	if (dec->vdec_cb)
-		dec->vdec_cb(hw_to_vdec(dec), dec->vdec_cb_arg);
+		dec->vdec_cb(hw_to_vdec(dec), dec->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static int avs2_hw_ctx_restore(struct AVS2Decoder_s *dec)
@@ -7066,7 +7064,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
@@ -7991,10 +7989,10 @@ module_param(enable_force_video_signal_type, uint, 0664);
 MODULE_PARM_DESC(enable_force_video_signal_type, "\n amvdec_avs2 enable_force_video_signal_type\n");
 
 module_param(force_bufspec, uint, 0664);
-MODULE_PARM_DESC(force_bufspec, "\n amvdec_h265 force_bufspec\n");
+MODULE_PARM_DESC(force_bufspec, "\n amvdec_avs2 force_bufspec\n");
 
 module_param(udebug_flag, uint, 0664);
-MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
+MODULE_PARM_DESC(udebug_flag, "\n amvdec_avs2 udebug_flag\n");
 
 module_param(udebug_pause_pos, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_pos, "\n udebug_pause_pos\n");
@@ -8015,7 +8013,7 @@ MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 
 module_param(force_disp_pic_index, int, 0664);
 MODULE_PARM_DESC(force_disp_pic_index,
-	"\n amvdec_h265 force_disp_pic_index\n");
+	"\n amvdec_avs2 force_disp_pic_index\n");
 
 module_param(without_display_mode, uint, 0664);
 MODULE_PARM_DESC(without_display_mode, "\n without_display_mode\n");

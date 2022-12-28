@@ -29,6 +29,7 @@
 #include <linux/device.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include "../chips/decoder_cpu_ver_info.h"
 #include "register.h"
 
 static void __iomem *reg_base[MAX_REG_BUS];

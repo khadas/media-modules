@@ -112,8 +112,10 @@ struct aml_buf_fbc {
 	u32		index;
 	void		*bmmu;
 	void		*mmu;
+	void		*mmu_1;
 	void		*bmmu_dw;
 	void		*mmu_dw;
+	void		*mmu_dw_1;
 	int		ref;
 	ulong		haddr;
 	u32		hsize;
@@ -176,6 +178,7 @@ struct aml_buf_mgr_s {
 	/* fbc information */
 	void				*bmmu;
 	void				*mmu;
+	void				*mmu_1;
 	void				*bmmu_dw;
 	void				*mmu_dw;
 	struct aml_buf_fbc		*fbc_array;

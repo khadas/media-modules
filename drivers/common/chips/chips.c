@@ -137,7 +137,9 @@ EXPORT_SYMBOL(get_cpu_type_name);
  *	VFORMAT_H264_ENC,
  *	VFORMAT_JPEG_ENC,
  *	VFORMAT_VP9,
-*	VFORMAT_AVS2,
+ *	VFORMAT_AVS2,
+ *	VFORMAT_AV1,
+ *	VFORMAT_AVS3,
  *	VFORMAT_MAX
  *};
  */
@@ -159,6 +161,7 @@ static const struct type_name vformat_type_name[] = {
 	{VFORMAT_VP9, "vp9"},
 	{VFORMAT_AVS2, "avs2"},
 	{VFORMAT_AV1, "av1"},
+	{VFORMAT_AVS3, "avs3"},
 	{VFORMAT_YUV, "yuv"},
 	{0, NULL},
 };

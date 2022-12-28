@@ -23,7 +23,6 @@
 #include <linux/platform_device.h>
 #include "../../include/regs/dos_registers.h"
 #include <linux/amlogic/media/utils/vdec_reg.h>
-#include "../chips/decoder_cpu_ver_info.h"
 
 
 typedef enum {
@@ -70,7 +69,7 @@ void t3_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 void s5_mm_registers_compat(struct bus_reg_desc *desc, MM_BUS_ENUM bs);
 
 
-ulong dos_reg_compact_convert(ulong addr);
+ulong dos_reg_compat_convert(ulong addr);
 
 void write_dos_reg(ulong addr, int val);
 

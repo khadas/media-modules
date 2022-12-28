@@ -32,7 +32,6 @@
 #include <linux/amlogic/media/vfm/vframe_provider.h>
 #include <linux/amlogic/media/vfm/vframe_receiver.h>
 #include <linux/amlogic/media/vfm/vframe.h>
-#include <linux/amlogic/media/utils/vdec_reg.h>
 #include <linux/amlogic/media/registers/register.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
@@ -503,7 +502,7 @@ struct vdec_avs_hw_s {
 	struct work_struct work;
 	atomic_t error_handler_run;
 	struct work_struct fatal_error_wd_work;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 /* for error handling */
 	u32 run_count;
@@ -2771,7 +2770,7 @@ static void vavs_work(struct work_struct *work)
 		vdec_v4l_write_frame_sync(ctx);
 
 	if (hw->vdec_cb) {
-		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg);
+		hw->vdec_cb(hw_to_vdec(hw), hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 		debug_print(hw, 0x80000, "%s:\n", __func__);
 	}
 }
@@ -3114,7 +3113,7 @@ static unsigned char get_data_check_sum
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-void (*callback)(struct vdec_s *, void *),
+void (*callback)(struct vdec_s *, void *, int),
 		void *arg)
 {
 	struct vdec_avs_hw_s *hw =
@@ -5337,7 +5336,7 @@ module_param(again_threshold, uint, 0664);
 MODULE_PARM_DESC(again_threshold, "\n again_threshold\n");
 
 module_param(udebug_flag, uint, 0664);
-MODULE_PARM_DESC(udebug_flag, "\n amvdec_h265 udebug_flag\n");
+MODULE_PARM_DESC(udebug_flag, "\n amvdec_avs udebug_flag\n");
 
 module_param(udebug_pause_pos, uint, 0664);
 MODULE_PARM_DESC(udebug_pause_pos, "\n udebug_pause_pos\n");

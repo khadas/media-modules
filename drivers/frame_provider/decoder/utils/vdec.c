@@ -129,19 +129,11 @@ static int rdma_mode = 0x1;
  * 0x4  : vdec canvas debug enable
  * 0x100: enable vdec fence.
  */
-
-
-#if 0
-#define HEVC_RDMA_F_CTRL                           0x30f0
-#define HEVC_RDMA_F_START_ADDR                     0x30f1
-#define HEVC_RDMA_F_END_ADDR                       0x30f2
-#define HEVC_RDMA_F_STATUS0                        0x30f3
-
-#define HEVC_RDMA_B_CTRL                           0x30f8
-#define HEVC_RDMA_B_START_ADDR                     0x30f9
-#define HEVC_RDMA_B_END_ADDR                       0x30fa
-#define HEVC_RDMA_B_STATUS0                        0x30fb
-#endif
+#define VDEC_DBG_SCHED_PRIO	(0x1)
+#define VDEC_DBG_ALWAYS_LOAD_FW	(0x2)
+#define VDEC_DBG_CANVAS_STATUS	(0x4)
+#define VDEC_DBG_ENABLE_FENCE	(0x100)
+#define VDEC_DBG_DUAL_CORE_DEBUG	(0x200)
 
 
 static u32 debug = VDEC_DBG_ALWAYS_LOAD_FW;
@@ -254,6 +246,7 @@ struct vdec_core_s {
 	struct vdec_s *vfm_vdec;
 	struct vdec_s *active_vdec;
 	struct vdec_s *active_hevc;
+	struct vdec_s *active_hevc_back;
 	struct vdec_s *hint_fr_vdec;
 	struct platform_device *vdec_core_platform_device;
 	struct device *cma_dev;
@@ -743,10 +736,12 @@ static void vdec_dbus_ctrl(bool enable)
 	}
 }
 
-static void hevc_arb_ctrl(bool enable)
+static void hevc_arb_ctrl(bool enable, bool dbe1_flag)
 {
-	u32 axi_ctrl, axi_status, nop_cnt = 200;
-	ulong timeout;
+	u32 axi_ctrl, axi_status, axi_status2, nop_cnt = 200;
+	u32 front_status_reg = HEVC_ASSIST_AXI_STATUS;
+	u32 back_status_dbe0_reg = HEVC_ASSIST_AXI_STATUS2_LO;
+	u32 back_status_dbe1_reg = HEVC_ASSIST_AXI_STATUS2_LO;
 
 	if (enable) {
 		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
@@ -756,34 +751,49 @@ static void hevc_arb_ctrl(bool enable)
 			axi_ctrl &= (~((1 << 6) | (1 << 14)));
 		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);		//enable front/back arbitor
 	} else {
+		u32 idle_mask = ((1 << 15) | (1 << 11));
+		ulong timeout;
+
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) {
+			front_status_reg = HEVC_ASSIST_AXI_STATUS_DFE_LO;
+			back_status_dbe0_reg = HEVC_ASSIST_AXI_STATUS_DBE0_LO;
+			back_status_dbe1_reg = HEVC_ASSIST_AXI_STATUS_DBE1_LO;
+		} else {
+			dbe1_flag = 0;	//do not check back core1 for other chip
+		}
+
+		/* front disable */
 		axi_ctrl = READ_VREG(HEVC_ASSIST_AXI_CTRL);
 		axi_ctrl |= (1 << 6);
 		WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable front arbitor
 
-		timeout = jiffies + HZ / 100;
+		timeout = jiffies + HZ / 10;
 		do {
-			axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS);
-			if (axi_status & ((1 << 15) | (1 << 11)))		//read/write disable
+			axi_status = READ_VREG(front_status_reg);
+			if (axi_status & idle_mask)		//read/write disable
 				break;
-
 			if (time_after(jiffies, timeout)) {
-				pr_info("%s timeout0 axi_status: %x\n", __func__, axi_status);
+				pr_err("%s front timeout\n", __func__);
 				break;
 			}
 		} while (1);
 
 		if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) {
+			/* back disable */
 			axi_ctrl |= (1 << 14);
 			WRITE_VREG(HEVC_ASSIST_AXI_CTRL, axi_ctrl);	 // disable back arbitor
-
-			timeout = jiffies + HZ / 100;
+			timeout = jiffies + HZ/10;
 			do {
-				axi_status = READ_VREG(HEVC_ASSIST_AXI_STATUS2_LO);
-				if (axi_status & ((1 << 15) | (1 << 11)))		//read/write disable
-					break;
+				axi_status = READ_VREG(back_status_dbe0_reg);
+				if (dbe1_flag)
+					axi_status2 = READ_VREG(back_status_dbe1_reg);
+				else
+					axi_status2 = 0xffff;
 
+				if ((axi_status & idle_mask) && (axi_status2 & idle_mask))	//read/write disable
+					break;
 				if (time_after(jiffies, timeout)) {
-					pr_info("%s timeout1 axi_status: %x\n", __func__, axi_status);
+					pr_err("%s back timeout %x, %x\n", __func__, axi_status, axi_status2);
 					break;
 				}
 			} while (1);
@@ -861,6 +871,18 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 	}
 }
 
+static void hevc_wait_ddr(void)
+{
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+		hevc_arb_ctrl(0, 0);
+	} else {
+		dec_dmc_port_ctrl(0, VDEC_INPUT_TARGET_HEVC);
+	}
+}
+
 static void vdec_disable_DMC(struct vdec_s *vdec)
 {
 	/*close first,then wait pedding end,timing suggestion from vlsi*/
@@ -872,6 +894,7 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		if (input->target == VDEC_INPUT_TARGET_VLD) {
 			if (!vdec_on(VDEC_1))
@@ -880,7 +903,7 @@ static void vdec_disable_DMC(struct vdec_s *vdec)
 		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
 			if (!vdec_on(VDEC_HEVC))
 				return;
-			hevc_arb_ctrl(0);
+			hevc_arb_ctrl(0, vdec->mc_back_type ? 1 : 0);	//check dbe1 when loaded backcore ucode
 		}
 	} else
 		dec_dmc_port_ctrl(0, input->target);
@@ -894,11 +917,12 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		if (input->target == VDEC_INPUT_TARGET_VLD)
 			vdec_dbus_ctrl(1);
 		else if (input->target == VDEC_INPUT_TARGET_HEVC)
-			hevc_arb_ctrl(1);
+			hevc_arb_ctrl(1, 0);
 		return;
 	}
 
@@ -911,8 +935,6 @@ static void vdec_enable_DMC(struct vdec_s *vdec)
 	pr_debug("%s input->target= 0x%x\n", __func__,  input->target);
 }
 
-
-
 static int vdec_get_hw_type(int value)
 {
 	int type;
@@ -921,6 +943,7 @@ static int vdec_get_hw_type(int value)
 		case VFORMAT_VP9:
 		case VFORMAT_AVS2:
 		case VFORMAT_AV1:
+		case VFORMAT_AVS3:
 			type = CORE_MASK_HEVC;
 		break;
 
@@ -948,18 +971,22 @@ static int vdec_get_hw_type(int value)
 }
 
 
-static void vdec_save_active_hw(struct vdec_s *vdec)
+static void vdec_save_active_hw(struct vdec_s *vdec, unsigned long mask)
 {
 	int type;
 
 	type = vdec_get_hw_type(vdec->port->vformat);
 
-	if (type == CORE_MASK_HEVC) {
-		vdec_core->active_hevc = vdec;
-	} else if (type == CORE_MASK_VDEC_1) {
+	if (mask & CORE_MASK_VDEC_1) {
 		vdec_core->active_vdec = vdec;
-	} else {
-		pr_info("save_active_fw wrong\n");
+	}
+
+	if (mask & CORE_MASK_HEVC) {
+		vdec_core->active_hevc = vdec;
+	}
+
+	if (mask & CORE_MASK_HEVC_BACK) {
+		vdec_core->active_hevc_back = vdec;
 	}
 }
 
@@ -976,7 +1003,7 @@ static void vdec_update_buff_status(void)
 		struct vdec_input_s *input = &vdec->input;
 		if (input_frame_based(input)) {
 			if (input->have_frame_num || input->eos)
-				core->buff_flag |= vdec->core_mask;
+				core->buff_flag |= (vdec->core_mask);
 		} else if (input_stream_based(input)) {
 			core->stream_buff_flag |= vdec->core_mask;
 		}
@@ -986,6 +1013,7 @@ static void vdec_update_buff_status(void)
 				STBUF_READ(&vdec->vbuf, get_wp));
 		}
 	}
+	core->buff_flag &= ~CORE_MASK_HEVC_BACK;
 	vdec_inputbuff_unlock(core, flags);
 }
 
@@ -1164,6 +1192,7 @@ static const char * const vdec_device_name[] = {
 	"amvdec_vp9",        "ammvdec_vp9",
 	"amvdec_avs2",       "ammvdec_avs2",
 	"amvdec_av1",        "ammvdec_av1",
+	"amvdec_avs3",       "ammvdec_avs3",
 };
 
 
@@ -1187,6 +1216,7 @@ static const char * const vdec_device_name[] = {
 	"amvdec_vp9",
 	"amvdec_avs2",
 	"amvdec_av1"
+	"amvdec_avs3"
 };
 
 #endif
@@ -2029,7 +2059,6 @@ void vdec_enable_input(struct vdec_s *vdec)
 	if (input->target == VDEC_INPUT_TARGET_VLD)
 		SET_VREG_MASK(VLD_MEM_VIFIFO_CONTROL, (1<<2) | (1<<1));
 	else if (input->target == VDEC_INPUT_TARGET_HEVC) {
-		SET_VREG_MASK(HEVC_STREAM_CONTROL, 1);
 		if (vdec_stream_based(vdec)) {
 			if (vdec->vbuf.no_parser)
 				/*set endian for non-parser mode. */
@@ -2039,7 +2068,9 @@ void vdec_enable_input(struct vdec_s *vdec)
 		} else
 			SET_VREG_MASK(HEVC_STREAM_CONTROL, 7 << 4);
 
-		SET_VREG_MASK(HEVC_STREAM_FIFO_CTL, (1<<29));
+		SET_VREG_MASK(HEVC_STREAM_FIFO_CTL, (1 << 29));
+
+		SET_VREG_MASK(HEVC_STREAM_CONTROL, 1);
 	}
 }
 EXPORT_SYMBOL(vdec_enable_input);
@@ -2217,23 +2248,12 @@ bool vdec_need_more_data(struct vdec_s *vdec)
 EXPORT_SYMBOL(vdec_need_more_data);
 
 
-static void hevc_wait_ddr(void)
-{
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
-		hevc_arb_ctrl(0);
-	} else {
-		dec_dmc_port_ctrl(0, VDEC_INPUT_TARGET_HEVC);
-	}
-}
-
 void vdec_save_input_context(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vdec_profile(vdec, VDEC_PROFILE_EVENT_SAVE_INPUT);
+	vdec_profile(vdec, VDEC_PROFILE_EVENT_SAVE_INPUT, 0);
 #endif
 
 	if (input->target == VDEC_INPUT_TARGET_VLD)
@@ -2274,7 +2294,8 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			vdec->input.streaming_rp &= 0xffffffffULL << 32;
 			vdec->input.streaming_rp |= vdec->input.stream_cookie;
 			vdec->input.total_rd_count = vdec->input.streaming_rp;
-			hevc_wait_ddr();
+			if ((vdec->core_mask & CORE_MASK_HEVC_BACK) == 0)
+				hevc_wait_ddr();
 		}
 
 		input->swap_valid = true;
@@ -2502,7 +2523,7 @@ EXPORT_SYMBOL(vdec_connect);
 int vdec_disconnect(struct vdec_s *vdec)
 {
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vdec_profile(vdec, VDEC_PROFILE_EVENT_DISCONNECT);
+	vdec_profile(vdec, VDEC_PROFILE_EVENT_DISCONNECT, 0);
 #endif
 	//trace_vdec_disconnect(vdec);/*DEBUG_TMP*/
 
@@ -2540,19 +2561,26 @@ int vdec_disconnect(struct vdec_s *vdec)
 
 	return 0;
 discon_timeout:
-	pr_err("%s timeout!!! status: 0x%x force it to 2\n", __func__, vdec->status);
+	pr_err("%s timeout!!! status: 0x%x\n", __func__, vdec->status);
 	if (vdec->status == VDEC_STATUS_ACTIVE) {
 		if (vdec->input.target == VDEC_INPUT_TARGET_VLD) {
 			amvdec_stop();
 			WRITE_VREG(ASSIST_MBOX1_MASK, 0);
 			vdec_free_irq(VDEC_IRQ_1, NULL);
 		} else if (vdec->input.target == VDEC_INPUT_TARGET_HEVC) {
-			amhevc_stop();
-			WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG, 0);
-			vdec_free_irq(VDEC_IRQ_0, NULL);
+			if (vdec->core_mask & CORE_MASK_HEVC_BACK) {
+				amhevc_stop_b();
+				amhevc_stop_f();
+				WRITE_VREG(EE_ASSIST_MBOX0_MASK, 0);
+				WRITE_VREG(HEVC_ASSIST_MBOX0_MASK, 0);
+			} else {
+				amhevc_stop();
+				WRITE_VREG(HEVC_ASSIST_MBOX0_MASK, 0);
+				vdec_free_irq(VDEC_IRQ_0, NULL);
+			}
 		}
 	}
-
+	pr_info("%s end\n", __func__);
 	return 0;
 }
 EXPORT_SYMBOL(vdec_disconnect);
@@ -2667,8 +2695,24 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	if (pdev_name == NULL)
 		return -ENODEV;
 
-	snprintf(dev_name, sizeof(dev_name),
-		"%s%s", pdev_name, is_v4l ? "_v4l": "");
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) &&
+		(vdec->format == VFORMAT_AV1) &&
+		is_support_profile("AV1-T5D-V4L")) {
+		snprintf(dev_name, sizeof(dev_name),
+			"%s%s", pdev_name, is_v4l ? "_t5d_v4l": "");
+	} else {
+		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) &&
+			(vdec->format == VFORMAT_HEVC ||
+				vdec->format == VFORMAT_AVS2 ||
+				vdec->format == VFORMAT_VP9 ||
+				vdec->format == VFORMAT_AV1)) {
+			snprintf(dev_name, sizeof(dev_name), "%s%s",
+				pdev_name, (is_v4l)?"_fb_v4l" : "_fb");
+		} else {
+			snprintf(dev_name, sizeof(dev_name),
+				"%s%s", pdev_name, is_v4l ? "_v4l": "");
+		}
+	}
 
 	pr_info("vdec_init, dev_name:%s, vdec_type=%s, format: %d, total: %d\n",
 		dev_name, vdec_type_str(vdec), vdec->format,atomic_read(&vdec_core->vdec_nr));
@@ -2679,6 +2723,14 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		 "%s-dec_spend_time", vdec->name);
 	snprintf(vdec->dec_spend_time_ave, sizeof(vdec->dec_spend_time_ave),
 		 "%s-dec_spend_time_ave", vdec->name);
+
+	snprintf(vdec->dec_back_spend_time, sizeof(vdec->dec_back_spend_time),
+		 "%s-dec_back_spend_time", vdec->name);
+	snprintf(vdec->dec_back_spend_time_ave, sizeof(vdec->dec_back_spend_time_ave),
+		 "%s-dec_back_spend_time_ave", vdec->name);
+
+	snprintf(vdec->dec_back_event, sizeof(vdec->dec_back_event),
+		 "%s-dec_back_event", vdec->name);
 
 	snprintf(vdec->frame_mode_size, sizeof(vdec->frame_mode_size),
 			 "0.frame_mode_size-%d", vdec->id);
@@ -2710,11 +2762,14 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			(vdec->format == VFORMAT_HEVC ||
 			vdec->format == VFORMAT_AVS2 ||
 			vdec->format == VFORMAT_VP9 ||
-			vdec->format == VFORMAT_AV1
+			vdec->format == VFORMAT_AV1 ||
+			vdec->format == VFORMAT_AVS3
 			) ?
 				VDEC_INPUT_TARGET_HEVC :
 				VDEC_INPUT_TARGET_VLD);
-	if (vdec_single(vdec) || (vdec_get_debug_flags() & 0x2))
+	if (vdec_single(vdec) ||
+		(vdec_get_debug_flags() & 0x2) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
 		vdec_enable_DMC(vdec);
 	p->cma_dev = vdec_core->cma_dev;
 
@@ -3117,8 +3172,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	}
 	p->dolby_meta_with_el = 0;
 	if (debug & VDEC_DBG_DETAIL_INFO)
-		pr_debug("vdec_init, vf_provider_name = %s, b %d\n",
-			p->vf_provider_name, is_cpu_tm2_revb());
+		pr_debug("vdec_init, vf_provider_name = %s\n", p->vf_provider_name);
 
 	mutex_lock(&vdec_mutex);
 	vdec_core->vdec_resource_status |= BIT(p->frame_base_video_path);
@@ -3172,6 +3226,8 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 				core->active_vdec = NULL;
 			if (core->active_hevc == v_ref)
 				core->active_hevc = NULL;
+			if (core->active_hevc_back == v_ref)
+				core->active_hevc_back = NULL;
 			if (core->last_vdec == v_ref)
 				core->last_vdec = NULL;
 			list_del(&vdec->list);
@@ -3502,12 +3558,12 @@ static unsigned long vdec_schedule_mask(struct vdec_s *vdec,
  *            hw->vdec_cb(vdec, hw->vdec_cb_arg);
  *        }
  */
-static void vdec_callback(struct vdec_s *vdec, void *data)
+static void vdec_callback(struct vdec_s *vdec, void *data, int mask)
 {
 	struct vdec_core_s *core = (struct vdec_core_s *)data;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vdec_profile(vdec, VDEC_PROFILE_EVENT_CB);
+	vdec_profile(vdec, VDEC_PROFILE_EVENT_CB, mask);
 #endif
 
 	up(&core->sem);
@@ -3525,6 +3581,8 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 			vdec = vdec_core->active_hevc;
 		else if (irq == vdec_core->isr_context[VDEC_IRQ_1].irq)
 			vdec = vdec_core->active_vdec;
+		else if (irq == vdec_core->isr_context[ASSIST_MAILBOX_IRQ0].irq)
+			vdec = vdec_core->active_hevc_back;
 		else
 			vdec = NULL;
 	}
@@ -3536,7 +3594,7 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 
 	if ((c != &vdec_core->isr_context[VDEC_IRQ_0]) &&
 	    (c != &vdec_core->isr_context[VDEC_IRQ_1]) &&
-	    (c != &vdec_core->isr_context[VDEC_IRQ_HEVC_BACK])) {
+	    (c != &vdec_core->isr_context[ASSIST_MAILBOX_IRQ0])) {
 #if 0
 		pr_warn("vdec interrupt w/o a valid receiver\n");
 #endif
@@ -3551,14 +3609,23 @@ static irqreturn_t vdec_isr(int irq, void *dev_id)
 		goto isr_done;
 	}
 
-	if (!vdec->irq_handler) {
+	if ((c == &vdec_core->isr_context[VDEC_IRQ_0]) ||
+	    (c == &vdec_core->isr_context[VDEC_IRQ_1])) {
+		if (!vdec->irq_handler) {
 #if 0
-		pr_warn("vdec instance has no irq handle.\n");
+			pr_warn("vdec instance has no irq handle.\n");
 #endif
-		goto  isr_done;
-	}
+			goto  isr_done;
+		}
 
-	ret = vdec->irq_handler(vdec, c->index);
+		ret = vdec->irq_handler(vdec, c->index);
+	} else if (c == &vdec_core->isr_context[ASSIST_MAILBOX_IRQ0]) {
+		if (!vdec->back_irq_handler) {
+			goto  isr_done;
+		}
+
+		ret = vdec->back_irq_handler(vdec, c->index);
+	}
 isr_done:
 	if (vdec && ret == IRQ_WAKE_THREAD)
 		vdec->irq_cnt++;
@@ -3578,6 +3645,8 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 			vdec = vdec_core->active_hevc;
 		else if (irq == vdec_core->isr_context[VDEC_IRQ_1].irq)
 			vdec = vdec_core->active_vdec;
+		else if (irq == vdec_core->isr_context[ASSIST_MAILBOX_IRQ0].irq)
+			vdec = vdec_core->active_hevc_back;
 		else
 			vdec = NULL;
 	}
@@ -3589,9 +3658,16 @@ static irqreturn_t vdec_thread_isr(int irq, void *dev_id)
 	if (!vdec)
 		goto thread_isr_done;
 
-	if (!vdec->threaded_irq_handler)
-		goto thread_isr_done;
-	ret = vdec->threaded_irq_handler(vdec, c->index);
+	if ((c == &vdec_core->isr_context[VDEC_IRQ_0]) ||
+		(c == &vdec_core->isr_context[VDEC_IRQ_1])) {
+		if (!vdec->threaded_irq_handler)
+			goto thread_isr_done;
+		ret = vdec->threaded_irq_handler(vdec, c->index);
+	} else if (c == &vdec_core->isr_context[ASSIST_MAILBOX_IRQ0]) {
+		if (!vdec->back_threaded_irq_handler)
+			goto thread_isr_done;
+		ret = vdec->back_threaded_irq_handler(vdec, c->index);
+	}
 thread_isr_done:
 	if (vdec)
 		vdec->irq_thread_cnt++;
@@ -3624,15 +3700,21 @@ int vdec_check_rec_num_enough(struct vdec_s *vdec) {
 
 unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 {
-	unsigned long ready_mask;
+	unsigned long ready_mask = 0;
 	struct vdec_input_s *input = &vdec->input;
+	unsigned long input_data_mask = 0;
+	struct vdec_core_s *core = vdec_core;
+	unsigned long check_mask = mask;
 
 	/* Wait the matching irq_thread finished */
-	if (vdec->irq_cnt > vdec->irq_thread_cnt)
+	if (vdec->irq_cnt > vdec->irq_thread_cnt) {
+		usleep_range(1000, 2000);
+		vdec_up(vdec);
 		return false;
+	}
 
 	if ((vdec->status != VDEC_STATUS_CONNECTED) &&
-	    (vdec->status != VDEC_STATUS_ACTIVE))
+	    (vdec->status != VDEC_STATUS_ACTIVE) && (vdec->next_status != VDEC_STATUS_DISCONNECTED))
 		return false;
 
 	if (!vdec->run_ready)
@@ -3650,12 +3732,32 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 #endif
 	if (vdec_core_with_input(mask)) {
 		/* check frame based input underrun */
-		if (input && !input->eos && input_frame_based(input)
+		if (input && input_frame_based(input)
 			&& (!vdec_input_next_chunk(input))) {
+			if ((vdec->core_mask & CORE_MASK_HEVC_BACK)) {
 #ifdef VDEC_DEBUG_SUPPORT
-			inc_profi_count(mask, vdec->input_underrun_count);
+				inc_profi_count(mask, vdec->input_underrun_count);
 #endif
-			return false;
+				if (!input->eos) {
+					if (mask & CORE_MASK_HEVC_BACK)
+						mask = CORE_MASK_HEVC_BACK;
+					else
+						return false;
+				} else {
+					if (debug == 0x10)
+						pr_err("eos1 mask 0x%lx \n", mask);
+					if (vdec->check_input_data && vdec->check_input_data(vdec, CORE_MASK_HEVC_BACK))
+						mask &= ~CORE_MASK_HEVC;
+					if (debug == 0x10)
+						pr_err("eos2 mask 0x%lx \n", mask);
+				}
+			} else {
+#ifdef VDEC_DEBUG_SUPPORT
+				inc_profi_count(mask, vdec->input_underrun_count);
+#endif
+				if (!input->eos)
+					return false;
+			}
 		}
 		/* check streaming prepare level threshold if not EOS */
 		if (input && input_stream_based(input) && !input->eos) {
@@ -3680,11 +3782,30 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 					}
 				}
 #endif
-				return false;
+				if (mask & CORE_MASK_HEVC_BACK)
+					mask = CORE_MASK_HEVC_BACK;
+				else
+					return false;
 			} else if (level > input->prepare_level)
 				vdec->need_more_data &= ~VDEC_NEED_MORE_DATA;
 		}
 	}
+
+	if (mask & CORE_MASK_HEVC_BACK) {
+		if (vdec->check_input_data)
+			input_data_mask = vdec->check_input_data(vdec, CORE_MASK_HEVC_BACK);
+		if (debug & 0x8)
+			pr_err("000 input_data_mask 0x%lx ready_mask = 0x%lx, mask = 0x%lx, vdec id %d\n",
+						input_data_mask, ready_mask, mask, vdec->id);
+		if (input_data_mask) {
+			core->buff_flag |= CORE_MASK_HEVC_BACK;
+			ready_mask |= CORE_MASK_HEVC_BACK;
+		}
+		else
+			mask &= ~CORE_MASK_HEVC_BACK;
+	}
+	if (debug & 0x8)
+		pr_err("ready_mask = 0x%lx, mask = 0x%lx, vdec id %d\n", ready_mask, mask, vdec->id);
 
 	if (step_mode) {
 		if ((step_mode & 0xff) != vdec->id)
@@ -3695,18 +3816,26 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	/*step_mode &= ~0xff; not work for id of 0, removed*/
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	vdec_profile(vdec, VDEC_PROFILE_EVENT_CHK_RUN_READY);
+	vdec_profile(vdec, VDEC_PROFILE_EVENT_CHK_RUN_READY, check_mask);
 #endif
-
-	ready_mask = vdec->run_ready(vdec, mask) & mask;
+	if (mask & ~CORE_MASK_HEVC_BACK)
+		ready_mask |= vdec->run_ready(vdec, mask) & mask;
+	if (debug & VDEC_DBG_DUAL_CORE_DEBUG) {
+		if (core->sched_mask & (CORE_MASK_HEVC_BACK | CORE_MASK_HEVC))
+			ready_mask = 0;
+		if (ready_mask == (CORE_MASK_HEVC_BACK | CORE_MASK_HEVC))
+			ready_mask = CORE_MASK_HEVC_BACK;
+	}
 #ifdef VDEC_DEBUG_SUPPORT
 	if (ready_mask != mask)
 		inc_profi_count(ready_mask ^ mask, vdec->not_run_ready_count);
 #endif
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	if (ready_mask)
-		vdec_profile(vdec, VDEC_PROFILE_EVENT_RUN_READY);
+		vdec_profile(vdec, VDEC_PROFILE_EVENT_RUN_READY, ready_mask);
 #endif
+	if (debug & 0x8)
+		pr_err("ready_mask = 0x%lx, mask = 0x%lx\n", ready_mask, mask);
 
 	return ready_mask;
 }
@@ -3783,7 +3912,6 @@ static int vdec_core_thread(void *data)
 	struct vdec_core_s *core = (struct vdec_core_s *)data;
 	struct sched_param param = {.sched_priority = MAX_RT_PRIO/2};
 	unsigned long flags;
-	int i;
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 
@@ -3798,18 +3926,13 @@ static int vdec_core_thread(void *data)
 			break;
 		mutex_lock(&vdec_mutex);
 
-		if (core->parallel_dec == 1) {
-			for (i = VDEC_1; i < VDEC_MAX; i++) {
-				core->power_ref_mask =
-					core->power_ref_count[i] > 0 ?
-					(core->power_ref_mask | (1 << i)) :
-					(core->power_ref_mask & ~(1 << i));
-			}
-		}
 		/* clean up previous active vdec's input */
 		list_for_each_entry(vdec, &core->connected_vdec_list, list) {
 			unsigned long mask = vdec->sched_mask &
 				(vdec->active_mask ^ vdec->sched_mask);
+
+			if (core->parallel_dec == 1)
+				core->power_ref_mask |= vdec->core_mask;
 
 			vdec_route_interrupt(vdec, mask, false);
 
@@ -3868,6 +3991,8 @@ static int vdec_core_thread(void *data)
 						vdec_core->active_hevc = NULL;
 					if (vdec_core->active_vdec == vdec)
 						vdec_core->active_vdec = NULL;
+					if (vdec_core->active_hevc_back == vdec)
+						vdec_core->active_hevc_back = NULL;
 				}
 				if (core->last_vdec == vdec)
 					core->last_vdec = NULL;
@@ -3940,6 +4065,7 @@ static int vdec_core_thread(void *data)
 			/* setting active_mask should be atomic.
 			 * it can be modified by decoder driver callbacks.
 			 */
+			 mutex_lock(&vdec_mutex);
 			while (sched_mask) {
 				i = __ffs(sched_mask);
 				set_bit(i, &vdec->active_mask);
@@ -3955,15 +4081,17 @@ static int vdec_core_thread(void *data)
 			} else
 				vdec->mc_loaded = 0;
 			core->last_vdec = vdec;
-			if (debug & 2)
+			if (debug & 2) {
 				vdec->mc_loaded = 0;/*alway reload firmware*/
+				vdec->mc_back_loaded = 0;
+			}
 			vdec_set_status(vdec, VDEC_STATUS_ACTIVE);
-
+			mutex_unlock(&vdec_mutex);
 			core->sched_mask |= mask;
 			if (core->parallel_dec == 1)
-				vdec_save_active_hw(vdec);
+				vdec_save_active_hw(vdec, mask);
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-			vdec_profile(vdec, VDEC_PROFILE_EVENT_RUN);
+			vdec_profile(vdec, VDEC_PROFILE_EVENT_RUN, mask);
 #endif
 			vdec_prepare_run(vdec, mask);
 #ifdef VDEC_DEBUG_SUPPORT
@@ -4016,6 +4144,7 @@ static int vdec_core_thread(void *data)
 			usleep_range(1000, 2000);
 			up(&core->sem);
 		}
+
 	}
 
 	return 0;
@@ -4223,6 +4352,7 @@ void vdec_reset_core(struct vdec_s *vdec)
 {
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		/* t7 no dmc req for vdec only */
 		vdec_dbus_ctrl(0);
@@ -4249,6 +4379,7 @@ void vdec_reset_core(struct vdec_s *vdec)
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
 		vdec_dbus_ctrl(1);
 	else
@@ -4296,9 +4427,10 @@ void hevc_reset_core(struct vdec_s *vdec)
 
 	if ((cpu_type == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(cpu_type == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(cpu_type == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(cpu_type == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		/* t7 no dmc req for hevc only */
-		hevc_arb_ctrl(0);
+		hevc_arb_ctrl(0, 0);
 	} else {
 		WRITE_VREG(HEVC_STREAM_CONTROL, 0);
 
@@ -4381,8 +4513,9 @@ void hevc_reset_core(struct vdec_s *vdec)
 
 	if ((cpu_type == AM_MESON_CPU_MAJOR_ID_T7) ||
 		(cpu_type == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(cpu_type == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(cpu_type == AM_MESON_CPU_MAJOR_ID_T5M))
-		hevc_arb_ctrl(1);
+		hevc_arb_ctrl(1, 0);
 	else
 		dec_dmc_port_ctrl(1, VDEC_INPUT_TARGET_HEVC);
 }
@@ -5950,7 +6083,7 @@ static int vdec_post_task_init(void)
 	post->task = kthread_run(vdec_post_task_recycle,
 		post, "task-post-daemon-thread");
 	if (IS_ERR(post->task)) {
-		pr_err("%s, creat task post daemon thread faild %ld\n",
+		pr_err("%s, creat task post daemon thread failed %ld\n",
 			__func__, PTR_ERR(post->task));
 		return PTR_ERR(post->task);
 	}
@@ -5995,7 +6128,7 @@ int vdec_post_task(post_task_handler func, void *args)
 	parms->task	= kthread_run(vdec_post_handler,
 				parms, "task-post-thread");
 	if (IS_ERR(parms->task)) {
-		pr_err("%s, creat task post thread faild %ld\n",
+		pr_err("%s, creat task post thread failed %ld\n",
 			__func__, PTR_ERR(parms->task));
 		kfree(parms);
 		return PTR_ERR(parms->task);
@@ -6078,6 +6211,16 @@ static int vdec_probe(struct platform_device *pdev)
 	if (get_cpu_major_id() >= MESON_CPU_MAJOR_ID_G12A) {
 		r = vdec_request_threaded_irq(VDEC_IRQ_HEVC_BACK, NULL, NULL,
 			IRQF_ONESHOT, "vdec-hevc_back", NULL);
+		if (r < 0) {
+			pr_err("vdec interrupt request failed\n");
+			return r;
+		}
+	}
+#endif
+#ifdef NEW_FB_CODE
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) {
+		r = vdec_request_threaded_irq(ASSIST_MAILBOX_IRQ0, NULL, NULL,
+			IRQF_ONESHOT, "vdec-assist-mailbox-0", NULL);
 		if (r < 0) {
 			pr_err("vdec interrupt request failed\n");
 			return r;

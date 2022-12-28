@@ -1,27 +1,16 @@
+/* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 /*
- * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
- * Description:
+ * Copyright (c) 2019 Amlogic, Inc. All rights reserved.
  */
+
 #define NEW_REG_CHECK_MASK  (0xffff0000)
-/*new reg mask, bit20~bit27 chipid, bit16~bit19 subid.
-Only for new registers added in S5 that have the same
-address as the previous register.*/
+/*new reg mask, bit20~bit27 chipid, bit16~bit19 subid*/
 #define MASK_S5_NEW_REGS   ((0x3e << 20) & 0xffff0000)
+
+#define EE_ASSIST_MBOX0_IRQ_REG          0x3f70
+#define EE_ASSIST_MBOX0_CLR_REG          0x3f71
+#define EE_ASSIST_MBOX0_MASK             0x3f72
+#define EE_ASSIST_MBOX0_FIQ_SEL          0x3f73
 
 #ifndef AMRISC_REGS_HEADER_
 #define AMRISC_REGS_HEADER_
@@ -853,8 +842,8 @@ address as the previous register.*/
 #define VP9_QUANT_WR                        (0x3146 | MASK_S5_NEW_REGS)
 
 #define HEVC_SLICE_DATA_CTL                 (0x3172 | MASK_S5_NEW_REGS)
-#define HEVC_STREAM_CRC                     (0x3173 | MASK_S5_NEW_REGS)
-#define VP9_ACP_CTRL                        (0x3174 | MASK_S5_NEW_REGS)
+#define HEVC_STREAM_CRC                     (0x3175 | MASK_S5_NEW_REGS)
+#define VP9_ACP_CTRL                        (0x3176 | MASK_S5_NEW_REGS)
 
 #define HEVC_MPRED_VERSION                  0x3200
 #define HEVC_MPRED_CTRL0                    0x3201
@@ -948,7 +937,7 @@ address as the previous register.*/
 #define HEVC_MPRED_CTRL6                           (0x3258 | MASK_S5_NEW_REGS)
 #define HEVC_MPRED_CTRL7                           (0x3259 | MASK_S5_NEW_REGS)
 #define HEVC_MPRED_CTRL8                           (0x325a | MASK_S5_NEW_REGS)
-#define HEVC_MPRED_CTRL9                           (0x325b | MASK_S5_NEW_REGS)
+#define HEVC_MPRED_CTRL9                           (0x325b)
 #define HEVC_MPRED_MCR_CNT_CTL                     (0x325c | MASK_S5_NEW_REGS)
 #define HEVC_MPRED_MCR_CNT_DATA                    (0x325d | MASK_S5_NEW_REGS)
 #define HEVC_MPRED_CTRL10                          (0x325e | MASK_S5_NEW_REGS)
@@ -1088,6 +1077,10 @@ address as the previous register.*/
 #define AV1D_IPP_DIR_CFG                    0x3490
 /* add from s5 */
 #define HEVCD_IPP_AXIADDR_PREFIX                   (0x3418 | MASK_S5_NEW_REGS)
+#define VP9D_MPP_REF_SCALE_ENBL                    (0x3441)
+#define VP9D_MPP_REFINFO_TBL_ACCCONFIG             (0x3442)
+#define VP9D_MPP_REFINFO_DATA                      (0x3443)
+
 
 #define HEVCD_IPP_MULTICORE_CFG                    (0x34a0 | MASK_S5_NEW_REGS)
 #define HEVCD_IPP_MULTICORE_LINE_CTL               (0x34a1 | MASK_S5_NEW_REGS)
@@ -1098,7 +1091,7 @@ address as the previous register.*/
 #define HEVCD_IPP_CTRL2                            (0x34a6 | MASK_S5_NEW_REGS)
 #define HEVCD_IPP_CTRL3                            (0x34a7 | MASK_S5_NEW_REGS)
 
-//#define HEVCD_MPP_DECOMP_AXIURG_CTL                (0x34c7 | MASK_S5_NEW_REGS)
+#define HEVCD_MPP_DECOMP_AXIURG_CTL                0x34c7
 
 #define HEVC_DBLK_MCP                              (0x3529 | MASK_S5_NEW_REGS)
 #define HEVC_DBLK_SLICNT                           (0x352a | MASK_S5_NEW_REGS)
@@ -1188,7 +1181,7 @@ address as the previous register.*/
 #define HEVCD_MPP_DECOMP_CTL3_DBE1                 (0x39c4 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_DECOMP_PERFMON_CTL_DBE1          (0x39c5 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_DECOMP_PERFMON_DATA_DBE1         (0x39c6 | MASK_S5_NEW_REGS)
-//#define HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1           (0x39c7 | MASK_S5_NEW_REGS)
+#define HEVCD_MPP_DECOMP_AXIURG_CTL_DBE1           (0x39c7 | MASK_S5_NEW_REGS)
 #define HEVCD_MPP_VDEC_MCR_CTL_DBE1                (0x39c8 | MASK_S5_NEW_REGS)
 #define HEVCD_MCRCC_CTL1_DBE1                      (0x39f0 | MASK_S5_NEW_REGS)
 #define HEVCD_MCRCC_CTL2_DBE1                      (0x39f1 | MASK_S5_NEW_REGS)

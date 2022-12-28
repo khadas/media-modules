@@ -61,8 +61,6 @@
 #include "../utils/vdec_v4l2_buffer_ops.h"
 #include "../utils/decoder_dma_alloc.h"
 
-//#include <linux/amlogic/media/utils/vdec_reg.h>
-
 #include "../utils/vdec.h"
 #include "../utils/amvdec.h"
 #include <linux/amlogic/media/video_sink/video.h>
@@ -124,13 +122,6 @@ to enable DV of frame mode
 #define SWAP_HEVC_OFFSET (3 * 0x1000)
 
 #define MEM_NAME "codec_265"
-
-#include <linux/amlogic/media/utils/vdec_reg.h>
-#include "../utils/vdec.h"
-#include "../utils/amvdec.h"
-//#include <linux/amlogic/media/video_sink/video.h>
-#include <linux/amlogic/media/codec_mm/configs.h>
-#include "../utils/vdec_feature.h"
 
 #define SEND_LMEM_WITH_RPM
 #define SUPPORT_10BIT
@@ -1832,7 +1823,7 @@ struct mh265_fence_vf_t {
 struct hevc_state_s {
 #ifdef MULTI_INSTANCE_SUPPORT
 	struct platform_device *platform_dev;
-	void (*vdec_cb)(struct vdec_s *, void *);
+	void (*vdec_cb)(struct vdec_s *, void *, int);
 	void *vdec_cb_arg;
 	struct vframe_chunk_s *chunk;
 	int dec_result;
@@ -12686,7 +12677,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 	}
 
 	if (hevc->vdec_cb)
-		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg);
+		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg, CORE_MASK_HEVC);
 }
 
 static void vh265_work(struct work_struct *work)
@@ -12871,7 +12862,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 }
 
 static void run(struct vdec_s *vdec, unsigned long mask,
-	void (*callback)(struct vdec_s *, void *), void *arg)
+	void (*callback)(struct vdec_s *, void *, int), void *arg)
 {
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;

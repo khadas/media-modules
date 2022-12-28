@@ -43,6 +43,8 @@
 #define AML_VCODEC_ENC_NAME	"aml-vcodec-enc"
 #define AML_PLATFORM_STR	"platform:amlogic"
 
+#define NEW_FB_CODE
+
 #define AML_VCODEC_MAX_PLANES	3
 #define AML_V4L2_BENCHMARK	0
 #define WAIT_INTR_TIMEOUT_MS	1000
@@ -451,6 +453,10 @@ struct internal_comp_buf {
 	ulong	header_dw_addr;
 	void	*mmu_box_dw;
 	void	*bmmu_box_dw;
+#ifdef NEW_FB_CODE
+	void	*mmu_box_1;
+	void	*mmu_box_dw_1;
+#endif
 };
 
 /*
@@ -812,6 +818,11 @@ struct aml_vcodec_ctx {
 	struct aml_es_mgr	es_mgr;
 	void (*es_free)(struct aml_vcodec_ctx *, ulong);
 	bool			v4l_reqbuff_flag;
+#ifdef NEW_FB_CODE
+	int 			front_back_mode;
+	void			*mmu_box_1;
+	void			*mmu_box_dw_1;
+#endif
 };
 
 /**
