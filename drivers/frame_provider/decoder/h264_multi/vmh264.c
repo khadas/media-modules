@@ -10600,8 +10600,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 					READ_VREG(NAL_SEARCH_CTL) & (~0x2));
 	}
 	WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | (1 << 2) | (hw->bitstream_restriction_flag << 15) | (hw->seq_info3&0xff)<<7);
-	if (udebug_flag)
-		WRITE_VREG(AV_SCRATCH_K, udebug_flag);
+
+	WRITE_VREG(AV_SCRATCH_K, udebug_flag);
 	hw->stat |= STAT_TIMER_ARM;
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 
