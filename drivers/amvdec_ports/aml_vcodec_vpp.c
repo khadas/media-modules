@@ -981,9 +981,7 @@ int aml_v4l2_vpp_init(
 		vpp->buffer_mode = BUFFER_MODE_USE_BUF;
 
 	if (vpp->work_mode == VPP_MODE_S4_DW_MMU)
-		//kernel5.15 codec2 bringup scgit.amlogic.com/#/c/219958/
-		//init.work_mode			= WORK_MODE_S4_DCOPY;
-		init.work_mode			= init.work_mode;
+		init.work_mode			= WORK_MODE_S4_DCOPY;
 	else
 		init.work_mode			= WORK_MODE_PRE_POST;
 	init.buffer_mode		= vpp->buffer_mode;
