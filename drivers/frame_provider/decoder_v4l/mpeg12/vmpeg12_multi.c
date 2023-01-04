@@ -1958,8 +1958,10 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		if (input_frame_based(vdec)) {
 			if ((frame_width < 64) || (frame_height < 64)) {
 				pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
-				if (vdec_frame_based(vdec))
+				mpeg2_buf_ref_process_for_exception(hw);
+				if (vdec_frame_based(vdec)) {
 					vdec_v4l_post_error_frame_event(ctx);
+				}
 				hw->dec_result = DEC_RESULT_ERROR_DATA;
 				vdec_schedule_work(&hw->work);
 				return IRQ_HANDLED;
@@ -2024,7 +2026,6 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			__func__, READ_VREG(VIFF_BIT_CNT));
 		if (vdec_frame_based(vdec)) {
 			reset_process_time(hw);
-			vdec_v4l_post_error_frame_event(ctx);
 			hw->dec_result = DEC_RESULT_GET_DATA;
 			vdec_schedule_work(&hw->work);
 		}
@@ -2079,6 +2080,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		if (index >= hw->buf_num) {
 			debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"mmpeg12: invalid buf index: %d\n", index);
+			mpeg2_buf_ref_process_for_exception(hw);
 			if (vdec_frame_based(vdec))
 				vdec_v4l_post_error_frame_event(ctx);
 			hw->dec_result = DEC_RESULT_ERROR;
@@ -2200,9 +2202,11 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				"mmpeg12: drop pic num %d, type %c, index %d, offset %x\n",
 				hw->dec_num, GET_SLICE_TYPE(info), index, offset);
 				hw->dec_result = DEC_RESULT_ERROR;
+				mpeg2_buf_ref_process_for_exception(hw);
+				if (vdec_frame_based(vdec))
+					vdec_v4l_post_error_frame_event(ctx);
 			}
-			if (vdec_frame_based(vdec))
-				vdec_v4l_post_error_frame_event(ctx);
+
 			vdec_schedule_work(&hw->work);
 			return IRQ_HANDLED;
 		}

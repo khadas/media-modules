@@ -1157,6 +1157,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 		if (input_frame_based(vdec)) {
 			if ((frame_width < 64) || (frame_height < 64)) {
+				mpeg4_buf_ref_process_for_exception(hw);
 				if (vdec_frame_based(hw_to_vdec(hw)))
 					vdec_v4l_post_error_frame_event(ctx);
 				pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);

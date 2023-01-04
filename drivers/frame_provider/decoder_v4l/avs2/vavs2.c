@@ -4685,6 +4685,7 @@ static bool is_available_buffer(struct AVS2Decoder_s *dec);
 static int notify_v4l_eos(struct vdec_s *vdec)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)vdec->private;
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 	struct vframe_s *vf = &dec->vframe_dummy;
 	struct aml_buf *aml_buf = NULL;
@@ -4706,7 +4707,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	}
 
 	aml_buf = (struct aml_buf *)
-		dec->m_BUF[index].v4l_ref_buf_addr;
+		dec->m_BUF[avs2_dec->fref[index]->index].v4l_ref_buf_addr;
 
 	vf->type		|= VIDTYPE_V4L_EOS;
 	vf->timestamp		= ULONG_MAX;

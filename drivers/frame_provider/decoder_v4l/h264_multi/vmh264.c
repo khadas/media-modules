@@ -9306,8 +9306,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 							vh264_report_pts(hw);
 							hw->dec_result = DEC_RESULT_DONE;
 							vdec_schedule_work(&hw->work);
+							return;
 						}
-						return;
 					}
 					hw->v4l_params_parsed = true;
 					if (hw->double_write_mode != 0x10) {
