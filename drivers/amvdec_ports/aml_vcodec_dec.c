@@ -1851,6 +1851,7 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 					ctx->vpp_size);
 			//rb->count = ctx->dpb_size;
 		}
+		ctx->v4l_reqbuff_flag = true;
 		ctx->capture_memory_mode = rb->memory;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 			"capture buffer memory mode is %d\n", rb->memory);
@@ -4120,6 +4121,13 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		aml_compressed_info_show(ctx);
 		memset(&ctx->compressed_buf_info, 0, sizeof(ctx->compressed_buf_info));
 		ctx->buf_used_count = 0;
+	}
+	if (ctx->is_out_stream_off && ctx->is_stream_off) {
+		ctx->v4l_resolution_change = false;
+		ctx->reset_flag = V4L_RESET_MODE_NORMAL;
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			"seek force reset to drop es frames.\n");
+		aml_vdec_reset(ctx);
 	}
 }
 

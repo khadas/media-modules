@@ -809,6 +809,7 @@ struct aml_vcodec_ctx {
 	int dv_id;
 	struct aml_es_mgr	es_mgr;
 	void (*es_free)(struct aml_vcodec_ctx *, ulong);
+	bool			v4l_reqbuff_flag;
 };
 
 /**
