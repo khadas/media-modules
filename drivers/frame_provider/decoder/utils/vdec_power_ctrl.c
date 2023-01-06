@@ -196,6 +196,9 @@ static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)
+		pm_vdec_power_switch(pm->pd_data, VDEC_1, true);    //enable dos top PDID_T5M_DOS_GE2D_WRAP
+
 	pm_vdec_clock_on(id);
 	pm_vdec_power_switch(pm->pd_data, id, true);
 }
@@ -206,15 +209,14 @@ static void pm_vdec_power_domain_power_off(struct device *dev, int id)
 
 	pm_vdec_clock_off(id);
 	pm_vdec_power_switch(pm->pd_data, id, false);
+
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)
+		pm_vdec_power_switch(pm->pd_data, VDEC_1, false);    //disable dos top PDID_T5M_DOS_GE2D_WRAP
 }
 
 static bool pm_vdec_power_domain_power_state(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
-
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) && ((id == VDEC_1) || (id == VDEC_HCODEC))) {
-		return 0;
-	}
 
 	return pm_runtime_active(pm->pd_data[id].dev);
 }
