@@ -12373,9 +12373,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		READ_VREG(HEVC_STREAM_RD_PTR));
 
 	if (hevc->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
-			ulong flags;
 			reset_process_time(hevc);
-			spin_lock_irqsave(&hevc->wait_buf_lock, flags);
 			if (get_free_buf_count(hevc)) {
 				read_decode_info(hevc);
 				get_picture_qos_info(hevc);
@@ -12400,7 +12398,6 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 				vdec_schedule_work(&hevc->work);
 			}
-			spin_unlock_irqrestore(&hevc->wait_buf_lock, flags);
 			return;
 		}
 
