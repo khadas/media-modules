@@ -41,7 +41,7 @@ int aml_vcodec_pts_checkout(s32 ptsserver_id, u64 offset, struct checkoutptsoffs
 
 	*pts = mCheckOutPtsOffset;
 
-	pr_info("%s duration: %lld offset: 0x%llx pts: 0x%x pts64: 0x%llx\n",
+	pr_debug("%s duration: %lld offset: 0x%llx pts: 0x%x pts64: 0x%llu\n",
 		__func__, (offset >> 32) & 0xffffffff,
 		offset & 0xffffffff, pts->pts, pts->pts_64);
 
@@ -63,7 +63,7 @@ int aml_vcodec_pts_offset(s32 ptsserver_id, u64 offset, struct checkoutptsoffset
 
 	*pts = mCheckOutPtsOffset;
 
-	pr_info("%s duration: %lld offset: 0x%llx pts: 0x%x pts64: 0x%llx\n",
+	pr_debug("%s duration: %lld offset: 0x%llx pts: 0x%x pts64: 0x%llu\n",
 		__func__, (offset >> 32) & 0xffffffff,
 		offset & 0xffffffff, pts->pts, pts->pts_64);
 
@@ -80,7 +80,7 @@ int aml_vcodec_pts_checkin(s32 ptsserver_id, u32 pkt_size, u64 pts_val)
 	mCheckinPtsSize.pts_64 = pts_val;
 	ptsserver_checkin_pts_size(ptsserver_id,&mCheckinPtsSize);
 
-	pr_info("%s pkt_size:%d chekin pts: 0x%llx\n",
+	pr_debug("%s pkt_size:%d chekin pts: 0x%llu\n",
 		__func__, pkt_size, pts_val);
 
 	return 0;
@@ -103,7 +103,7 @@ int aml_vcodec_pts_first_checkin(u32 format, s32 ptsserver_id, u32 wp, u32 buf_s
 	mSartOffset.mAlignmentOffset = mAlignmentOffset;
 	ptsserver_set_first_checkin_offset(ptsserver_id,&mSartOffset);
 
-	pr_info("%s format:%d mBaseffset: 0x%d mAlignmentOffset: %d\n",
+	pr_debug("%s format:%d mBaseffset: 0x%d mAlignmentOffset: %d\n",
 		__func__, format, mBaseffset, mAlignmentOffset);
 
 	return 0;
