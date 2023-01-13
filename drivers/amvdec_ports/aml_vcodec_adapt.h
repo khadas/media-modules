@@ -51,8 +51,8 @@ int video_decoder_release(struct aml_vdec_adapt *ada_ctx);
 int vdec_vbuf_write(struct aml_vdec_adapt *ada_ctx,
 	const char *buf, unsigned int count);
 
-int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx,
-	const char *buf, unsigned int count, u64 timestamp, ulong meta_ptr);
+int vdec_vframe_write(struct aml_vdec_adapt *ada_ctx, const char *buf,
+	unsigned int count, u64 timestamp, ulong meta_ptr, chunk_free free);
 
 void vdec_vframe_input_free(void *priv, u32 handle);
 

@@ -886,6 +886,11 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 			if (ret < 0)/*no enough block now.*/
 				return ret;
 		}
+
+		if (block && free) {
+			block->free = free;
+			block->priv = priv;
+		}
 	}
 
 	chunk = kzalloc(sizeof(struct vframe_chunk_s), GFP_KERNEL);
@@ -993,7 +998,7 @@ int vdec_input_add_chunk(struct vdec_input_s *input, const char *buf,
 }
 
 int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
-			size_t count)
+			size_t count, chunk_free free, void* priv)
 {
 	int ret = 0;
 	struct drm_info drm;
@@ -1020,7 +1025,7 @@ int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
 				vdec->pts_valid = true;
 		}
 	} else {
-		ret = vdec_input_add_chunk(input, buf, count, 0, NULL, NULL);
+		ret = vdec_input_add_chunk(input, buf, count, 0, free, priv);
 	}
 
 	return ret;
@@ -1081,6 +1086,7 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 	unsigned long flags;
 	struct vframe_block_list_s *block = chunk->block;
 	struct vframe_block_list_s *tofreeblock = NULL;
+	u32 free_cb = 0;
 	flags = vdec_input_lock(input);
 
 	list_for_each_entry(p, &input->vframe_chunk_list, list) {
@@ -1122,8 +1128,7 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 			&input->vframe_block_free_list);
 		if (block->free) {
 			vdec_input_del_block_locked(input, block);
-			block->free(block->priv, block->handle);
-			kfree(block);
+			free_cb = 1;
 		}
 	} else if (block->chunk_count == 0 &&
 		input->wr_block != block ) {/*don't free used block*/
@@ -1136,9 +1141,19 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 			list_move_tail(&block->list,
 				&input->vframe_block_free_list);
 		}
+
+		if (block->free)
+			free_cb = 2;
 	}
 
 	vdec_input_unlock(input, flags);
+
+	if (free_cb == 1) {
+		block->free(block->priv, block->handle);
+		kfree(block);
+	} else if (free_cb == 2)
+		block->free(block->priv, input->have_frame_num);
+
 	if (tofreeblock)
 		vframe_block_free_block(tofreeblock);
 	kfree(chunk);

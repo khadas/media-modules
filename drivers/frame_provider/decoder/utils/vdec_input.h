@@ -155,7 +155,7 @@ extern int vdec_input_set_buffer(struct vdec_input_s *input, u32 start,
 
 /* Add enqueue video data into decoder's input */
 extern int vdec_input_add_frame(struct vdec_input_s *input, const char *buf,
-	size_t count);
+	size_t count, chunk_free free, void* priv);
 
 extern int vdec_input_add_frame_with_dma(struct vdec_input_s *input, ulong addr,
 	size_t count, u32 handle, chunk_free free, void* priv);

@@ -566,7 +566,7 @@ extern int vdec_set_receive_id(struct vdec_s *vdec, int receive_id);
 
 /* add frame data to input chain */
 extern int vdec_write_vframe(struct vdec_s *vdec, const char *buf,
-				size_t count);
+				size_t count, chunk_free free, void* priv);
 
 extern int vdec_write_vframe_with_dma(struct vdec_s *vdec,
 	ulong addr, size_t count, u32 handle, chunk_free free, void* priv);

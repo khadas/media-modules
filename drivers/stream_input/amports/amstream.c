@@ -1096,7 +1096,7 @@ static ssize_t amstream_vframe_write(struct file *file, const char *buf,
 	debug_file_write(buf, count);
 #endif
 	do {
-		ret = vdec_write_vframe(priv->vdec, buf, count);
+		ret = vdec_write_vframe(priv->vdec, buf, count, NULL, NULL);
 		if (file->f_flags & O_NONBLOCK) {
 			break;/*alway return for no block mode.*/
 		} else if (ret == -EAGAIN) {
