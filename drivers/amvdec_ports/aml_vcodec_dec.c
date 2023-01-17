@@ -1321,7 +1321,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		int offset = vb->planes[0].data_offset;
 		buf.addr = es_data->data_start + offset;
 		buf.size = vb->planes[0].bytesused - offset;
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x ts 0x%llu\n",
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x ts %llu\n",
 			buf.addr, buf.size, offset, es_data->data_start, vb->timestamp);
 	} else {
 		buf.addr	= aml_vb->addr ? aml_vb->addr : sg_dma_address(aml_vb->out_sgt->sgl);
@@ -3784,7 +3784,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		src_mem.addr = es_data->data_start + offset;
 		src_mem.size = vb->planes[0].bytesused - offset;
 
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x pts 0x%llu\n",
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x pts %llu\n",
 			src_mem.addr, src_mem.size, offset, es_data->data_start, vb->timestamp);
 
 	} else {

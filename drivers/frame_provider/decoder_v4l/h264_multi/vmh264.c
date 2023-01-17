@@ -6444,17 +6444,22 @@ static void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct StorablePicture *dec_picture = hw->dpb.mVideo.dec_picture;
 
-	if (dec_picture) {
+	struct DecodedPictureBuffer *p_Dpb = &hw->dpb.mDPB;
+	struct vdec_s *vdec = hw_to_vdec(hw);
+
+	if (dec_picture && (vdec_frame_based(vdec) ||
+		(vdec_stream_based(vdec) && !p_Dpb->last_picture))) {
 		int buf_spec_num = hw->dpb.cur_idx;
 		int pic_struct = dec_picture->pic_struct;
-		struct aml_buf *aml_buf =
-			(struct aml_buf *)hw->buffer_spec[buf_spec_num].cma_alloc_addr;
+		struct aml_buf *aml_buf;
 
 		if (buf_spec_num == INVALID_IDX) {
 			dpb_print(DECODE_ID(hw), 0,
 				"[ERR]cur_idx is invalid!\n");
 			return;
 		}
+
+		aml_buf = (struct aml_buf *)hw->buffer_spec[buf_spec_num].cma_alloc_addr;
 
 		if (!((hw->seq_info >> 15) & 0x01) || //frame_mbs_only_flag
 			pic_struct == PIC_DOUBLE_FRAME ||
