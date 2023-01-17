@@ -714,7 +714,8 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	struct vframe_s *vf = &aml_buf->vframe;
 
 	vf->index_disp = ctx->index_disp;
-	ctx->index_disp++;
+	if ((vf->type & VIDTYPE_V4L_EOS) == 0)
+		ctx->index_disp++;
 	ctx->post_to_upper_done = false;
 
 	if (ctx->stream_mode) {
