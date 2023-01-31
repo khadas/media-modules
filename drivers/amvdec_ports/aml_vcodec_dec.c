@@ -3703,7 +3703,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 			vb->index, vb,
 			vf ? vf->index & 0xff : -1, vf,
 			vf ? vf->timestamp : 0,
-			vb2_dma_contig_plane_dma_addr(vb, 0),
+			(u64)vb2_dma_contig_plane_dma_addr(vb, 0),
 			aml_buf->planes[0].addr, aml_buf->planes[0].length,
 			aml_buf->planes[1].addr, aml_buf->planes[1].length,
 			aml_buf->planes[2].addr, aml_buf->planes[2].length);
@@ -3738,7 +3738,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 				buf->addr != sg_dma_address(buf->out_sgt->sgl)) {
 				v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
 					"vb2 dma addr update(0x%llx --> 0x%lx)\n",
-					sg_dma_address(buf->out_sgt->sgl), buf->addr);
+					(u64)sg_dma_address(buf->out_sgt->sgl), buf->addr);
 			}
 		} else
 			v4l_dbg(ctx, 0,
