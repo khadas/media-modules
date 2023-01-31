@@ -3682,16 +3682,17 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		}
 
 		/* DI hook must be detached if the dmabuff be reused. */
-		if (ctx->vpp_cfg.enable_local_buf &&
-			!buf->attached) {
-			struct dma_buf *dma = vb->planes[0].dbuf;
+		if (ctx->vpp_cfg.enable_local_buf) {
+			if (!buf->attached) {
+				struct dma_buf *dma = vb->planes[0].dbuf;
 
-			if (dmabuf_is_uvm(dma) &&
-				uvm_detach_hook_mod(dma, VF_PROCESS_DI) < 0) {
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-					"dmabuf without attach DI hook.\n");
-			}
-			buf->attached = true;
+				if (uvm_detach_hook_mod(dma, VF_PROCESS_DI) < 0) {
+					v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+						"dmabuf without attach DI hook.\n");
+				}
+				buf->attached = true;
+			} else
+				aml_v4l2_vpp_recycle(ctx->vpp, buf);
 		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
@@ -3711,10 +3712,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		ctx->in_buff_cnt++;
 
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_PIC_4, vb->index);
-
-		if (ctx->vpp) {
-			aml_v4l2_vpp_recycle(ctx->vpp, buf);
-		}
 
 		if (aml_buf->entry.vb2 != vb) {
 			aml_buf->entry.vb2 = vb;

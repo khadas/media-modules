@@ -117,7 +117,7 @@ static int detach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 	if (!aml_vb)
 		return -EINVAL;
 	dma = aml_vb->vb.vb2_buf.planes[0].dbuf;
-	if (!dma || !dmabuf_is_uvm(dma)) {
+	if (IS_ERR_OR_NULL(dma) || !dmabuf_is_uvm(dma)) {
 		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_ERROR,
 			"detach_DI_buffer err\n");
 		return -EINVAL;
