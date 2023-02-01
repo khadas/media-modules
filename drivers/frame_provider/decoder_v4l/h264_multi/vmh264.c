@@ -1858,12 +1858,8 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	if (hw->mmu_enable) {
 		bs->alloc_header_addr = hw->aml_buf->fbc->haddr;
 		if (!hw->afbc_buf_table[hw->aml_buf->fbc->index].used) {
-			if (!vdec_secure(hw_to_vdec(hw)))
-				vdec_mm_dma_flush(hw->aml_buf->fbc->haddr,
-						hw->aml_buf->fbc->hsize);
 			hw->afbc_buf_table[hw->aml_buf->fbc->index].fb =
 				bs->cma_alloc_addr;
-			hw->afbc_buf_table[hw->aml_buf->fbc->index].used = 1;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_V4L_DETAIL,
 				"fb(afbc_index: %d) fb: 0x%lx\n",
 				hw->aml_buf->fbc->index,
@@ -2114,6 +2110,15 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 	} else {
 		struct aml_buf *aml_buf =
 			(struct aml_buf *)pic->cma_alloc_addr;
+
+		if (hw->mmu_enable) {
+			if (!hw->afbc_buf_table[aml_buf->fbc->index].used) {
+				if (!vdec_secure(hw_to_vdec(hw)))
+					vdec_mm_dma_flush(aml_buf->fbc->haddr,
+							aml_buf->fbc->hsize);
+				hw->afbc_buf_table[aml_buf->fbc->index].used = 1;
+			}
+		}
 
 		aml_buf->state = FB_ST_DECODER;
 
