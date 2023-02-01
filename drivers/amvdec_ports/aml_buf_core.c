@@ -311,17 +311,9 @@ static void buf_core_destroy(struct kref *kref)
 	struct buf_core_mgr_s *bc =
 		container_of(kref, struct buf_core_mgr_s, core_ref);
 	struct buf_core_entry *entry, *tmp;
-	struct hlist_node *h_tmp;
-	ulong bucket;
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		list_del(&entry->node);
-	}
-
-	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
-		entry->state = BUF_STATE_ERR;
-		hash_del(&entry->h_node);
-		bc->mem_ops.free(bc, entry);
 	}
 
 	bc->free_num	= 0;
@@ -399,10 +391,11 @@ out:
 static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 {
 	struct buf_core_entry *entry;
+	struct hlist_node *h_tmp;
 
 	mutex_lock(&bc->mutex);
 
-	hash_for_each_possible(bc->buf_table, entry, h_node, key) {
+	hash_for_each_possible_safe(bc->buf_table, entry, h_tmp, h_node, key) {
 		if (key == entry->key) {
 			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 				"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -414,6 +407,10 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 				atomic_read(&entry->ref),
 				kref_read(&bc->core_ref),
 				bc->free_num);
+
+			entry->state = BUF_STATE_ERR;
+			hash_del(&entry->h_node);
+			bc->mem_ops.free(bc, entry);
 
 			kref_put(&bc->core_ref, buf_core_destroy);
 			break;
