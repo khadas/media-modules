@@ -9765,7 +9765,8 @@ static void vh264_timeout_work(struct work_struct *work)
 		return;
 
 	hw->timeout_processing = 1;
-	if (vdec_frame_based(vdec)) {
+	if (vdec_frame_based(vdec) &&
+		(hw->i_only || !(hw->error_proc_policy & 0x2))) {
 		buf_ref_process_for_exception(hw);
 		vdec_v4l_post_error_frame_event(ctx);
 	}
