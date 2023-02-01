@@ -4773,6 +4773,7 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 		if (pic->bit_depth == AVS2_BITS_8)
 			vf->bitdepth |= BITDEPTH_SAVING_MODE;
 
+		vf->type_original = vf->type;
 		set_frame_info(dec, vf);
 
 		if (dec->high_bandwidth_flag) {
