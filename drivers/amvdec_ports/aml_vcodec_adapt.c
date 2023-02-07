@@ -337,7 +337,7 @@ static int vdec_ports_init(struct aml_vdec_adapt *ada_ctx)
 		}
 
 		/* connect vdec at the end after all HW initialization */
-		vdec_connect(vdec);
+		aml_codec_connect(ada_ctx);
 	}
 
 	return 0;
@@ -560,6 +560,26 @@ int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *mode)
 	}
 
 	return ret;
+}
+
+void aml_codec_disconnect(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	if (vdec) {
+		vdec_disconnect(vdec);
+		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT, "set vdec disconnect\n");
+	}
+}
+
+void aml_codec_connect(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	if (vdec) {
+		vdec_connect(vdec);
+		v4l_dbg(ada_ctx->ctx, V4L_DEBUG_CODEC_INPUT, "set vdec connect\n");
+	}
 }
 
 bool is_input_ready(struct aml_vdec_adapt *ada_ctx)

@@ -1397,6 +1397,8 @@ static void aml_vdec_reset(struct aml_vcodec_ctx *ctx)
 		goto out;
 	}
 
+	aml_codec_disconnect(ctx->ada_ctx);
+
 	if (aml_codec_reset(ctx->ada_ctx, &ctx->reset_flag)) {
 		ctx->state = AML_STATE_ABORT;
 		vdec_tracing(&ctx->vtr, VTRACE_V4L_ST_0, ctx->state);
@@ -1762,6 +1764,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 	} else {
 		ctx->is_out_stream_off = false;
 		ctx->es_wkr_stop = false;
+		aml_codec_connect(ctx->ada_ctx); /* for seek */
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 		if (ctx->dv_id < 0) {
@@ -1941,14 +1944,15 @@ void aml_es_node_alloc(struct aml_es_mgr *mgr)
 		__func__, mgr->free_num);
 }
 
-void  aml_es_node_expand(struct aml_es_mgr *mgr)
+void  aml_es_node_expand(struct aml_es_mgr *mgr, bool recycle_flag)
 {
 	struct aml_es_node *packet;
 	struct vb2_v4l2_buffer *vb;
+	u32 recycle_index;
 
 	mutex_lock(&mgr->mutex);
 
-	if (mgr->free_num)
+	if (mgr->free_num && !recycle_flag)
 		goto out;
 
 	aml_es_node_alloc(mgr);
@@ -1956,8 +1960,8 @@ void  aml_es_node_expand(struct aml_es_mgr *mgr)
 		if (!packet->ref_mark) {
 			vb = aml_get_vb_by_index(mgr->ctx, packet->index);
 			packet->dbuf = vb->vb2_buf.planes[0].dbuf;
+			recycle_index = packet->index;
 			ref_mark(packet);
-			aml_recycle_dma_buffers(mgr->ctx, packet->index);
 			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
 				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
 				"used_num(%d), free_num(%d), dbuf(%px)\n",
@@ -1965,7 +1969,9 @@ void  aml_es_node_expand(struct aml_es_mgr *mgr)
 				packet->ref_mark, packet->addr,
 				mgr->used_num, mgr->free_num,
 				packet->dbuf);
-			break;
+			mutex_unlock(&mgr->mutex);
+			aml_recycle_dma_buffers(mgr->ctx, recycle_index);
+			return;
 		}
 	}
 out:
@@ -2016,7 +2022,7 @@ out:
 
 	/* for scenes where one frame of multi-packet data is not enough */
 	if (es_node_expand)
-		aml_es_node_expand(mgr);
+		aml_es_node_expand(mgr, false);
 }
 
 void aml_es_node_del(struct aml_es_mgr *mgr, struct aml_es_node *packet, bool flag)
@@ -2132,7 +2138,7 @@ void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 {
 	struct aml_es_node *packet;
 	struct vb2_v4l2_buffer *vb = NULL;
-	bool flag = 0;
+	u32 recycle_index;
 	for (;;) {
 		packet = get_consumed_es_node(&ctx->es_mgr, addr);
 		if (packet == NULL)
@@ -2146,15 +2152,14 @@ void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 		mutex_lock(&ctx->es_mgr.mutex);
 		if (packet->ref_mark) {
 			ref_unmark(packet);
-			flag = 0;
-		} else {
+			aml_es_node_del(&ctx->es_mgr, packet, false);
 			mutex_unlock(&ctx->es_mgr.mutex);
-			aml_recycle_dma_buffers(ctx, packet->index);
-			mutex_lock(&ctx->es_mgr.mutex);
-			flag = 1;
+		} else {
+			recycle_index = packet->index;
+			aml_es_node_del(&ctx->es_mgr, packet, true);
+			mutex_unlock(&ctx->es_mgr.mutex);
+			aml_recycle_dma_buffers(ctx, recycle_index);
 		}
-		aml_es_node_del(&ctx->es_mgr, packet, flag);
-		mutex_unlock(&ctx->es_mgr.mutex);
 	}
 }
 
@@ -4107,6 +4112,8 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		if (ctx->state > AML_STATE_INIT) {
 			wake_up_interruptible(&ctx->cap_wq);
 			aml_vdec_reset(ctx);
+			if (ctx->stream_mode && es_node_expand)
+				aml_es_node_expand(&ctx->es_mgr, true);
 		}
 
 		mutex_lock(&ctx->capture_buffer_lock);
@@ -4133,7 +4140,7 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		}
 
 		aml_buf_reset(&ctx->bm);
-
+		aml_codec_connect(ctx->ada_ctx); /* for resolution change */
 		aml_compressed_info_show(ctx);
 		memset(&ctx->compressed_buf_info, 0, sizeof(ctx->compressed_buf_info));
 		ctx->buf_used_count = 0;

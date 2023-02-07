@@ -3406,9 +3406,6 @@ EXPORT_SYMBOL(vdec_reset);
 
 int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 {
-	//trace_vdec_reset(vdec); /*DEBUG_TMP*/
-	pr_debug("vdec_v4l2_reset %d\n", flag);
-	vdec_disconnect(vdec);
 	if (flag != 2) {
 		if (!vdec->disable_vfm) {
 			if (vdec->vframe_provider.name)
@@ -3451,8 +3448,6 @@ int vdec_v4l2_reset(struct vdec_s *vdec, int flag)
 				vdec->slave->reset(vdec->slave);
 		}
 	}
-
-	vdec_connect(vdec);
 
 	return 0;
 }

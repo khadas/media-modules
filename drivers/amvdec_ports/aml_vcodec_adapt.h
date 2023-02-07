@@ -65,6 +65,8 @@ bool vdec_input_full(struct aml_vdec_adapt *ada_ctx);
 void aml_decoder_flush(struct aml_vdec_adapt *ada_ctx);
 
 int aml_codec_reset(struct aml_vdec_adapt *ada_ctx, int *flag);
+void aml_codec_connect(struct aml_vdec_adapt *ada_ctx);
+void aml_codec_disconnect(struct aml_vdec_adapt *ada_ctx);
 
 extern void dump_write(const char __user *buf, size_t count);
 
