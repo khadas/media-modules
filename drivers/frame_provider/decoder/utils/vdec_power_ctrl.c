@@ -218,6 +218,11 @@ static bool pm_vdec_power_domain_power_state(struct device *dev, int id)
 {
 	const struct power_manager_s *pm = of_device_get_match_data(dev);
 
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) &&
+		((id == VDEC_1) || (id == VDEC_HCODEC))) {
+		return 0;
+	}
+
 	return pm_runtime_active(pm->pd_data[id].dev);
 }
 
