@@ -6892,6 +6892,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 			}
 			vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 			vf->hdr10p_data_size = pic->hdr10p_data_size;
+			set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, pbi->v4l2_ctx);
 		} else {
 			vp9_print(pbi, 0, "bind_hdr10p_buffer fail\n");
 		}

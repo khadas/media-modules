@@ -31,6 +31,7 @@
 #include <linux/scatterlist.h>
 #include <linux/sched/clock.h>
 #include <linux/highmem.h>
+#include <linux/version.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/amlogic/media/canvas/canvas_mgr.h>
 #include <linux/amlogic/media/codec_mm/dmabuf_manage.h>
@@ -3193,6 +3194,7 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 	buf = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
 
 	if (vb->memory == VB2_MEMORY_DMABUF && V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 		if (!ctx->is_drm_mode) {
 			struct dmabuf_videodec_es_data *videodec_es_data;
 			if (dmabuf_manage_get_type(vb->planes[0].dbuf) != DMA_BUF_TYPE_VIDEODEC_ES) {
@@ -3207,9 +3209,17 @@ static int vb2ops_vdec_buf_prepare(struct vb2_buffer *vb)
 				memcpy(buf->meta_data, (void *)videodec_es_data->data, videodec_es_data->data_len);
 			}
 		}
-
+#endif
 		return 0;
 	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
+	if (vb2_v4l2->meta_ptr && (copy_from_user(buf->meta_data,
+		(void *)vb2_v4l2->meta_ptr, META_DATA_SIZE + 4))) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s:copy meta data error. ptr: %lx\n", __func__, vb2_v4l2->meta_ptr);
+	}
+#endif
 
 	q_data = aml_vdec_get_q_data(ctx, vb->vb2_queue->type);
 
