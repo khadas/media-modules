@@ -3237,7 +3237,7 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 	vdec_core_unlock(core, flags);
 }
 
-st_userdata *get_vdec_userdata_ctx()
+st_userdata *get_vdec_userdata_ctx(void)
 {
 	return &userdata;
 }
