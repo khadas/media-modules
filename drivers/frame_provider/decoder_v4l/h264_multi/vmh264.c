@@ -386,7 +386,9 @@ static void vmh264_dump_state(struct vdec_s *vdec);
 			(frame->frame && \
 			 frame->frame->coded_frame && \
 			 (!frame->frame->frame_mbs_only_flag) && \
-			 frame->frame->structure == FRAME))
+			 frame->frame->structure == FRAME) || \
+			 (frame->frame && (frame->frame->pic_struct == PIC_TOP_BOT || \
+			 frame->frame->pic_struct == PIC_TOP_BOT)))
 
 static inline bool close_to(int a, int b, int m)
 {
@@ -945,6 +947,7 @@ struct vdec_h264_hw_s {
 	u32 dpb_frames_bak;
 	u32 dpb_margin_bak;
 	bool reset_flags;
+	u32 is_interlace;
 };
 
 static u32 again_threshold;
@@ -2129,7 +2132,9 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 			pic_struct = p_H264_Dpb->mVideo.dec_picture->pic_struct;
 			if (!((hw->seq_info >> 15) & 0x01) || //frame_mbs_only_flag
 				pic_struct == PIC_DOUBLE_FRAME ||
-				pic_struct == PIC_TRIPLE_FRAME)
+				pic_struct == PIC_TRIPLE_FRAME ||
+				pic_struct == PIC_TOP_BOT ||
+				pic_struct == PIC_BOT_TOP)
 				aml_buf_get_ref(&v4l->bm, aml_buf);
 
 			if (pic_struct == PIC_TOP_BOT_TOP ||
@@ -9103,7 +9108,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->dpb_frames		= dec_dpb_size + 1; /* +1 for two frames in one packet */
 	ps->dpb_margin		= used_reorder_dpb_size_margin;
 	ps->dpb_size		= active_buffer_spec_num;
-	ps->field = frame_mbs_only_flag ?
+	ps->field = (!hw->is_interlace) && frame_mbs_only_flag ?
 		V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 	ps->field 		= hw->high_bandwidth_flag ?
 		V4L2_FIELD_NONE : ps->field;
@@ -9312,6 +9317,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		u32 param2 = READ_VREG(AV_SCRATCH_2);
 		u32 param3 = READ_VREG(AV_SCRATCH_6);
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
+		u8 *trans_data_buf = (u8 *)hw->aux_addr;
 
 		if (input_frame_based(vdec)) {
 			int mb_width = 0;
@@ -9343,6 +9349,19 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 				return;
 			}
 		}
+
+		if (trans_data_buf[7] == AUX_TAG_SEI) {
+			int pic_struct;
+			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
+			pic_struct = p_H264_Dpb->dpb_param.l.data[PICTURE_STRUCT];
+			hw->is_interlace = ((pic_struct == PIC_TOP) || (pic_struct == PIC_BOT) ||
+				(pic_struct == PIC_TOP_BOT) || (pic_struct == PIC_BOT_TOP)) ?  1: 0;
+			dpb_print(DECODE_ID(hw),
+					PRINT_FLAG_UCODE_EVT,
+					"pic_struct %d is_interlace %d\n", pic_struct,
+					hw->is_interlace);
+		}
+
 		if (ctx->param_sets_from_ucode) {
 			if (!v4l_res_change(hw, param1, param2, param3, param4)) {
 				if (!hw->v4l_params_parsed) {

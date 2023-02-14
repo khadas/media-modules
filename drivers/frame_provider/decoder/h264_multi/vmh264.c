@@ -390,7 +390,9 @@ static void vmh264_dump_state(struct vdec_s *vdec);
 			(frame->frame && \
 			 frame->frame->coded_frame && \
 			 (!frame->frame->frame_mbs_only_flag) && \
-			 frame->frame->structure == FRAME))
+			 frame->frame->structure == FRAME) || \
+			 (frame->frame && (frame->frame->pic_struct == PIC_TOP_BOT || \
+			 frame->frame->pic_struct == PIC_TOP_BOT)))
 
 static inline bool close_to(int a, int b, int m)
 {
