@@ -823,7 +823,8 @@ struct aml_vcodec_ctx {
 	void			*mmu_box_1;
 	void			*mmu_box_dw_1;
 #endif
-	atomic_t local_buf_out;
+	atomic_t 		local_buf_out;
+	struct mutex		v4l_intf_lock;
 };
 
 /**
