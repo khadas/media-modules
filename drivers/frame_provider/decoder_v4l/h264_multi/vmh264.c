@@ -948,6 +948,7 @@ struct vdec_h264_hw_s {
 	u32 dpb_margin_bak;
 	bool reset_flags;
 	u32 is_interlace;
+	u8 bufmgr_err_flag;
 };
 
 static u32 again_threshold;
@@ -5838,7 +5839,9 @@ static void bufmgr_recover(struct vdec_h264_hw_s *hw)
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 
 	bufmgr_h264_remove_unused_frame(p_H264_Dpb, 2);
-
+	if (hw->error_proc_policy & 0x20) {
+		hw->reset_bufmgr_flag = 1;
+	}
 }
 
 void bufmgr_force_recover(struct h264_dpb_stru *p_H264_Dpb)
@@ -5953,10 +5956,13 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 1);
 
 		if (hw->reset_bufmgr_flag == 1)
-			buffer_available = 1;
+			hw->bufmgr_err_flag = 1;
 	}
 
-	buffer_available = have_free_buf_spec(vdec);
+	if (hw->bufmgr_err_flag)
+		return 1;
+	else
+		buffer_available = have_free_buf_spec(vdec);
 
 	return buffer_available;
 }
@@ -9662,13 +9668,18 @@ result_done:
 	} else if (hw->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 		bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
-		if (!have_free_buf_spec(vdec)) {
+		if (!is_buffer_available(vdec)) {
 			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
 				hw->dec_result = DEC_RESULT_AGAIN;
 			else
 				hw->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+
 			vdec_schedule_work(&hw->work);
 		} else {
+			if (hw->bufmgr_err_flag) {
+				hw->dec_result = DEC_RESULT_ERROR_DATA;
+				vdec_schedule_work(&hw->work);
+			}
 			hw->get_data_count = 0x7fffffff;
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
 			decode_frame_count[DECODE_ID(hw)]++;
@@ -10027,6 +10038,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		h264_reset_bufmgr_v4l(vdec, 1, false);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
+
+		if (hw->bufmgr_err_flag) {
+			hw->bufmgr_err_flag = 0;
+			hw->dec_result = DEC_RESULT_NONE;
+			vdec_schedule_work(&hw->work);
+			return;
+		}
 	}
 
 	if (h264_debug_cmd & 0xf000) {
