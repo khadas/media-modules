@@ -5565,6 +5565,49 @@ static int get_idle_pos(struct hevc_state_s *hevc)
 	return (i != hevc->used_buf_num) ? i : -1;
 }
 
+static void v4l_crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
+{
+	hevc->crop_w = pic->width;
+	hevc->crop_h = pic->height;
+
+	if (pic->conformance_window_flag &&
+		(get_dbg_flag(hevc) &
+			H265_DEBUG_IGNORE_CONFORMANCE_WINDOW) == 0) {
+		unsigned int SubWidthC, SubHeightC;
+
+		switch (pic->chroma_format_idc) {
+		case 1:
+			SubWidthC = 2;
+			SubHeightC = 2;
+			break;
+		case 2:
+			SubWidthC = 2;
+			SubHeightC = 1;
+			break;
+		default:
+			SubWidthC = 1;
+			SubHeightC = 1;
+			break;
+		}
+		hevc->crop_w -= (SubWidthC *
+			(pic->conf_win_left_offset +
+			pic->conf_win_right_offset));
+		hevc->crop_h -= (SubHeightC *
+			(pic->conf_win_top_offset +
+			pic->conf_win_bottom_offset));
+
+		if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
+			hevc_print(hevc, 0,
+				"conformance_window %d, %d, %d, %d, %d => cropped width %d, height %d, com_w %d com_h %d\n",
+				pic->chroma_format_idc,
+				pic->conf_win_left_offset,
+				pic->conf_win_right_offset,
+				pic->conf_win_top_offset,
+				pic->conf_win_bottom_offset,
+				hevc->crop_w, hevc->crop_h, pic->width, pic->height);
+	}
+}
+
 static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		union param_u *rpm_param)
 {
@@ -5684,6 +5727,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 
 		hevc->aml_buf = NULL;
 	}
+	v4l_crop_pic(hevc, new_pic);
 
 	hevc_print(hevc, H265_DEBUG_BUFMGR,
 		"%s: index %d, buf_idx %d, decode_idx %d, POC %d\n",
@@ -8684,8 +8728,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
 		}
 
-		vf->width = pic->width;
-		vf->height = pic->height;
+		vf->width = hevc->crop_w;
+		vf->height = hevc->crop_h;
 
 		if (force_w_h != 0) {
 			vf->width = (force_w_h >> 16) & 0xffff;
@@ -8707,60 +8751,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->pts_us64 = stream_offset;
 			vf->pts = 0;
 		}
-		/*
-		 *	!!! to do ...
-		 *	need move below code to get_new_pic(),
-		 *	hevc->xxx can only be used by current decoded pic
-		 */
-		if (pic->conformance_window_flag &&
-			(get_dbg_flag(hevc) &
-				H265_DEBUG_IGNORE_CONFORMANCE_WINDOW) == 0) {
-			unsigned int SubWidthC, SubHeightC;
-
-			switch (pic->chroma_format_idc) {
-			case 1:
-				SubWidthC = 2;
-				SubHeightC = 2;
-				break;
-			case 2:
-				SubWidthC = 2;
-				SubHeightC = 1;
-				break;
-			default:
-				SubWidthC = 1;
-				SubHeightC = 1;
-				break;
-			}
-			 vf->width -= SubWidthC *
-				(pic->conf_win_left_offset +
-				pic->conf_win_right_offset);
-			 vf->height -= SubHeightC *
-				(pic->conf_win_top_offset +
-				pic->conf_win_bottom_offset);
-
-			 vf->compWidth -= SubWidthC *
-				(pic->conf_win_left_offset +
-				pic->conf_win_right_offset);
-			 vf->compHeight -= SubHeightC *
-				(pic->conf_win_top_offset +
-				pic->conf_win_bottom_offset);
-
-
-			if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR)
-				hevc_print(hevc, 0,
-					"conformance_window %d, %d, %d, %d, %d => cropped width %d, height %d com_w %d com_h %d\n",
-					pic->chroma_format_idc,
-					pic->conf_win_left_offset,
-					pic->conf_win_right_offset,
-					pic->conf_win_top_offset,
-					pic->conf_win_bottom_offset,
-					vf->width, vf->height, vf->compWidth, vf->compHeight);
-		}
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
-
-		hevc->crop_w = vf->width;
-		hevc->crop_h = vf->height;
 
 		vf->width = vf->width /
 			get_double_write_ratio(pic->double_write_mode);
@@ -10914,6 +10906,9 @@ force_output:
 				hevc->pic_h = hevc->param.p.pic_height_in_luma_samples;
 				hevc->lcu_size = 1 << (log + 3 + log_s);
 				hevc->lcu_size_log2 = log2i(hevc->lcu_size);
+				hevc->crop_w = hevc->pic_w;
+				hevc->crop_h = hevc->pic_w;
+
 				if (performance_profile && ((!is_oversize(hevc->pic_w, hevc->pic_h)) && IS_8K_SIZE(hevc->pic_w,hevc->pic_h)))
 					hevc->performance_profile = 1;
 				else
