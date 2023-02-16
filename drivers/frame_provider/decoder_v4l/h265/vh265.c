@@ -12266,10 +12266,6 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 
 	hevc_local_uninit(hevc);
 
-	if (hevc->gvs)
-		kfree(hevc->gvs);
-	hevc->gvs = NULL;
-
 	if (use_cma) {
 		hevc->uninit_list = 1;
 		reset_process_time(hevc);
@@ -12291,6 +12287,10 @@ static int vmh265_stop(struct hevc_state_s *hevc)
 	cancel_work_sync(&hevc->timeout_work);
 	cancel_work_sync(&hevc->work);
 	uninit_mmu_buffers(hevc);
+
+	if (hevc->gvs)
+		kfree(hevc->gvs);
+	hevc->gvs = NULL;
 
 	vfree(hevc->fw);
 	hevc->fw = NULL;
