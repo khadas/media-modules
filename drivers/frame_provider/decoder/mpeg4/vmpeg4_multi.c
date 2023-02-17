@@ -790,15 +790,23 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		set_frame_info(hw, vf, pic->index);
 
 		hw->vfbuf_use[pic->index]++;
-		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-			"field0: pts %d, pts64 %lld, w %d, h %d, dur %d\n",
-			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-			vf->pts_us64 =
-				(((u64)vf->duration << 32) &
-				0xffffffff00000000) | pic->offset;
-			vf->pts = 0;
+			if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
+				u64 frame_type = 0;
+				if (pic->pic_type == I_PICTURE)
+					frame_type = KEYFRAME_FLAG;
+				else if (pic->pic_type == P_PICTURE)
+					frame_type = PFRAME_FLAG;
+				else
+					frame_type = BFRAME_FLAG;
+				vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+					| pic->offset;
+				vf->pts = 0;
+			}
 		}
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+			"field0: pts %d, pts64 %lld(0x%llx), w %d, h %d, dur %d\n",
+			vf->pts, vf->pts_us64, vf->pts_us64, vf->width, vf->height, vf->duration);
 		if (((error_frame_skip_level & 0x1) && (pic->error_mark)) ||
 			(((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE))) {
@@ -872,8 +880,8 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 
 		hw->vfbuf_use[pic->index]++;
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-			"filed1: pts %d, pts64 %lld, w %d, h %d, dur: %d\n",
-			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
+			"filed1: pts %d, pts64 %lld(0x%llx), w %d, h %d, dur: %d\n",
+			vf->pts, vf->pts_us64, vf->pts_us64, vf->width, vf->height, vf->duration);
 
 		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
 			vf->pts_us64 = (u64)-1;
@@ -967,15 +975,21 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		set_frame_info(hw, vf, index);
 
 		hw->vfbuf_use[index]++;
-		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-			"prog: pts %d, pts64 %lld, w %d, h %d, dur %d\n",
-			vf->pts, vf->pts_us64, vf->width, vf->height, vf->duration);
 		if (vdec_stream_based(vdec) && (!vdec->vbuf.use_ptsserv)) {
-			vf->pts_us64 =
-				(((u64)vf->duration << 32) &
-				0xffffffff00000000) | pic->offset;
+			u64 frame_type = 0;
+			if (pic->pic_type == I_PICTURE)
+				frame_type = KEYFRAME_FLAG;
+			else if (pic->pic_type == P_PICTURE)
+				frame_type = PFRAME_FLAG;
+			else
+				frame_type = BFRAME_FLAG;
+			vf->pts_us64 = (((u64)vf->duration << 32 | (frame_type << 62)) & 0xffffffff00000000)
+				| pic->offset;
 			vf->pts = 0;
 		}
+		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+			"prog: pts %d, pts64 %lld(0x%llx), w %d, h %d, dur %d\n",
+			vf->pts, vf->pts_us64, vf->pts_us64, vf->width, vf->height, vf->duration);
 		if (((error_frame_skip_level & 0x1) && (pic->error_mark)) ||
 			(((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE))) {

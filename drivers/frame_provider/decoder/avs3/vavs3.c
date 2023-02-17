@@ -5865,6 +5865,7 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 
 	if (dec->front_back_mode != 1)
 		update_vf_memhandle(dec, vf, pic);
+
 	if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 		/* offset for tsplayer pts lookup */
 		u64 frame_type = 0;
