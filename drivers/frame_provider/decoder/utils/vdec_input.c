@@ -1151,9 +1151,6 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 			list_move_tail(&block->list,
 				&input->vframe_block_free_list);
 		}
-
-		if (block->free)
-			free_cb = 2;
 	}
 
 	vdec_input_unlock(input, flags);
@@ -1161,7 +1158,7 @@ void vdec_input_release_chunk(struct vdec_input_s *input,
 	if (free_cb == 1) {
 		block->free(block->priv, block->handle);
 		kfree(block);
-	} else if (free_cb == 2)
+	} else if ((block->free != NULL) && (!block->is_out_buf))
 		block->free(block->priv, input->have_frame_num);
 
 	if (tofreeblock)
