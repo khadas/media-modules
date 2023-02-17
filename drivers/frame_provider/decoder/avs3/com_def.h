@@ -1643,8 +1643,8 @@ typedef struct _LibVCData
 	int list_poc_of_RLpic[MAX_CANDIDATE_PIC];
 	int list_libidx_for_RLpic[MAX_CANDIDATE_PIC]; //the idx of library picture instead of poc of library picture in origin sequence is set as new poc.
 
-	double bits_dependencyFile;
-	double bits_libpic;
+	int bits_dependencyFile;
+	int bits_libpic;
 
 	int library_picture_enable_flag;
 #if IPPPCRR

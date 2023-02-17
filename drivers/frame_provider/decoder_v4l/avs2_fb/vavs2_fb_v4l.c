@@ -4386,8 +4386,14 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 	int ret = -1;
 	int bufspec_index = 0;
 
-	struct avs2_decoder_fb dec_fb;
+	struct avs2_decoder_fb *dec_fb = NULL;
 	struct BuffInfo_s *cur_buf_info = NULL;
+
+	dec_fb = vzalloc(sizeof(struct avs2_decoder_fb));
+	if (IS_ERR_OR_NULL(dec_fb)) {
+		pr_info("the struct of avs2_decoder_fb malloc failed.\n");
+		return -ENOMEM;
+	}
 
 	cur_buf_info = &dec->work_space_buf_store;
 	if (force_bufspec) {
@@ -4419,11 +4425,13 @@ static int avs2_local_init(struct AVS2Decoder_s *dec)
 
 	init_buff_spec(dec, cur_buf_info);
 
-	avs2_store_pbi_fb(&dec->avs2_dec, &dec_fb, dec->res_ch_flag);
+	avs2_store_pbi_fb(&dec->avs2_dec, dec_fb, dec->res_ch_flag);
 	memset(&dec->avs2_dec, 0, sizeof(struct avs2_decoder));
-	avs2_restore_pbi_fb(&dec->avs2_dec, &dec_fb, dec->res_ch_flag);
+	avs2_restore_pbi_fb(&dec->avs2_dec, dec_fb, dec->res_ch_flag);
 	init_avs2_decoder(&dec->avs2_dec);
 	dec->pic_list_init_flag = 0;
+
+	vfree(dec_fb);
 
 #ifdef AVS2_10B_MMU
 	avs2_bufmgr_init(dec, cur_buf_info, NULL);

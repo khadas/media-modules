@@ -38,10 +38,10 @@ ulong dos_reg_compat_convert(ulong adr);
 //typedef union param_u param_t;
 
 #define PRINT_HEVC_DATA_PATH_MONITOR
-static   unsigned   mcrcc_hit_rate;
+//static   unsigned   mcrcc_hit_rate;
 static   unsigned   mcrcc_hit_rate_0;
 static   unsigned   mcrcc_hit_rate_1;
-static   unsigned   mcrcc_bypass_rate;
+//static   unsigned   mcrcc_bypass_rate;
 static   unsigned   mcrcc_bypass_rate_0;
 static   unsigned   mcrcc_bypass_rate_1;
 
@@ -107,21 +107,21 @@ static void    mcrcc_get_hitrate_dual(int pic_num)
 
 	if ( raw_mcr_cnt != 0 ) {
 		hitrate = (hit_mcr_0_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] CANV0_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] CANV0_HIT_RATE : %d\n", hitrate);
 		hitrate = (hit_mcr_1_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] CANV1_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] CANV1_HIT_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchcanv *100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] NONCACH_CANV_BYP_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] NONCACH_CANV_BYP_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchoutwin *100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] CACHE_OUTWIN_BYP_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
 	}
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : %d\%\n", pic_num, hitrate);
+		printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : %d\n", pic_num, hitrate);
 		hitrate = ((byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv) * 100 / raw_mcr_cnt);
-		printk("[P%d MCRCC CORE0] MCRCC_BYP_RATE : %d\%\n", pic_num, hitrate);
+		printk("[P%d MCRCC CORE0] MCRCC_BYP_RATE : %d\n", pic_num, hitrate);
 	} else
 	{
 		printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : na\n", pic_num);
@@ -161,21 +161,21 @@ static void    mcrcc_get_hitrate_dual(int pic_num)
 
 	if ( raw_mcr_cnt != 0 ) {
 		hitrate = (hit_mcr_0_cnt * 100 /raw_mcr_cnt);
-		printk("[MCRCC CORE1] CANV0_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] CANV0_HIT_RATE : %d\n", hitrate);
 		hitrate = (hit_mcr_1_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] CANV1_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] CANV1_HIT_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchcanv * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] NONCACH_CANV_BYP_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] NONCACH_CANV_BYP_RATE : %d\n", hitrate);
 		hitrate = (byp_mcr_cnt_nchoutwin * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] CACHE_OUTWIN_BYP_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] CACHE_OUTWIN_BYP_RATE : %d\n", hitrate);
 	}
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : %d\%\n", pic_num, hitrate);
+		printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : %d\n", pic_num, hitrate);
 		hitrate = ((byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv) * 100 /raw_mcr_cnt);
-		printk("[P%d MCRCC CORE1] MCRCC_BYP_RATE : %d\%\n", pic_num, hitrate);
+		printk("[P%d MCRCC CORE1] MCRCC_BYP_RATE : %d\n", pic_num, hitrate);
 	} else
 	{
 		printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : na\n", pic_num);
@@ -218,7 +218,7 @@ static void    decomp_get_hitrate_dual(int pic_num)
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 /raw_mcr_cnt);
-		printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
 	} else
 	{
 		printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : na\n");
@@ -234,10 +234,10 @@ static void    decomp_get_hitrate_dual(int pic_num)
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
 
 		hitrate = (mcrcc_hit_rate_0 + (mcrcc_bypass_rate_0 * hit_mcr_cnt / raw_mcr_cnt ));
-		printk("[MCRCC CORE0] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE0] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\n", hitrate);
 
 	} else
 	{
@@ -256,7 +256,7 @@ static void    decomp_get_hitrate_dual(int pic_num)
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : %d\n", hitrate);
 	} else
 	{
 		printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : na\n");
@@ -272,10 +272,10 @@ static void    decomp_get_hitrate_dual(int pic_num)
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt * 100 / raw_mcr_cnt);
-		printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : %d\n", hitrate);
 
 		hitrate = (mcrcc_hit_rate_1 + (mcrcc_bypass_rate_1 * hit_mcr_cnt / raw_mcr_cnt));
-		printk("[MCRCC CORE1] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\%\n", hitrate);
+		printk("[MCRCC CORE1] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d\n", hitrate);
 
 	} else
 	{
@@ -309,7 +309,7 @@ static void    decomp_get_comprate_dual(int pic_num)
 	if ( raw_ucomp_cnt != 0 )
 	{
 		comprate = ((fast_comp_cnt + slow_comp_cnt) *100 / raw_ucomp_cnt);
-		printk("[MCRCC CORE0] DECOMP_COMP_RATIO : %d\%\n", comprate);
+		printk("[MCRCC CORE0] DECOMP_COMP_RATIO : %d\n", comprate);
 	} else
 	{
 		printk("[MCRCC CORE0] DECOMP_COMP_RATIO : na\n");
@@ -330,7 +330,7 @@ static void    decomp_get_comprate_dual(int pic_num)
 	if ( raw_ucomp_cnt != 0 )
 	{
 		comprate = ((fast_comp_cnt + slow_comp_cnt) * 100 /raw_ucomp_cnt);
-		printk("[MCRCC CORE1] DECOMP_COMP_RATIO : %d\%\n", comprate);
+		printk("[MCRCC CORE1] DECOMP_COMP_RATIO : %d\n", comprate);
 	} else
 	{
 		printk("[MCRCC CORE1] DECOMP_COMP_RATIO : na\n");
@@ -906,7 +906,7 @@ static int init_mmu_fb_bufstate(struct AVS3Decoder_s *dec, int mmu_fb_4k_number)
 		mmu_fb_4k_number,
 		dec->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages");
+		pr_err("%s: failed to alloc fb_mmu0 pages\n", __func__);
 		return -1;
 	}
 
@@ -916,7 +916,7 @@ static int init_mmu_fb_bufstate(struct AVS3Decoder_s *dec, int mmu_fb_4k_number)
 		mmu_fb_4k_number,
 		dec->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages");
+		pr_err("%s: failed to alloc fb_mmu1 pages\n", __func__);
 		return -1;
 	}
 

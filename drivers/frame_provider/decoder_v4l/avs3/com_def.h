@@ -219,7 +219,9 @@
 #define ITER_NUM                            4
 #define INTERVAL_NUM_X 8
 #define INTERVAL_NUM_Y 8
-#define NO_VAR_BINS                        INTERVAL_NUM_X * INTERVAL_NUM_Y
+//temporary fix reconstructCoefInfo brk crash
+//#define NO_VAR_BINS                        INTERVAL_NUM_X*INTERVAL_NUM_Y
+#define NO_VAR_BINS                        16
 #define NO_VAR_BINS_16                     16
 #else
 #define NO_VAR_BINS                        16
@@ -1642,8 +1644,8 @@ typedef struct _LibVCData
 	int list_poc_of_RLpic[MAX_CANDIDATE_PIC];
 	int list_libidx_for_RLpic[MAX_CANDIDATE_PIC]; //the idx of library picture instead of poc of library picture in origin sequence is set as new poc.
 
-	double bits_dependencyFile;
-	double bits_libpic;
+	int bits_dependencyFile;
+	int bits_libpic;
 
 	int library_picture_enable_flag;
 #if IPPPCRR
