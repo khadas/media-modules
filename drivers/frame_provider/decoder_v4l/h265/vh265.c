@@ -8353,10 +8353,23 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			return -1;
 
 		if (pair_pic == NULL || pair_pic->vf_ref <= 0) {
+			unsigned long flags;
 			/*
 			 *if pair_pic is recycled (pair_pic->vf_ref <= 0),
 			 *do not use it
 			 */
+			if (pair_pic == NULL) {
+				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
+					hevc_print(hevc, 0,
+						"%s pair_pic is null, put vf(0x%x) to newframe_q\n",
+						__func__, vf->index);
+
+				spin_lock_irqsave(&h265_lock, flags);
+				kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
+				spin_unlock_irqrestore(&h265_lock, flags);
+				return 0;
+			}
+
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"%s warning(2), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
@@ -8382,6 +8395,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			vf->index &= 0xff;
 			vf->index |= (pair_pic->index << 8);
 			pair_pic->vf_ref++;
+			hevc->pre_top_pic = NULL;
+			hevc->pre_bot_pic = NULL;
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
 			get_pair_fb(hevc, vf);
@@ -8402,6 +8417,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			vf->index &= 0xff00;
 			vf->index |= pair_pic->index;
 			pair_pic->vf_ref++;
+			hevc->pre_top_pic = NULL;
+			hevc->pre_bot_pic = NULL;
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
 			get_pair_fb(hevc, vf);
@@ -8919,12 +8936,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 				if (atomic_read(&hevc->vf_pre_count) == 0)
 					atomic_add(1, &hevc->vf_pre_count);
-
-				/**/
-				if (pic->pic_struct == 9)
-					hevc->pre_top_pic = pic;
-				else
-					hevc->pre_bot_pic = pic;
 			} else {
 				vh265_vf_put(vf, vdec);
 				atomic_add(1, &hevc->vf_get_count);

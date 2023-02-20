@@ -4017,6 +4017,7 @@ static void dump_pic_list(struct hevc_state_s *hevc)
 {
 	int i;
 	struct PIC_s *pic;
+	PR_INIT(256);
 
 	hevc_print(hevc, 0,
 		"pic_list_init_flag is %d\r\n", hevc->pic_list_init_flag);
@@ -4024,9 +4025,8 @@ static void dump_pic_list(struct hevc_state_s *hevc)
 		pic = hevc->m_PIC[i];
 		if (pic == NULL || pic->index == -1)
 			continue;
-		hevc_print_cont(hevc, 0,
-		"index %d buf_idx %d mv_idx %d decode_idx:%d,	POC:%d,	referenced:%d (LT %d),	",
-		 pic->index, pic->BUF_index,
+		PR_FILL("index %d buf_idx %d mv_idx %d decode_idx:%d,	POC:%d,	referenced:%d (LT %d),	",
+			pic->index, pic->BUF_index,
 #ifndef MV_USE_FIXED_BUF
 		pic->mv_buf_index,
 #else
@@ -4039,14 +4039,13 @@ static void dump_pic_list(struct hevc_state_s *hevc)
 		 , 0
 #endif
 		 );
-		hevc_print_cont(hevc, 0,
-			"num_reorder_pic:%d, output_mark:%d, error_mark:%d w/h %d,%d",
-				pic->num_reorder_pic, pic->output_mark, pic->error_mark,
-				pic->width, pic->height);
-		hevc_print_cont(hevc, 0,
-			"output_ready:%d, mv_wr_start %x vf_ref %d\n",
-				pic->output_ready, pic->mpred_mv_wr_start_addr,
-				pic->vf_ref);
+		PR_FILL("num_reorder_pic:%d, output_mark:%d, error_mark:%d w/h %d,%d",
+			pic->num_reorder_pic, pic->output_mark, pic->error_mark,
+			pic->width, pic->height);
+		PR_FILL("output_ready:%d, mv_wr_start %x vf_ref %d\n",
+			pic->output_ready, pic->mpred_mv_wr_start_addr,
+			pic->vf_ref);
+		PR_INFO(hevc->index);
 	}
 }
 
@@ -8464,6 +8463,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 
 	if (kfifo_peek(&hevc->pending_q, &vf)) {
 		if (pair_pic == NULL || pair_pic->vf_ref <= 0) {
+			unsigned long flags;
 			/*
 			 *if pair_pic is recycled (pair_pic->vf_ref <= 0),
 			 *do not use it
@@ -8473,6 +8473,19 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 					"fatal error, no available buffer slot.");
 				return -1;
 			}
+
+			if (pair_pic == NULL) {
+				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
+					hevc_print(hevc, 0,
+						"%s pair_pic is null, put vf(0x%x) to newframe_q\n",
+						__func__, vf->index);
+
+				spin_lock_irqsave(&h265_lock, flags);
+				kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
+				spin_unlock_irqrestore(&h265_lock, flags);
+				return 0;
+			}
+
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 				hevc_print(hevc, 0,
 					"%s warning(2), vf=>display_q: (index 0x%x)\n",
@@ -8507,6 +8520,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vf->index &= 0xff;
 				vf->index |= (pair_pic->index << 8);
 				pair_pic->vf_ref++;
+				hevc->pre_top_pic = NULL;
+				hevc->pre_bot_pic = NULL;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
@@ -8534,6 +8549,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				vf->index &= 0xff00;
 				vf->index |= pair_pic->index;
 				pair_pic->vf_ref++;
+				hevc->pre_top_pic = NULL;
+				hevc->pre_bot_pic = NULL;
 				vdec_vframe_ready(hw_to_vdec(hevc), vf);
 				kfifo_put(&hevc->display_q,
 				(const struct vframe_s *)vf);
@@ -9064,11 +9081,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (hevc->vf_pre_count == 0)
 					hevc->vf_pre_count++;
 
-				/**/
-				if (pic->pic_struct == 9)
-					hevc->pre_top_pic = pic;
-				else
-					hevc->pre_bot_pic = pic;
 			} else {
 				vh265_vf_put(vf, vdec);
 				atomic_add(1, &hevc->vf_get_count);

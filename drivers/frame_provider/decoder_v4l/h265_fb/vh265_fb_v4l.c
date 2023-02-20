@@ -8846,6 +8846,20 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			 *if pair_pic is recycled (pair_pic->vf_ref <= 0),
 			 *do not use it
 			 */
+			unsigned long flags;
+			if (pair_pic == NULL) {
+				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
+					hevc_print(hevc, 0,
+						"%s pair_pic is null, put vf(0x%x) to newframe_q\n",
+						__func__, vf->index);
+
+				spin_lock_irqsave(&h265_lock, flags);
+				kfifo_put(&hevc->newframe_q, (const struct vframe_s *)vf);
+				spin_unlock_irqrestore(&h265_lock, flags);
+				return 0;
+			}
+
+
 			hevc_print(hevc, H265_DEBUG_PIC_STRUCT,
 				"%s warning(2), vf=>display_q: (index 0x%x)\n",
 				__func__, vf->index);
@@ -8871,6 +8885,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			vf->index &= 0xff;
 			vf->index |= (pair_pic->index << 8);
 			pair_pic->vf_ref++;
+			hevc->pre_top_pic = NULL;
+			hevc->pre_bot_pic = NULL;
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
 			kfifo_put(&hevc->display_q,
@@ -8890,6 +8906,8 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 			vf->index &= 0xff00;
 			vf->index |= pair_pic->index;
 			pair_pic->vf_ref++;
+			hevc->pre_top_pic = NULL;
+			hevc->pre_bot_pic = NULL;
 			vdec_vframe_ready(hw_to_vdec(hevc), vf);
 			hevc->send_frame_flag = 1;
 			kfifo_put(&hevc->display_q,
@@ -9465,11 +9483,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (atomic_read(&hevc->vf_pre_count) == 0)
 					atomic_add(1, &hevc->vf_pre_count);
 
-				/**/
-				if (pic->pic_struct == 9)
-					hevc->pre_top_pic = pic;
-				else
-					hevc->pre_bot_pic = pic;
 			} else {
 				vh265_vf_put(vf, vdec);
 				atomic_add(1, &hevc->vf_get_count);
@@ -14786,7 +14799,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		hevc->i_only);
 
 	hevc_print(hevc, 0,
-		"front_back_mode (%d), is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d, fb_rd_pos %d, fb_wr_pos %d, wait_working_buf %d\n",
+		"front_back_mode (%d), is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d, error_count %d, drop_count %d\n",
 		hevc->front_back_mode,
 		input_frame_based(vdec),
 		hevc->eos,
@@ -14797,10 +14810,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 		not_run_ready[hevc->index],
 		input_empty[hevc->index],
 		hevc->gvs->error_frame_count,
-		hevc->gvs->drop_frame_count,
-		hevc->fb_rd_pos,
-		hevc->fb_wr_pos,
-		hevc->wait_working_buf
+		hevc->gvs->drop_frame_count
 		);
 
 	if (vf_get_receiver(vdec->vf_provider_name)) {
