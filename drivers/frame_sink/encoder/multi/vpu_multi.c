@@ -78,6 +78,7 @@
 #define MHz (1000000)
 
 #define VPU_INIT_VIDEO_MEMORY_SIZE_IN_BYTE (256 * SZ_1M)
+#define SIZE_COMMON                 (4*1024*1024)
 
 #define LOG_ALL 0
 #define LOG_INFO 1
@@ -96,6 +97,7 @@ static s32 clock_gate_count = 0;
 static u32 set_clock_freq = 0;
 
 static struct video_mm_t s_vmem;
+static struct video_mm_t s_common_vmem;
 static struct vpudrv_buffer_t s_video_memory = {0};
 static bool use_reserve;
 static ulong cma_pool_size;
@@ -476,6 +478,24 @@ static void vpu_free_dma_buffer(struct vpudrv_buffer_t *vb)
 		vmem_free(&s_vmem, vb->phys_addr, 0);
 }
 
+static s32 vpu_alloc_common_dma_buffer(struct vpudrv_buffer_t *vb)
+{
+	if (!vb)
+		return -1;
+
+	vb->phys_addr = (ulong)vmem_alloc(&s_common_vmem, vb->size, 0);
+	if ((ulong)vb->phys_addr == (ulong)-1) {
+		enc_pr(LOG_ERROR,
+			"Physical memory allocation error size=%d\n",
+			vb->size);
+		return -1;
+	}
+
+	enc_pr(LOG_INFO,
+		"%s: vb->phys_addr 0x%lx\n", __func__,
+		vb->phys_addr);
+	return 0;
+}
 static s32 vpu_free_instances(struct file *filp)
 {
 	struct vpudrv_instance_list_t *vil, *n;
@@ -991,7 +1011,6 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 	}*/
 	filp->private_data = (void *)(&s_vpu_drv_context);
 	spin_unlock(&s_vpu_lock);
-	#if 0
 	if (first_open && !use_reserve) {
 #ifdef CONFIG_CMA
 		s_video_memory.size = cma_cfg_size;
@@ -1027,7 +1046,6 @@ static s32 vpu_open(struct inode *inode, struct file *filp)
 		enc_pr(LOG_ERROR, "MultiEnc memory is not malloced yet wait & retry!\n");
 		r = -EBUSY;
 	}
-	#endif
 	if (first_open) {
 		if ((s_vpu_irq >= 0) && (s_vpu_irq_requested == false)) {
 			s32 err;
@@ -1565,7 +1583,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				ret = down_interruptible(&s_vpu_sem);
 				if (ret != 0)
 					break;
-				if (vpu_alloc_dma_buffer(
+				if (vpu_alloc_common_dma_buffer(
 					&s_common_memory) != -1) {
 					ret = copy_to_user((void __user *)arg,
 						&s_common_memory,
@@ -1615,7 +1633,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 				ret = down_interruptible(&s_vpu_sem);
 				if (ret != 0)
 					break;
-				if (vpu_alloc_dma_buffer(
+				if (vpu_alloc_common_dma_buffer(
 					&s_common_memory) != -1) {
 					buf32.size =
 						s_common_memory.size;
@@ -2490,6 +2508,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 				vfree((const void *)s_instance_pool.base);
 				s_instance_pool.base = 0;
 			}
+			#if 0
 			if (s_common_memory.phys_addr) {
 				enc_pr(LOG_INFO,
 				"vpu_release, s_common_memory 0x%lx\n",
@@ -2497,7 +2516,7 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 				vpu_free_dma_buffer(&s_common_memory);
 				s_common_memory.phys_addr = 0;
 			}
-			#if 0
+			#endif
 			if (s_video_memory.phys_addr && !use_reserve) {
 				enc_pr(LOG_DEBUG,
 					"vpu_release, s_video_memory 0x%lx\n",
@@ -2511,7 +2530,6 @@ static s32 vpu_release(struct inode *inode, struct file *filp)
 				memset(&s_vmem,
 					0, sizeof(struct video_mm_t));
 			}
-			#endif
 			if ((s_vpu_irq >= 0)
 				&& (s_vpu_irq_requested == true)) {
 				free_irq(s_vpu_irq, &s_vpu_drv_context);
@@ -2985,7 +3003,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 	err = of_property_read_u32(np, "config_mm_sz_mb", &cma_cfg_size);
 
 	cma_cfg_size = 100;
-	enc_pr(LOG_DEBUG, "reset cma_cfg_size to 200");
+	enc_pr(LOG_DEBUG, "reset cma_cfg_size to 100");
 
 	if (err) {
 		enc_pr(LOG_DEBUG, "failed to get config_mm_sz_mb node, use default\n");
@@ -3112,30 +3130,30 @@ static s32 vpu_probe(struct platform_device *pdev)
 	}
 	if (!use_reserve) {
 #ifdef CONFIG_CMA
-		s_video_memory.size = cma_cfg_size;
-		s_video_memory.phys_addr = (ulong)codec_mm_alloc_for_dma(VPU_DEV_NAME, cma_cfg_size >> PAGE_SHIFT, 0, 0);
+		s_common_memory.size = SIZE_COMMON*MAX_NUM_VPU_CORE;
+		s_common_memory.phys_addr = (ulong)codec_mm_alloc_for_dma(VPU_DEV_NAME, s_common_memory.size >> PAGE_SHIFT, 0, 0);
 
-		if (s_video_memory.phys_addr) {
-			enc_pr(LOG_DEBUG, "allocating phys 0x%lx, ", s_video_memory.phys_addr);
-			enc_pr(LOG_DEBUG, "virt addr 0x%lx, size %dk\n", s_video_memory.base, s_video_memory.size >> 10);
+		if (s_common_memory.phys_addr) {
+			enc_pr(LOG_DEBUG, "allocating phys 0x%lx, ", s_common_memory.phys_addr);
+			enc_pr(LOG_DEBUG, "virt addr 0x%lx, size %dk\n", s_common_memory.base, s_common_memory.size >> 10);
 
-			if (vmem_init(&s_vmem, s_video_memory.phys_addr, s_video_memory.size) < 0) {
+			if (vmem_init(&s_common_vmem, s_common_memory.phys_addr, s_common_memory.size) < 0) {
 				enc_pr(LOG_ERROR, "fail to init vmem system\n");
 				err = -ENOMEM;
 
-				codec_mm_free_for_dma(VPU_DEV_NAME, (u32)s_video_memory.phys_addr);
-				vmem_exit(&s_vmem);
-				memset(&s_video_memory, 0, sizeof(struct vpudrv_buffer_t));
-				memset(&s_vmem, 0, sizeof(struct video_mm_t));
+				codec_mm_free_for_dma(VPU_DEV_NAME, (u32)s_common_memory.phys_addr);
+				vmem_exit(&s_common_vmem);
+				memset(&s_common_memory, 0, sizeof(struct vpudrv_buffer_t));
+				memset(&s_common_vmem, 0, sizeof(struct video_mm_t));
 				goto ERROR_PROVE_DEVICE;
 			}
 		} else {
-			enc_pr(LOG_ERROR, "Failed to alloc dma buffer %s, phys:0x%lx\n", VPU_DEV_NAME, s_video_memory.phys_addr);
+			enc_pr(LOG_ERROR, "Failed to alloc dma buffer %s, phys:0x%lx\n", VPU_DEV_NAME, s_common_memory.phys_addr);
 
-			if (s_video_memory.phys_addr)
-				codec_mm_free_for_dma(VPU_DEV_NAME, (u32)s_video_memory.phys_addr);
+			if (s_common_memory.phys_addr)
+				codec_mm_free_for_dma(VPU_DEV_NAME, (u32)s_common_memory.phys_addr);
 
-			s_video_memory.phys_addr = 0;
+			s_common_memory.phys_addr = 0;
 			err = -ENOMEM;
 			goto ERROR_PROVE_DEVICE;
 		}
@@ -3143,7 +3161,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 		enc_pr(LOG_ERROR, "No CMA and reserved memory for MultiEnc!!!\n");
 		err = -ENOMEM;
 #endif
-	} else if (!s_video_memory.phys_addr) {
+	} else if (!s_common_memory.phys_addr) {
 		enc_pr(LOG_ERROR, "MultiEnc memory is not malloced yet wait & retry!\n");
 		err = -EBUSY;
 		goto ERROR_PROVE_DEVICE;
@@ -3194,8 +3212,16 @@ static s32 vpu_remove(struct platform_device *pdev)
 	}
 
 	if (s_common_memory.phys_addr) {
-		vpu_free_dma_buffer(&s_common_memory);
-		s_common_memory.phys_addr = 0;
+		if (!use_reserve) {
+			codec_mm_free_for_dma(
+			VPU_DEV_NAME,
+			(u32)s_common_memory.phys_addr);
+		}
+		vmem_exit(&s_common_vmem);
+		memset(&s_common_memory,
+			0, sizeof(struct vpudrv_buffer_t));
+		memset(&s_common_vmem,
+			0, sizeof(struct video_mm_t));
 	}
 
 	if (s_video_memory.phys_addr) {
