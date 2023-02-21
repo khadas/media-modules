@@ -41,17 +41,10 @@
 #include <linux/amlogic/media/utils/amstream.h>
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/utils/aformat.h>
-#ifdef CONFIG_AMLOGIC_MEDIA_FRAME_SYNC
 #include <linux/amlogic/media/frame_sync/tsync.h>
 #include <linux/amlogic/media/frame_sync/ptsserv.h>
 #include <linux/amlogic/media/frame_sync/timestamp.h>
 #include <linux/amlogic/media/frame_sync/tsync_pcr.h>
-#else
-#include "../../include/frame_sync/tsync.h"
-#include "../../include/frame_sync/ptsserv.h"
-#include "../../include/frame_sync/timestamp.h"
-#include "../../include/frame_sync/tsync_pcr.h"
-#endif
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
@@ -300,9 +293,6 @@ static int last_read_wi;
 static u32 force_dv_mode;
 
 static DEFINE_MUTEX(userdata_mutex);
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-#define CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-#endif
 static struct stream_port_s ports[] = {
 	{
 		.name = "amstream_vbuf",

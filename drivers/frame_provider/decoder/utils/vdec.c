@@ -91,6 +91,11 @@
 
 #ifdef CONFIG_AMLOGIC_IONVIDEO
 #include <linux/amlogic/media/video_sink/ionvideo_ext.h>
+#else
+int ionvideo_assign_map(char **receiver_name, int *inst)
+{
+       return -1;
+}
 #endif
 
 //#if IS_ENABLED(CONFIG_AMLOGIC_TEE) || IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
@@ -2682,7 +2687,10 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	char dev_name[32] = {0};
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 	int max_di_count = max_di_instance;
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 	char postprocess_name[64] = {0};
+#endif
+
 	if (vdec_stream_based(vdec))
 		max_di_count = max_supported_di_instance;
 	vdec->is_v4l = is_v4l ? 1 : 0;
@@ -2769,7 +2777,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				VDEC_INPUT_TARGET_VLD);
 	if (vdec_single(vdec) ||
 		(vdec_get_debug_flags() & 0x2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12B))
 		vdec_enable_DMC(vdec);
 	p->cma_dev = vdec_core->cma_dev;
 

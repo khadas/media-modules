@@ -18,9 +18,6 @@
  * Description:
  */
 #ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-#define CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-#endif
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -53,7 +53,11 @@ MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
 u64 last_pcr;
 
+#ifdef CONFIG_AMLOGIC_DVB_DMX
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
+#else
+int demux_get_pcr(int demux_device_index, int index, u64 *pcr) {return -1;}
+#endif
 
 static u64 get_llabs(s64 value){
 	u64 llvalue;
