@@ -1379,10 +1379,10 @@ static unsigned int amstream_userdata_poll(struct file *file,
 	poll_wait(file, &userdata->userdata_wait, wait_table);
 	mutex_lock(&userdata->mutex);
 	for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-		if (userdata->id[i] == userdata->video_id && userdata->ready_flag[i] == 1) {
+		if (userdata->ready_flag[i] == 1) {
 			fd_match = 1;
 			if (vdec_get_debug_flags() & 0x10000000)
-				pr_info("%s, success! id = %d\n", __func__, userdata->video_id);
+				pr_info("%s, success! id = %d\n", __func__, userdata->id[i]);
 			break;
 		}
 	}
@@ -2135,7 +2135,6 @@ static long amstream_ioctl_set(struct port_priv_s *priv, ulong arg)
 			if (userdata->used[i] == 0) {
 				userdata->id[i] = priv->vdec->video_id;
 				userdata->used[i] = 1;
-				userdata->video_id = priv->vdec->video_id;
 				userdata->set_id_flag = 1;
 				break;
 			}
@@ -3113,8 +3112,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 
 			mutex_lock(&userdata->mutex);
 			for (i = 0; i < MAX_USERDATA_CHANNEL_NUM; i++) {
-				if (userdata->video_id == userdata->id[i] &&
-					userdata->ready_flag[i] == 1) {
+				if (userdata->ready_flag[i] == 1) {
 					ready_vdec = userdata->id[i];
 					userdata->ready_flag[i] = 0;
 					ready_flag = 1;
@@ -3122,7 +3120,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 				}
 			}
 			if (!ready_flag) {
-				pr_info("instance %d not ready!\n", userdata->video_id);
+				pr_info("no instance ready!\n");
 				r = -EINVAL;
 			}
 			mutex_unlock(&userdata->mutex);

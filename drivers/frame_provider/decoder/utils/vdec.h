@@ -517,7 +517,6 @@ struct vdec_post_task_parms_s {
 typedef struct {
 	struct mutex mutex;
 	wait_queue_head_t userdata_wait;
-	u32 video_id;
 	u32 set_id_flag;
 	u32 ready_flag[MAX_USERDATA_CHANNEL_NUM];
 	int used[MAX_USERDATA_CHANNEL_NUM];
