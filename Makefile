@@ -46,6 +46,13 @@ ifeq (${PATCHLEVEL},15)
 endif
 endif
 
+ifeq ($(O),)
+out_dir := .
+else
+out_dir := $(O)
+endif
+include $(out_dir)/include/config/auto.conf
+
 modules:
 	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE) $(KBUILD_CFLAGS_MODULE) ${VERSION_CONTROL_CFLAGS}" $(CONFIGS)
 
@@ -53,10 +60,14 @@ all: modules
 
 modules_install:
 	$(MAKE) INSTALL_MOD_STRIP=1 M=$(M)/drivers -C $(KERNEL_SRC) modules_install
-	mkdir -p ${OUT_DIR}/../vendor_lib/modules
-	cd ${OUT_DIR}/$(M)/; find -name "*.ko" -exec cp {} ${OUT_DIR}/../vendor_lib/modules/ \;
-	mkdir -p ${OUT_DIR}/../vendor_lib/firmware/video
-	cp $(KERNEL_SRC)/$(M)/firmware/* ${OUT_DIR}/../vendor_lib/firmware/video/ -rf
+	$(Q)mkdir -p ${out_dir}/../vendor_lib/modules
+	$(Q)mkdir -p ${out_dir}/../vendor_lib/firmware/video
+	$(Q)cp $(KERNEL_SRC)/$(M)/firmware/* ${out_dir}/../vendor_lib/firmware/video/ -rf
+	$(Q)if [ -z "$(CONFIG_AMLOGIC_KERNEL_VERSION)" ]; then \
+		cd ${out_dir}/$(M)/; find -name "*.ko" -exec cp {} ${out_dir}/../vendor_lib/modules/ \; ; \
+	else \
+		find $(INSTALL_MOD_PATH)/lib/modules/*/$(INSTALL_MOD_DIR) -name "*.ko" -exec cp {} ${out_dir}/../vendor_lib/modules \; ; \
+	fi;
 
 clean:
 	$(MAKE) -C $(KERNEL_SRC) M=$(M)  clean
