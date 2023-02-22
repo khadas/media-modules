@@ -1891,7 +1891,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 	aml_buf_put_ref(&ctx->bm, aml_buf);
-
+	vdec_up(vdec);
 	return;
 }
 
@@ -2618,7 +2618,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			level = wp - rp;
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 		}
 	}
 

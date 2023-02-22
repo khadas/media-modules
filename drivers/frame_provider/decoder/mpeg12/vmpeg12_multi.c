@@ -2668,6 +2668,9 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	if (from == 1)
+		hw->timeout_processing = 0;
+
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }
@@ -2777,6 +2780,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		(const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	spin_unlock_irqrestore(&hw->lock, flags);
+	vdec_up(vdec);
 }
 
 
@@ -3545,7 +3549,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 		}
 	}
 

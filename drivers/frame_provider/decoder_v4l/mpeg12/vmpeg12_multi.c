@@ -2560,6 +2560,9 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
+	if (from == 1)
+		hw->timeout_processing = 0;
+
 	if (hw->vdec_cb)
 		hw->vdec_cb(vdec, hw->vdec_cb_arg, CORE_MASK_VDEC_1);
 }
@@ -2669,6 +2672,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->index, hw->vfbuf_use[vf->index]);
 
 	aml_buf_put_ref(&ctx->bm, aml_buf);
+	vdec_up(vdec);
 }
 
 static int vmpeg_event_cb(int type, void *data, void *op_arg)
@@ -3426,7 +3430,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 		}
 	}
 

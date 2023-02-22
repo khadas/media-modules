@@ -159,6 +159,10 @@ enum e_trace_work_status {
 #define mask_front_core(mask) ((mask & ~CORE_MASK_HEVC_BACK) || (mask == 0))
 #define mask_back_core(mask) ((mask & CORE_MASK_HEVC_BACK))
 
+#define PRE_LEVEL_NOT_ENOUGH		0xff
+
+#define DECODER_ON_PROCESS		0x1
+#define VDEC_NOT_READY			0x2
 
 #define META_DATA_SIZE	(256)
 #define HDR10P_BUF_SIZE	(128)
@@ -444,7 +448,9 @@ struct vdec_s {
 	char dec_spend_time_ave[32];
 	char dec_back_spend_time[32];
 	char dec_back_spend_time_ave[32];
+	char dec_event[32];
 	char dec_back_event[32];
+	char stream_buffer_level[32];
 	u32 discard_start_data_flag;
 	u32 video_id;
 	int is_v4l;
@@ -458,6 +464,17 @@ struct vdec_s {
 	char stream_rp[32];
 	spinlock_t power_lock;
 	bool suspend;
+#ifdef NEW_FB_CODE
+	u64 back_irq_thread_cnt;
+	u64 back_irq_cnt;
+#endif
+#ifdef VDEC_DEBUG_SUPPORT
+	u32 ready_to_run_count[VDEC_MAX];
+#endif
+#ifdef NEW_FB_CODE
+	bool front_pic_done;
+	bool back_pic_done;
+#endif
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -691,6 +708,8 @@ extern void vdec_reset_core(struct vdec_s *vdec);
 
 extern void hevc_reset_core(struct vdec_s *vdec);
 
+extern void hevc_arb_ctrl_front_or_back(bool enable, bool front_flag);
+
 extern void vdec_set_suspend_clk(int mode, int hevc);
 
 extern unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask);
@@ -712,6 +731,10 @@ extern void vdec_set_step_mode(void);
 #endif
 
 extern void hevc_mmu_dma_check(struct vdec_s *vdec);
+
+#ifdef NEW_FB_CODE
+extern void fb_hw_status_clear(bool is_front);
+#endif
 
 int vdec_read_user_data(struct vdec_s *vdec,
 				struct userdata_param_t *p_userdata_param);
@@ -747,6 +770,8 @@ int show_stream_buffer_status(char *buf,
 extern int get_double_write_ratio(int dw_mode);
 
 bool is_support_no_parser(void);
+
+bool is_support_dual_core(void);
 
 int vdec_resource_checking(struct vdec_s *vdec);
 
@@ -797,6 +822,8 @@ void register_frame_rate_uevent_func(vdec_frame_rate_event_func func);
 unsigned long vdec_power_lock(struct vdec_s *vdec);
 
 void vdec_power_unlock(struct vdec_s *vdec, unsigned long flags);
+
+void vdec_up(struct vdec_s *vdec);
 
 #define DEBUG_PORT
 #ifdef DEBUG_PORT

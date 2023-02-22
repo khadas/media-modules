@@ -343,10 +343,6 @@ static struct avs2_frame_s *get_pic_by_index(
 	struct AVS2Decoder_s *dec, int index);
 static int avs2_hw_ctx_restore(struct AVS2Decoder_s *dec);
 
-#ifdef NEW_FRONT_BACK_CODE
-static void fb_hw_status_clear(struct AVS2Decoder_s *dec, bool is_front);
-#endif
-
 static const char vavs2_dec_id[] = "vavs2-dev";
 
 #define PROVIDER_NAME   "decoder.avs2"
@@ -1026,7 +1022,6 @@ static void timeout_process(struct AVS2Decoder_s *dec)
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode == 1) {
 		amhevc_stop_f();
-		fb_hw_status_clear(dec, 1);
 	} else
 #endif
 	amhevc_stop();
@@ -4078,7 +4073,7 @@ static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 	}
 #endif
 	WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, buf_spec->swap_buf2.buf_start);
-#ifndef FOR_S5
+
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 		if (buf_spec->max_width <= 4096 && buf_spec->max_height <= 2304)
 			WRITE_VREG(HEVC_DBLK_CFG3, 0x404010); //default value
@@ -4087,7 +4082,7 @@ static void avs2_config_work_space_hw(struct AVS2Decoder_s *dec)
 		avs2_print(dec, AVS2_DBG_BUFMGR,
 			"HEVC_DBLK_CFG3 = %x\n", READ_VREG(HEVC_DBLK_CFG3));
 	}
-#endif
+
 	/* cfg_p_addr */
 	WRITE_VREG(HEVC_DBLK_CFG4, buf_spec->dblk_para.buf_start);
 	/* cfg_d_addr */
@@ -5021,6 +5016,9 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(dec);
+#endif
 	uint8_t index;
 
 	if (vf == (&dec->vframe_dummy))
@@ -5071,6 +5069,9 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->new_frame_displayed++;
 		unlock_buffer(dec, flags);
 	}
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 
 }
 
@@ -5632,18 +5633,6 @@ static void dec_again_process(struct AVS2Decoder_s *dec)
 	}
 	dec->next_again_flag = 1;
 	reset_process_time(dec);
-
-	if (dec->front_back_mode == 1) {
-		u32 data32;
-		data32 = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		data32 &= (~0x3);
-		data32 |= 0x0;
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, data32);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
-			"again, WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1)");
-	}
 
 	vdec_schedule_work(&dec->work);
 }
@@ -6320,6 +6309,7 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE || dec->front_back_mode == 2) {
 		struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
 		reset_process_time_back(dec);
+		vdec->back_pic_done = true;
 		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
 			"BackEnd data done %d, fb_rd_pos %d, HEVC_SAO_CRC %x HEVC_SAO_CRC_DBE1 %x\n",
 			avs2_dec->backend_decoded_count, avs2_dec->fb_rd_pos,
@@ -6439,6 +6429,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 	unsigned int dec_status = dec->dec_status;
 	int i, ret;
 	int32_t start_code = 0;
+	struct vdec_s *vdec = hw_to_vdec(dec);
 
 #ifdef NEW_FB_CODE
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
@@ -6484,6 +6475,7 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		goto irq_handled_exit;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
 		PRINT_LINE();
+		vdec->front_pic_done = true;
 		if ((dec->front_back_mode == 0) &&
 			get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5) {
 			avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
@@ -7570,7 +7562,6 @@ static void vavs2_prot_init(struct AVS2Decoder_s *dec)
 
 	/* enable mailbox interrupt */
 	WRITE_VREG(dec->ASSIST_MBOX0_MASK, 1);
-
 #ifndef FOR_S5
 	/* disable PSCALE for hardware sharing */
 	WRITE_VREG(HEVC_PSCALE_CTRL, 0);
@@ -8319,6 +8310,15 @@ static void avs2_work(struct work_struct *work)
 		dec->stat &= ~STAT_TIMER_ARM;
 	}
 
+#ifdef NEW_FRONT_BACK_CODE
+	if (!vdec->front_pic_done && (dec->front_back_mode == 1)) {
+		fb_hw_status_clear(true);
+		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear front, status 0x%x, status_back 0x%x\n",
+			__func__, dec->dec_status, dec->dec_status_back);
+	}
+#endif
+
 	if (dec->dec_result == DEC_RESULT_DONE)
 		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_WORKER_END);
 
@@ -8345,7 +8345,6 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 		struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
 
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS2_DEC_IDLE);
-		fb_hw_status_clear(dec, 0);
 		amhevc_stop_b();
 
 		mutex_lock(&dec->fb_mutex);
@@ -8369,6 +8368,13 @@ static void avs2_work_back_implement(struct AVS2Decoder_s *dec,
 		if (dec->front_back_mode == 1 ||
 			dec->front_back_mode == 3)
 			release_free_mmu_buffers(dec);
+	}
+
+	if (!vdec->back_pic_done && (dec->front_back_mode == 1)) {
+		fb_hw_status_clear(false);
+		avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear back, status 0x%x, status_back 0x%x\n",
+			__func__, dec->dec_status, dec->dec_status_back);
 	}
 
 	if (dec->stat & STAT_TIMER_BACK_ARM) {
@@ -8477,7 +8483,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		return ret;
 #ifdef NEW_FB_CODE
 	if (dec->front_back_mode && avs2_dec->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 
 	if (dec->eos)
@@ -8573,13 +8579,14 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 			return;
 		}
 
-		vdec->mc_back_loaded = 1;
+		//vdec->mc_back_loaded = 1;
 		vdec->mc_back_type = VFORMAT_HEVC;
 	}
 
 	mod_timer(&dec->timer_back, jiffies);
 	dec->stat |= STAT_TIMER_BACK_ARM;
 
+	vdec->back_pic_done = false;
 	run_count_back[dec->index]++;
 	dec->vdec_back_cb_arg = arg;
 	dec->vdec_back_cb = callback;
@@ -8626,6 +8633,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_RUN_START);
 #ifdef NEW_FRONT_BACK_CODE
 	WRITE_VREG(HEVC_STREAM_CRC, 0);
+	vdec->front_pic_done = false;
 
 	/*simulation code: if (dec_status == HEVC_DECPIC_DATA_DONE) {*/
 	if (dec->front_back_mode) {
@@ -8703,11 +8711,8 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-#ifdef FOR_S5
-	if (avs2_dec->frontend_decoded_count > 0) {
-#else
+
 	if (vdec->mc_loaded) {
-#endif
 		/*firmware have load before,
 			and not changes to another.
 			ignore reload.
@@ -8729,7 +8734,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			vdec_schedule_work(&dec->work);
 			return;
 		}
-		vdec->mc_loaded = 1;
+		//vdec->mc_loaded = 1;
 		vdec->mc_type = VFORMAT_AVS2;
 	}
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_END);
@@ -8830,9 +8835,8 @@ static void avs2_dump_state(struct vdec_s *vdec)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
-#ifndef FOR_S5
 	int i;
-#endif
+
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
@@ -8847,10 +8851,11 @@ static void avs2_dump_state(struct vdec_s *vdec)
 	avs2_print(dec, 0, "====== %s\n", __func__);
 
 	avs2_print(dec, 0,
-		"width/height (%d/%d), used_buf_num %d\n",
+		"width/height (%d/%d), used_buf_num %d, ref_maxbuffer %d\n",
 		dec->avs2_dec.img.width,
 		dec->avs2_dec.img.height,
-		dec->used_buf_num);
+		dec->used_buf_num,
+		dec->avs2_dec.ref_maxbuffer);
 
 	avs2_print(dec, 0,
 		"front_back_mode (%d), is_framebase(%d), eos %d, dec_result 0x%x dec_frm %d disp_frm %d run %d not_run_ready %d input_empty %d\n",
@@ -8876,7 +8881,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 	}
 
 	avs2_print(dec, 0,
-		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), free_buf_count %d (min %d for run_ready)\n",
+		"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), free_buf_count %d (min %d for run_ready), used_cont %d\n",
 		__func__,
 		kfifo_len(&dec->newframe_q),
 		VF_POOL_SIZE,
@@ -8885,14 +8890,10 @@ static void avs2_dump_state(struct vdec_s *vdec)
 		dec->vf_pre_count,
 		dec->vf_get_count,
 		dec->vf_put_count,
-#ifdef FOR_S5
-		0,
-#else
 		get_free_buf_count(dec),
-#endif
-		run_ready_min_buf_num);
+		run_ready_min_buf_num,
+		get_used_buf_count(dec));
 
-#ifndef FOR_S5
 	dump_pic_list(dec);
 
 	for (i = 0; i < MAX_BUF_NUM; i++) {
@@ -8903,7 +8904,7 @@ static void avs2_dump_state(struct vdec_s *vdec)
 			dec->m_mv_BUF[i].size,
 			dec->m_mv_BUF[i].used_flag);
 	}
-#endif
+
 	avs2_print(dec, 0,
 		"HEVC_DEC_STATUS_REG=0x%x\n",
 		READ_VREG(HEVC_DEC_STATUS_REG));

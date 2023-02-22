@@ -8161,6 +8161,9 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	h265_recycle_dec_resource(hevc, aml_buf);
 
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 	return;
 }
 
@@ -12826,6 +12829,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_0, 0);
 
+	if (from == 1)
+		hevc->timeout_processing = 0;
+
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg, CORE_MASK_HEVC);
 }
@@ -12922,7 +12928,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				level = wp - rp;
 
 			if (level < pre_decode_buf_level)
-				return 0;
+				return PRE_LEVEL_NOT_ENOUGH;
 	}
 
 #ifdef AGAIN_HAS_THRESHOLD

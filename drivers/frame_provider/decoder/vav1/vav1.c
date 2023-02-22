@@ -6303,6 +6303,9 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(hw);
+#endif
 	uint8_t index = vf->index & 0xff;
 	unsigned long flags;
 
@@ -6339,7 +6342,9 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 		hw->new_frame_displayed++;
 		unlock_buffer_pool(hw->common.buffer_pool, flags);
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vav1_event_cb(int type, void *data, void *op_arg)

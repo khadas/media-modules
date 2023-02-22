@@ -1323,7 +1323,7 @@ int32_t g_WqMDefault8x8[64] = {
 
 	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "[test.c] Entering hevc_init_decoder_hw\n");
 
-#if 1 //def AVS3_10B_HED_FB
+#if 0 //def AVS3_10B_HED_FB
 	avs3_print(dec, AVS3_DBG_BUFMGR_DETAIL, "[test.c] Init AVS3_10B_HED_FB\n");
 	data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
 	data32 = data32 |
@@ -1506,6 +1506,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 {
 	uint32_t data32;
 	unsigned int decode_mode;
+	uint32_t tmp = 0;
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "%s front_flag %d back_flag %d\n", __func__, front_flag, back_flag);
 	if (dec->front_back_mode != 1) {
 		if (front_flag)
@@ -1518,6 +1519,22 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 			WRITE_VREG(dec->backend_ASSIST_MBOX0_MASK, 1);
 		}
 		return 0;
+	}
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 9) | (1 << 1);
+		tmp = (1 << 0) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 3) | (1 << 13) | (1 << 6) | (1 << 14);
+		tmp = (1 << 2) |  (1 << 11) | (1 << 5) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
 	}
 
 	config_work_space_hw(dec, front_flag, back_flag);
@@ -1766,39 +1783,6 @@ static void print_hevc_b_data_path_monitor(int frame_count)
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
 	printk(" %d", path_wait_ratio);
 	printk("\n");
-}
-
-/* clear unfinished hw status */
-static void fb_hw_status_clear(struct AVS3Decoder_s *dec, bool is_front)
-{
-	u32 reg_val;
-
-	if (dec->front_back_mode != 1)
-		return;
-
-	if (is_front) {
-		/* front end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		reg_val &= (~0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-	} else {
-		/* back end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
-
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
-	}
-
-	avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
-		"%s, clear %d, status 0x%x, status_back 0x%x\n",
-		__func__, is_front, dec->dec_status, dec->dec_status_back);
 }
 
 static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)

@@ -5896,6 +5896,9 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	av1_recycle_dec_resource(hw, aml_buf);
 
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vav1_event_cb(int type, void *data, void *op_arg)

@@ -602,6 +602,7 @@ static void vmjpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
 	atomic_add(1, &hw->put_num);
+	vdec_up(vdec);
 }
 
 static int vmjpeg_event_cb(int type, void *data, void *op_arg)
@@ -1412,7 +1413,7 @@ static unsigned long run_ready(struct vdec_s *vdec,
 			level = wp - rp;
 
 		if (level < pre_decode_buf_level)
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 	}
 
 	ret = is_available_buffer(hw) ? CORE_MASK_VDEC_1 : 0;

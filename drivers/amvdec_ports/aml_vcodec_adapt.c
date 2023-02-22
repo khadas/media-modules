@@ -608,6 +608,15 @@ int vdec_frame_number(struct aml_vdec_adapt *ada_ctx)
 		return -1;
 }
 
+void vdec_thread_wakeup(struct aml_vdec_adapt *ada_ctx)
+{
+	struct vdec_s *vdec = ada_ctx->vdec;
+
+	if (vdec) {
+		vdec_up(vdec);
+	}
+}
+
 void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;

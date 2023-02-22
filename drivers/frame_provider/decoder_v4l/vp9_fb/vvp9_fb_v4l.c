@@ -257,10 +257,6 @@ static int compute_losless_comp_header_size(int width, int height);
 static void mcrcc_perfcount_reset(void);
 static void decomp_perfcount_reset(void);
 
-#ifdef NEW_FRONT_BACK_CODE
-static void fb_hw_status_clear(struct VP9Decoder_s *pbi, bool is_front);
-#endif
-
 static const char vvp9_dec_id[] = "vvp9-dev";
 
 #define PROVIDER_NAME   "decoder.vp9"
@@ -1939,7 +1935,6 @@ static void timeout_process(struct VP9Decoder_s *pbi)
 #ifdef NEW_FB_CODE
 	if (pbi->front_back_mode == 1) {
 		amhevc_stop_f();
-		fb_hw_status_clear(pbi, 1);
 	} else
 #endif
 		amhevc_stop();
@@ -5483,6 +5478,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 	//int  decode_pic_begin = 0;
 	//int decode_pic_num = 0;
 	uint32_t data32;
+	uint32_t tmp = 0;
 	struct BuffInfo_s *buf_spec = pbi->work_space_buf;
 	struct loopfilter *lf = pbi->lf;
 	//struct loop_filter_info_n *lfi = pbi->lfi;
@@ -5499,6 +5495,22 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 
 		}
 		return;
+	}
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 0);
+		tmp = (1 << 1) | (1 << 9) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 2) | (1 << 5);
+		tmp = (1 << 3) | (1 << 13) |  (1 << 11) | (1 << 6) | (1 << 14) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
 	}
 
 	if (back_flag) {
@@ -9350,6 +9362,10 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	vp9_recycle_dec_resource(pbi, aml_buf);
+
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vvp9_event_cb(int type, void *data, void *private_data)
@@ -10137,18 +10153,6 @@ static void dec_again_process(struct VP9Decoder_s *pbi)
 			 */
 			vdec_schedule_work(&pbi->recycle_mmu_work);
 		}
-	}
-
-	if (pbi->front_back_mode == 1) {
-		u32 data32;
-		data32 = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		data32 &= (~0x3);
-		data32 |= 0x0;
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, data32);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
-			"again, WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1)");
 	}
 
 	reset_process_time(pbi);
@@ -11025,6 +11029,7 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		struct PIC_BUFFER_CONFIG_s* pic = pbi->next_be_decode_pic[pbi->fb_rd_pos];
 		struct PIC_BUFFER_CONFIG_s* ref_pic;
 		reset_process_time_back(pbi);
+		vdec->back_pic_done = true;
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "BackEnd data done %d, fb_rd_pos %d pic index %d\n",
 			pbi->backend_decoded_count, pbi->fb_rd_pos, pic->index);
 		if (pbi->front_back_mode == 1) {
@@ -11107,6 +11112,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)data;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	unsigned int dec_status = pbi->dec_status;
+	struct vdec_s *vdec = hw_to_vdec(pbi);
 	int i;
 	uint debug_tag;
 
@@ -11229,6 +11235,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		pbi->process_busy = 0;
 		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec->front_pic_done = true;
 		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODED_FRAME, CORE_MASK_HEVC);
 
 		if (pbi->m_ins_flag) {
@@ -11505,7 +11512,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-			dec_again_process(pbi);
 
 #ifdef NEW_FB_CODE
 			if (pbi->front_back_mode == 1) {
@@ -11522,6 +11528,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				}
 			}
 #endif
+			dec_again_process(pbi);
 
 			return IRQ_HANDLED;
 		} else {
@@ -12512,41 +12519,6 @@ static int vp9_wait_cap_buf(void *args)
 }
 
 #ifdef NEW_FB_CODE
-/* clear unfinished hw status */
-static void fb_hw_status_clear(struct VP9Decoder_s *pbi, bool is_front)
-{
-	u32 reg_val;
-
-	if (pbi->front_back_mode != 1)
-		return;
-
-	if (is_front) {
-		/* front end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		reg_val &= (~0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-	} else {
-		/* back end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
-
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
-	}
-
-	vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
-		"%s, clear %d, status f: 0x%x, b: 0x%x, result f: %x, result b: %x\n",
-		__func__, is_front,
-		pbi->dec_status, pbi->dec_status_back,
-		pbi->dec_result, pbi->dec_back_result);
-}
-
 static void vp9_work_back(struct work_struct *work)
 {
 	struct VP9Decoder_s *pbi = container_of(work,
@@ -12559,7 +12531,6 @@ static void vp9_work_back(struct work_struct *work)
 		struct PIC_BUFFER_CONFIG_s* ref_pic;
 
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_DEC_IDLE);
-		fb_hw_status_clear(pbi, 0);
 		amhevc_stop_b();
 
 		pbi->backend_decoded_count++;
@@ -12596,6 +12567,14 @@ static void vp9_work_back(struct work_struct *work)
 		del_timer_sync(&pbi->timer_back);
 		pbi->stat &= ~STAT_TIMER_BACK_ARM;
 	}
+
+	if (!vdec->back_pic_done && (pbi->front_back_mode == 1)) {
+		fb_hw_status_clear(false);
+		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear back, status 0x%x, status_back 0x%x\n",
+			__func__, pbi->dec_status, pbi->dec_status_back);
+	}
+
 	if (pbi->front_back_mode == 1)
 		amhevc_stop_b();
 	else if (fb_ucode_debug == 1)
@@ -12861,6 +12840,16 @@ static void vp9_work(struct work_struct *work)
 #endif
 			amhevc_stop();
 	}
+
+#ifdef NEW_FB_CODE
+	if (!vdec->front_pic_done && (pbi->front_back_mode == 1)) {
+		fb_hw_status_clear(true);
+		vp9_print(pbi, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear front, status 0x%x, status_back 0x%x\n",
+			__func__, pbi->dec_status, pbi->dec_status_back);
+	}
+#endif
+
 	if (pbi->stat & STAT_VDEC_RUN) {
 #ifdef NEW_FB_CODE
 		if (pbi->front_back_mode == 1)
@@ -13125,7 +13114,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		return ret;
 #ifdef NEW_FB_CODE
 	if (pbi->front_back_mode && pbi->wait_working_buf)
-		return 0;
+		return 0xffffffff;
 #endif
 	if (!pbi->first_sc_checked && pbi->mmu_enable) {
 		int size = decoder_mmu_box_sc_check(ctx->bm.mmu, tvp);
@@ -13718,6 +13707,7 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "run_count_back = %d\n", run_count_back[pbi->index]);
 	pbi->vdec_back_cb_arg = arg;
 	pbi->vdec_back_cb = callback;
+	vdec->back_pic_done = false;
 
 	BackEnd_StartDecoding(pbi);
 	start_process_time_back(pbi);
@@ -13760,6 +13750,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	pbi->vdec_cb_arg = arg;
 	pbi->vdec_cb = callback;
+	vdec->front_pic_done = false;
 	pbi->one_package_frame_cnt = 0;
 #ifdef SUPPORT_FB_DECODING
 	if ((mask & CORE_MASK_HEVC) ||

@@ -1346,6 +1346,8 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 		return;
 
 	aml_buf_put_ref(&ctx->bm, aml_buf);
+
+	vdec_up(vdec);
 }
 
 static int vavs_event_cb(int type, void *data, void *private_data)

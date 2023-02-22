@@ -1342,6 +1342,7 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 	struct AV1Decoder *pbi = hw->pbi;
 	int32_t decode_pic_begin = 0;//picParam[2];
 	int32_t decode_pic_num = 0;//picParam[3];
+	uint32_t tmp = 0;
 
 	if (hw->front_back_mode != 1) {
 		if (front_flag)
@@ -1356,6 +1357,22 @@ void av1_hw_init(struct AV1HW_s *hw, int first_flag, int front_flag, int back_fl
 			hw->stat |= STAT_ISR_REG;
 		}
 		return;
+	}
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 10);
+		tmp = (1 << 0) | (1 << 1) | (1 << 9);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7) | (1 << 11) | (1 << 12);
+		tmp = (1 << 2) | (1 << 3) |  (1 << 13) | (1 << 5) | (1 << 6) | (1 << 14);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
 	}
 
 	aom_config_work_space_hw_fb(hw, front_flag, back_flag);
@@ -2954,41 +2971,6 @@ else{
 	av1_print(hw, AOM_DEBUG_HW_MORE,
 		"[test.c] av1_loop_filter_frame_init (run before every frame decoding start)\n");
 	av1_loop_filter_frame_init_fb(pbi, seg_4lf, lfi, lf, pic->dec_width);
-}
-
-/* clear unfinished hw status */
-static void fb_hw_status_clear(struct AV1HW_s *hw, bool is_front)
-{
-	u32 reg_val;
-
-	if (hw->front_back_mode != 1)
-		return;
-
-	if (is_front) {
-		/* front end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		reg_val &= (~0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-	} else {
-		/* back end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
-
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
-	}
-
-	av1_print(hw, PRINT_FLAG_VDEC_STATUS,
-		"%s, clear %d, status 0x%x, status_back 0x%x\n",
-		__func__, is_front,
-		hw->dec_status, hw->dec_status_back,
-		hw->dec_result, hw->dec_back_result);
 }
 
 void BackEnd_StartDecoding(struct AV1HW_s *hw)

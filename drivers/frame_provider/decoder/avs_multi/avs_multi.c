@@ -1068,6 +1068,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 	int i;
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)op_arg;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	if (vf) {
 		hw->put_num++;
@@ -1091,6 +1092,7 @@ static void vavs_vf_put(struct vframe_s *vf, void *op_arg)
 
 		kfifo_put(&hw->recycle_q, (const struct vframe_s *)vf);
 
+	vdec_up(vdec);
 }
 
 static int vavs_event_cb(int type, void *data, void *private_data)
@@ -2454,7 +2456,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 		}
 	}
 

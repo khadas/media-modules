@@ -1814,6 +1814,7 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 	kfifo_put(&hw->newframe_q, (const struct vframe_s *)vf);
 	spin_unlock_irqrestore(&hw->lock, flags);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
+	vdec_up(vdec);
 }
 
 static int vmpeg_event_cb(int type, void *data, void *op_arg)
@@ -2508,7 +2509,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			level = wp - rp;
 		if (level < pre_decode_buf_level) {
 			hw->not_run_ready++;
-			return 0;
+			return PRE_LEVEL_NOT_ENOUGH;
 		}
 	}
 

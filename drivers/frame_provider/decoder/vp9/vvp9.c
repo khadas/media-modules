@@ -7995,6 +7995,9 @@ static struct vframe_s *vvp9_vf_get(void *op_arg)
 static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)op_arg;
+#ifdef MULTI_INSTANCE_SUPPORT
+	struct vdec_s *vdec = hw_to_vdec(pbi);
+#endif
 	uint8_t index;
 
 	if (vf == (&pbi->vframe_dummy))
@@ -8061,7 +8064,9 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 			trigger_schedule(pbi);
 #endif
 	}
-
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vvp9_event_cb(int type, void *data, void *private_data)

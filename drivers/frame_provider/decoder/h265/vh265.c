@@ -8308,6 +8308,9 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 		}
 	}
 	spin_unlock_irqrestore(&h265_lock, flags);
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vh265_event_cb(int type, void *data, void *op_arg)
@@ -12024,6 +12027,7 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 	return (new_pic != NULL) ? 1 : 0;
 }
 
+#if 0
 static void check_buffer_status(struct hevc_state_s *hevc)
 {
 	int i;
@@ -12085,7 +12089,7 @@ static void check_buffer_status(struct hevc_state_s *hevc)
 		}
 	}
 }
-
+#endif
 
 static int vmh265_stop(struct hevc_state_s *hevc)
 {
@@ -12682,6 +12686,9 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			vdec_v4l_write_frame_sync(ctx);
 	}
 
+	if (from == 1)
+		hevc->timeout_processing = 0;
+
 	if (hevc->vdec_cb)
 		hevc->vdec_cb(hw_to_vdec(hevc), hevc->vdec_cb_arg, CORE_MASK_HEVC);
 }
@@ -12771,7 +12778,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 				level = wp - rp;
 
 			if (level < pre_decode_buf_level)
-				return 0;
+				return PRE_LEVEL_NOT_ENOUGH;
 	}
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -12824,7 +12831,6 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 		if (run_ready_max_buf_num == 0xff &&
 			get_used_buf_count(hevc) >=
 			get_work_pic_num(hevc)) {
-			check_buffer_status(hevc);
 			ret = 0;
 		}
 		else if (run_ready_max_buf_num &&
@@ -13391,7 +13397,7 @@ static void vh265_dump_state(struct vdec_s *vdec)
 	}
 
 	hevc_print(hevc, 0,
-	"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), pic_list_init_flag(%d), is_new_pic_available(%d)\n",
+	"%s, newq(%d/%d), dispq(%d/%d), vf prepare/get/put (%d/%d/%d), pic_list_init_flag(%d), is_new_pic_available(%d), use count(%d) pic_num(%d)\n",
 	__func__,
 	kfifo_len(&hevc->newframe_q),
 	VF_POOL_SIZE,
@@ -13401,8 +13407,9 @@ static void vh265_dump_state(struct vdec_s *vdec)
 	hevc->vf_get_count,
 	hevc->vf_put_count,
 	hevc->pic_list_init_flag,
-	is_new_pic_available(hevc)
-	);
+	is_new_pic_available(hevc),
+	get_used_buf_count(hevc),
+	get_work_pic_num(hevc));
 
 	dump_pic_list(hevc);
 

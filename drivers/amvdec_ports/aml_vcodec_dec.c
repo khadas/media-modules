@@ -3742,6 +3742,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		aml_buf_fill(&ctx->bm, aml_buf, BUF_USER_VSINK);
 
+		vdec_thread_wakeup(ctx->ada_ctx);
+
 		wake_up_interruptible(&ctx->cap_wq);
 		return;
 	} else if (ctx->output_dma_mode) {
@@ -4040,6 +4042,8 @@ static int vb2ops_vdec_start_streaming(struct vb2_queue *q, unsigned int count)
 	v4l2_m2m_set_dst_buffered(ctx->fh.m2m_ctx, true);
 
 	ctx->dst_queue_streaming = true;
+
+	vdec_thread_wakeup(ctx->ada_ctx);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);

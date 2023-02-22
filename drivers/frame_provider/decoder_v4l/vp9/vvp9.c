@@ -7032,6 +7032,10 @@ static void vvp9_vf_put(struct vframe_s *vf, void *op_arg)
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	vp9_recycle_dec_resource(pbi, aml_buf);
+
+#ifdef MULTI_INSTANCE_SUPPORT
+	vdec_up(vdec);
+#endif
 }
 
 static int vvp9_event_cb(int type, void *data, void *private_data)

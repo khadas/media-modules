@@ -881,39 +881,6 @@ static void read_bufstate_front(struct hevc_state_s* hevc)
 	hevc->fr.sys_imem_ptr_v = hevc->sys_imem_ptr_v;
 }
 
-/* clear unfinished hw status */
-static void fb_hw_status_clear(struct hevc_state_s* hevc, bool is_front)
-{
-	u32 reg_val;
-
-	if (hevc->front_back_mode != 1)
-		return;
-
-	if (is_front) {
-		/* front end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_W_CTL);
-		reg_val &= (~0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_W_CTL, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 1);
-	} else {
-		/* back end clr */
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL, reg_val);
-
-		reg_val = READ_VREG(HEVC_ASSIST_FB_R_CTL1);
-		reg_val &= ~(0x3);
-		WRITE_VREG(HEVC_ASSIST_FB_R_CTL1, reg_val);
-
-		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
-	}
-
-	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-		"%s, clear %d, status 0x%x, status_back 0x%x\n",
-		__func__, is_front, hevc->dec_status, hevc->dec_status_back);
-}
-
 /**/
 void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 {
@@ -1062,10 +1029,8 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 		WRITE_VREG(HEVC_DBLK_CFG3, 0x4010); // adp offset(cfg3[23:16]) should be 0
 		WRITE_VREG(HEVC_DBLK_CFG3_DBE1, 0x4010); // adp offset(cfg3[23:16]) should be 0
 	#ifdef HEVC_8K_LFTOFFSET_FIX
-	#ifdef H265_8K
 		WRITE_VREG(HEVC_DBLK_CFG3, 0x8020); // offset should x2 if 8k
 		WRITE_VREG(HEVC_DBLK_CFG3_DBE1, 0x8020); // offset should x2 if 8k
-	#endif
 	#endif
 	#ifdef H265_10B_MMU_DW
 		//WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR2, FRAME_MMU_MAP_ADDR_DW);
@@ -1266,7 +1231,7 @@ static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8
 	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
 #endif // JT
 
-#if 1 //def H265_10B_HED_FB
+#if 0 //def H265_10B_HED_FB
 	//if (back_flag) {
 		//printk("[test.c] Init H265_10B_HED_FB\n");
 		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
@@ -1433,6 +1398,7 @@ static void hevc_init_decoder_hw_fb(hevc_stru_t* hevc, uint8_t front_flag, uint8
 static int32_t hevc_hw_init(hevc_stru_t* hevc, uint8_t bit_depth, uint8_t front_flag, uint8_t back_flag)
 {
 	uint32_t data32 = 0;
+	uint32_t tmp = 0;
 
 	hevc_print(hevc, H265_DEBUG_BUFMGR,
 		"%s front_flag %d back_flag %d\n", __func__, front_flag, back_flag);
@@ -1448,6 +1414,22 @@ static int32_t hevc_hw_init(hevc_stru_t* hevc, uint8_t bit_depth, uint8_t front_
 
 		}
 		return 0;
+	}
+
+	if (front_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7);
+		tmp = (1 << 0) | (1 << 1) | (1 << 9) | (1 << 10);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
+	}
+
+	if (back_flag) {
+		data32 = READ_VREG(HEVC_ASSIST_FB_CTL);
+		data32 = data32 | (3 << 7);
+		tmp = (1 << 2) | (1 << 3) |(1 << 13) | (1 << 11) | (1 << 5) | (1 << 6) | (1 << 14) | (1 << 12);
+		data32 &= ~tmp;
+		WRITE_VREG(HEVC_ASSIST_FB_CTL, data32);
 	}
 
 	hevc_config_work_space_hw_fb(hevc , bit_depth, front_flag, back_flag);
