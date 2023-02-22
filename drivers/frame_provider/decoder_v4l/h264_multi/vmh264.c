@@ -445,6 +445,8 @@ u32 V_BUF_ADDR_OFFSET = 0x200000;
 #define SWITCHING_STATE_ON_CMD3   1
 #define SWITCHING_STATE_ON_CMD1   2
 
+#define SEI_HDR_FMM_MASK	      0x00000010
+
 #define INCPTR(p) ptr_atomic_wrap_inc(&p)
 
 #define SLICE_TYPE_I 2
@@ -966,6 +968,7 @@ struct vdec_h264_hw_s {
 	u32 chunk_offset;
 	u32 consume_byte;
 	u32 reserved_byte;
+	u32 sei_present_flag;
 };
 
 static u32 again_threshold;
@@ -3378,9 +3381,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 #endif
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL,
-			"aux_data_size:%d signal_type:0x%x inst_cnt:%d vf:%p\n",
+			"aux_data_size:%d signal_type:0x%x ext_signal_type:0x%x inst_cnt:%d vf:%p\n",
 			hw->buffer_spec[buffer_index].aux_data_size, hw->video_signal_type,
-			vdec->inst_cnt, vf);
+			vf->ext_signal_type, vdec->inst_cnt, vf);
 
 		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL)) {
 			int i = 0;
@@ -4859,11 +4862,22 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 		struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 		vf->signal_type = hw->video_signal_from_vui;
+		vf->ext_signal_type = 0;
 		memset(&hdr, 0, sizeof(hdr));
 		hdr.signal_type = hw->video_signal_from_vui;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
-	} else
+
+		if (hw->sei_present_flag & SEI_HDR_FMM_MASK) {
+			u32 data;
+			data = vf->ext_signal_type;
+			data = data & 0xFFFFFFFE;
+			data = data | (1<<0);
+			vf->ext_signal_type = data;
+		}
+	} else {
 		vf->signal_type = 0;
+		vf->ext_signal_type = 0;
+	}
 	hw->video_signal_type = vf->signal_type;
 
 	vf->width = hw->frame_width;
@@ -6343,32 +6357,70 @@ static int parse_one_sei_record(struct vdec_h264_hw_s *hw,
 			int data_len;
 			u8 *user_data_buf;
 
-			user_data_buf
-				= hw->sei_itu_data_buf + hw->sei_itu_data_len;
-			/* user data length should be align with 8 bytes,
-			if not, then padding with zero*/
-			for (i = 0; i < payload_size; i += 8) {
-				if (hw->sei_itu_data_len + i >= SEI_ITU_DATA_SIZE)
-					break; // Avoid out-of-bound writing
-				for (j = 0; j < 8; j++) {
-					int index;
+			if (p_sei[0] == 0xB5
+				&& p_sei[1] == 0x00
+				&& p_sei[2] == 0x3D
+				&& p_sei[3] == 0x01
+				&& p_sei[4] == 0x00) {
+				hw->sei_present_flag |= SEI_HDR_FMM_MASK;
 
-					index = i+7-j;
-					if (index >= payload_size)
-						user_data_buf[i+j] = 0;
-					else
-						user_data_buf[i+j]
-							= p_sei[i+7-j];
+				if (dpb_is_debug(DECODE_ID(hw),
+					PRINT_FLAG_SEI_DETAIL)) {
+					dpb_print(DECODE_ID(hw), 0,	"hdr FMM data size %d\n", payload_size);
+					for (i = 0; i < payload_size; i++) {
+						dpb_print_cont(DECODE_ID(hw), 0,
+							"%02x ", p_sei[i]);
+						if (((i + 1) & 0xf) == 0)
+							dpb_print_cont(
+							DECODE_ID(hw),
+								0, "\n");
+					}
+					dpb_print_cont(DECODE_ID(hw),
+						0, "\n");
+				}
+			} else {
+				user_data_buf
+					= hw->sei_itu_data_buf + hw->sei_itu_data_len;
+				/* user data length should be align with 8 bytes,
+				if not, then padding with zero*/
+				for (i = 0; i < payload_size; i += 8) {
+					if (hw->sei_itu_data_len + i >= SEI_ITU_DATA_SIZE)
+						break; // Avoid out-of-bound writing
+					for (j = 0; j < 8; j++) {
+						int index;
+
+						index = i+7-j;
+						if (index >= payload_size)
+							user_data_buf[i+j] = 0;
+						else
+							user_data_buf[i+j]
+								= p_sei[i+7-j];
+					}
+				}
+
+				data_len = payload_size;
+				if (payload_size % 8)
+					data_len = ((payload_size + 8) >> 3) << 3;
+
+				hw->sei_itu_data_len += data_len;
+				if (hw->sei_itu_data_len >= SEI_ITU_DATA_SIZE)
+					hw->sei_itu_data_len = SEI_ITU_DATA_SIZE;
+
+				if (dpb_is_debug(DECODE_ID(hw),
+					PRINT_FLAG_SEI_DETAIL)) {
+					dpb_print(DECODE_ID(hw), 0,	"hdr CC sei_itu_data_len %d\n", hw->sei_itu_data_len);
+					for (i = 0; i < hw->sei_itu_data_len; i++) {
+						dpb_print_cont(DECODE_ID(hw), 0,
+							"%02x ", ((u8 *)hw->sei_itu_data_buf)[i]);
+						if (((i + 1) & 0xf) == 0)
+							dpb_print_cont(
+							DECODE_ID(hw),
+								0, "\n");
+					}
+					dpb_print_cont(DECODE_ID(hw),
+						0, "\n");
 				}
 			}
-
-			data_len = payload_size;
-			if (payload_size % 8)
-				data_len = ((payload_size + 8) >> 3) << 3;
-
-			hw->sei_itu_data_len += data_len;
-			if (hw->sei_itu_data_len >= SEI_ITU_DATA_SIZE)
-				hw->sei_itu_data_len = SEI_ITU_DATA_SIZE;
 		}
 		break;
 	case SEI_RECOVERY_POINT:
