@@ -2659,6 +2659,10 @@ static void vmpeg_vf_put(struct vframe_s *vf, void *op_arg)
 		vf->meta_data_buf = NULL;
 		vf->meta_data_size = 0;
 	}
+	if (vdec_frame_based(vdec)) {
+		ctx->current_timestamp = vf->timestamp;
+		vdec_v4l_post_error_frame_event(ctx);
+	}
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 		"%s: vf: %lx, index: %d, use: %d\n", __func__, (ulong)vf,
