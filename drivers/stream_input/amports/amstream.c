@@ -1639,14 +1639,13 @@ static int amstream_release(struct inode *inode, struct file *file)
 
 				vdec_poweroff(VDEC_1);
 #else
-			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
-				&& port->vformat == VFORMAT_H264
-				&& priv->is_4k) {
-				vdec_poweroff(VDEC_HEVC);
-			}
+				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_TXLX
+					&& port->vformat == VFORMAT_H264
+					&& priv->is_4k) {
+					vdec_poweroff(VDEC_HEVC);
+				}
 
-			if (port->type & BUF_TYPE_HEVC) {
-					pr_info("vdec_poweroff HEVC\n");
+				if (port->type & PORT_TYPE_HEVC) {
 					vdec_poweroff(VDEC_HEVC);
 				} else {
 					vdec_poweroff(VDEC_1);
