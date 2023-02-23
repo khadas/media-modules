@@ -439,9 +439,6 @@ retry:
 
 		aml_buf->state = FB_ST_GE2D;
 
-		/* get reference for vpp wrapper. */
-		if (ctx->vpp)
-			aml_buf_get_ref(&ctx->bm, aml_buf);
 
 		/* fill output vframe information. */
 		memcpy(vf_out, in_buf->vf, sizeof(*vf_out));
@@ -477,11 +474,13 @@ retry:
 
 		if (in_buf->vf->canvas0_config[0].endian == 7)
 			src_fmt |= (is_cpu_t7c() ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)) ?
+						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) ?
 						GE2D_LITTLE_ENDIAN : GE2D_BIG_ENDIAN;
 		else
 			src_fmt |= (is_cpu_t7c() ||
-						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)) ?
+						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+						(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) ?
 						GE2D_BIG_ENDIAN : GE2D_LITTLE_ENDIAN;
 
 		/* negotiate format of destination */
