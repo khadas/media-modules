@@ -617,12 +617,16 @@ void vdec_thread_wakeup(struct aml_vdec_adapt *ada_ctx)
 	}
 }
 
-void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx)
+void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx, bool dmabuf_type)
 {
 	struct vdec_s *vdec = ada_ctx->vdec;
 
-	if (vdec)
-		vdec->port_flag |= PORT_FLAG_DMABUF;
+	if (vdec) {
+		if (dmabuf_type)
+			vdec->port_flag |= PORT_FLAG_DMABUF;
+		else
+			vdec->port_flag &= ~PORT_FLAG_DMABUF;
+	}
 }
 
 int vdec_get_instance_num(void)

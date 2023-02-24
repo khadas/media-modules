@@ -1863,9 +1863,7 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 	} else {
 		ctx->output_dma_mode =
 			(rb->memory == VB2_MEMORY_DMABUF) ? 1 : 0;
-		if (ctx->output_dma_mode) {
-			vdec_set_dmabuf_type(ctx->ada_ctx);
-		}
+		vdec_set_dmabuf_type(ctx->ada_ctx, ctx->output_dma_mode);
 
 		ctx->es_mgr.count = rb->count;
 

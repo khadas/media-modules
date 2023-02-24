@@ -74,7 +74,7 @@ bool is_input_ready(struct aml_vdec_adapt *ada_ctx);
 
 int vdec_frame_number(struct aml_vdec_adapt *ada_ctx);
 
-void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx);
+void vdec_set_dmabuf_type(struct aml_vdec_adapt *ada_ctx, bool dmabuf_type);
 
 int vdec_get_instance_num(void);
 
