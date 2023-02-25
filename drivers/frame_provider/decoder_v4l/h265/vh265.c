@@ -2042,6 +2042,7 @@ static int is_oversize(int w, int h)
 	int max = MAX_SIZE_8K;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		max = MAX_SIZE_4K;
 	else if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
@@ -2061,12 +2062,14 @@ int is_oversize_ex(int w, int h)
 	int max = MAX_SIZE_8K;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		max = MAX_SIZE_4K;
 
 	if (w < 64 || h < 64)
 		return true;
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
 		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		if (w >= h) {
 			if (w > 8192 || h > 4608)
@@ -14666,6 +14669,7 @@ static int __init amvdec_h265_driver_init_module(void)
 			/* m8m2 support 4k */
 			amvdec_h265_profile.profile = "4k";
 		} else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
 					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 			amvdec_h265_profile.profile =
 				"8k, 8bit, 10bit, dwrite, compressed, frame_dv, fence, uvm, multi_frame_dv";

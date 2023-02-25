@@ -7666,7 +7666,8 @@ static int __init amvdec_avs2_driver_init_module(void)
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		amvdec_avs2_profile.name = "avs2_unsupport";
-	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
+	} else if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		if (vdec_is_support_4k())
 			amvdec_avs2_profile.profile =
 				"4k, 10bit, dwrite, compressed";
