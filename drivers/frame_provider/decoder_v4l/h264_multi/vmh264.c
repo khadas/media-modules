@@ -10222,6 +10222,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	config_decode_mode(hw);
 	vdec_enable_input(vdec);
 	WRITE_VREG(NAL_SEARCH_CTL, 0);
+
+	WRITE_VREG(MDEC_EXTIF_CFG2, READ_VREG(MDEC_EXTIF_CFG2) | 0x20);
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "set MDEC_EXTIF_CFG2 bit 5\n");
+
 	hw->sei_data_len = 0;
 	if (enable_itu_t35)
 		WRITE_VREG(NAL_SEARCH_CTL, READ_VREG(NAL_SEARCH_CTL) | 0x1);
