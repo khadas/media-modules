@@ -11027,7 +11027,8 @@ pic_done:
 			hevc->switch_dvlayer_flag = 0;
 #endif
 			hevc->decoded_poc = hevc->curr_POC;
-			hevc->decoding_pic = NULL;
+			if (hevc->discard_dv_data || (!aux_data_is_available(hevc)))
+				hevc->decoding_pic = NULL;
 			hevc->dec_result = DEC_RESULT_DONE;
 
 #ifdef NEW_FB_CODE
