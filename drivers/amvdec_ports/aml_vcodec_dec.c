@@ -311,8 +311,6 @@ static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
 static void vidioc_vdec_s_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 static void vidioc_vdec_g_parm_ext(struct v4l2_ctrl *, struct aml_vcodec_ctx *);
 
-void aml_es_status_dump(struct aml_vcodec_ctx *ctx);
-
 static ulong aml_vcodec_ctx_lock(struct aml_vcodec_ctx *ctx)
 {
 	ulong flags;
@@ -1148,9 +1146,6 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 
 	pr_info("\n==== Show Buffer Status ======== \n");
 	buf_core_walk(&ctx->bm.bc);
-
-	pr_info("\n==== Show ES Status ======== \n");
-	aml_es_status_dump(ctx);
 }
 
 void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)
@@ -1374,6 +1369,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		int offset = vb->planes[0].data_offset;
 		buf.addr = es_data->data_start + offset;
 		buf.size = vb->planes[0].bytesused - offset;
+		buf.dbuf = vb->planes[0].dbuf;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "stream update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x ts %llu\n",
 			buf.addr, buf.size, offset, es_data->data_start, vb->timestamp);
 	} else {
@@ -1416,7 +1412,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
-		if (!ctx->stream_mode && !ctx->output_dma_mode) {
+		if (ctx->stream_mode || !ctx->output_dma_mode) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_8, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_DONE);
@@ -1425,7 +1421,7 @@ static void aml_vdec_worker(struct work_struct *work)
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
-		if (!ctx->stream_mode && !ctx->output_dma_mode) {
+		if (ctx->stream_mode || !ctx->output_dma_mode) {
 			vdec_tracing(&ctx->vtr, VTRACE_V4L_ES_10, buf.size);
 			v4l2_buff_done(&aml_vb->vb,
 				VB2_BUF_STATE_ERROR);
@@ -1917,8 +1913,6 @@ static int vidioc_decoder_reqbufs(struct file *file, void *priv,
 			(rb->memory == VB2_MEMORY_DMABUF) ? 1 : 0;
 		vdec_set_dmabuf_type(ctx->ada_ctx, ctx->output_dma_mode);
 
-		ctx->es_mgr.count = rb->count;
-
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
 			"output buffer memory mode is %d\n", rb->memory);
 	}
@@ -1948,341 +1942,238 @@ static int vidioc_vdec_expbuf(struct file *file, void *priv,
 	return v4l2_m2m_ioctl_expbuf(file, priv, eb);
 }
 
-static void ref_mark(struct aml_es_node *packet)
+static bool is_turn_around(struct aml_es_ref_elem *elem)
 {
-	get_dma_buf(packet->dbuf);
-	packet->ref_mark++;
+	return (elem->au_addr + elem->au_size) >
+		(elem->buf_start + elem->buf_size);
 }
 
-static void ref_unmark(struct aml_es_node *packet)
+static ulong get_remain_pos(struct aml_es_ref_elem *elem)
 {
-	dma_buf_put(packet->dbuf);
-	packet->ref_mark--;
+	return is_turn_around(elem) ?
+		elem->buf_start + (elem->au_size -
+		(elem->buf_start + elem->buf_size - elem->au_addr)) :
+		elem->au_addr + elem->au_size;
 }
 
-struct vb2_v4l2_buffer *aml_get_vb_by_index(struct aml_vcodec_ctx *ctx,
-	s32 index)
+static int aml_es_ref_que(struct aml_es_mgr *stmgr, struct dma_buf *dbuf,
+			    ulong addr, u32 size, u64 timestamp)
 {
-	struct vb2_v4l2_buffer *vb = NULL;
-	struct vb2_queue *q = NULL;
+	struct aml_es_ref_elem *elem;
 
-	q = v4l2_m2m_get_vq(ctx->m2m_ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
-	if (q)
-		vb = to_vb2_v4l2_buffer(q->bufs[index]);
-	else
-		v4l_dbg(ctx, 0,
-				"vb queue is released!\n");
+	/* 1.Get stbuf from free pool. */
+	if (!kfifo_get(&stmgr->free_q, &elem)) {
+		v4l_dbg(stmgr->ctx, 0, "Get elem from free queue fail.\n");
+		return -EBADSLT;
+	}
 
-	return vb;
+	/* 2.Fill stbuf info from dbuf. */
+	elem->dbuf		= dbuf;
+	elem->buf_start		= stmgr->buf_start;
+	elem->buf_size		= stmgr->buf_size;
+	elem->au_addr		= addr;
+	elem->au_size		= size;
+	elem->timestamp		= timestamp;
+
+	if (stmgr->cursor_Wp == -1)
+		stmgr->cursor_Wp = elem->au_addr;
+
+	/* 3.Get dmabuf ref in driver. */
+	get_dma_buf(elem->dbuf);
+
+	atomic_inc(&stmgr->buf_cache);
+
+	/* 4.Add stbuf into the management queue. */
+	kfifo_put(&stmgr->ref_q, elem);
+	v4l_dbg(stmgr->ctx, V4L_DEBUG_CODEC_INPUT,
+		"Get-ref, CPB(%lx, %d), AU(%lx, %d, %d), "
+		"cursor_Wp:%lx, ts:%llu, buf_cache:%d\n",
+		elem->buf_start,
+		elem->buf_size,
+		elem->au_addr,
+		elem->au_size,
+		is_turn_around(elem),
+		stmgr->cursor_Wp,
+		elem->timestamp,
+		atomic_read(&stmgr->buf_cache));
+
+	return 0;
 }
 
-void aml_es_node_alloc(struct aml_es_mgr *mgr)
+static void aml_es_put_ref(struct aml_es_mgr *stmgr,
+			     struct aml_es_ref_elem *elem)
 {
-	struct aml_es_node *packet;
+	/* Update cursor Wp. */
+	stmgr->cursor_Wp = get_remain_pos(elem);
+	atomic_dec(&stmgr->buf_cache);
+	v4l_dbg(stmgr->ctx, V4L_DEBUG_CODEC_INPUT,
+		"Put-ref, CPB(%lx, %d), AU(%lx, %d, %d), "
+		"cursor_Wp:%lx, ts:%llu, buf_cache:%d\n",
+		elem->buf_start,
+		elem->buf_size,
+		elem->au_addr,
+		elem->au_size,
+		is_turn_around(elem),
+		stmgr->cursor_Wp,
+		elem->timestamp,
+		atomic_read(&stmgr->buf_cache));
 
-	packet = vzalloc(sizeof(struct aml_es_node));
-	if (packet == NULL) {
-		v4l_dbg(mgr->ctx, 0,
-		"es node alloc fail!\n");
-		return;
-	}
-	packet->index = INVALID_IDX;
-	list_add_tail(&packet->node, &mgr->free_que);
-	mgr->free_num++;
-	v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-		"%s: free_num(%d)\n",
-		__func__, mgr->free_num);
+	dma_buf_put(elem->dbuf);
+
+	kfifo_put(&stmgr->free_q, elem);
 }
 
-void  aml_es_node_expand(struct aml_es_mgr *mgr, bool recycle_flag)
+static int aml_es_ref_dque(struct aml_es_mgr *stmgr, ulong Rp)
 {
-	struct aml_es_node *packet;
-	struct vb2_v4l2_buffer *vb;
-	u32 recycle_index;
+	struct aml_es_ref_elem *elem;
+	ulong cursor_Wp = stmgr->cursor_Wp;
 
-	mutex_lock(&mgr->mutex);
+	v4l_dbg(stmgr->ctx, V4L_DEBUG_CODEC_INPUT,
+		"Put-ref-start, cursor_Wp:%lx, Rp:%lx\n", cursor_Wp, Rp);
 
-	if (mgr->free_num && !recycle_flag)
-		goto out;
-
-	aml_es_node_alloc(mgr);
-	list_for_each_entry(packet, &mgr->used_que, node) {
-		if (!packet->ref_mark) {
-			vb = aml_get_vb_by_index(mgr->ctx, packet->index);
-			packet->dbuf = vb->vb2_buf.planes[0].dbuf;
-			recycle_index = packet->index;
-			ref_mark(packet);
-			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
-				"used_num(%d), free_num(%d), dbuf(%px)\n",
-				__func__, packet->index,
-				packet->ref_mark, packet->addr,
-				mgr->used_num, mgr->free_num,
-				packet->dbuf);
-			mutex_unlock(&mgr->mutex);
-			aml_recycle_dma_buffers(mgr->ctx, recycle_index);
-			return;
-		}
+	/* Get stbuf from management queue. */
+	if (kfifo_is_empty(&stmgr->ref_q)) {
+		v4l_dbg(stmgr->ctx, 0, "There is no ref elem to process.\n");
+		return 0;
 	}
-out:
-	mutex_unlock(&mgr->mutex);
-}
-
-void aml_es_node_add(struct aml_es_mgr *mgr, ulong addr,
-	u32 size, s32 index)
-{
-	struct aml_es_node *packet, *tmp;
-	int i;
-
-	mutex_lock(&mgr->mutex);
-
-	if (!mgr->alloced) {
-		for (i = 0; i < mgr->count; i++) {
-			aml_es_node_alloc(mgr);
-		}
-		mgr->alloced = true;
+retry:
+	if (!kfifo_peek(&stmgr->ref_q, &elem)) {
+		v4l_dbg(stmgr->ctx, 0, "Peek elem from ref queue fail.\n");
+		return -EINVAL;
 	}
 
-	if (list_empty(&mgr->free_que)) {
-		v4l_dbg(mgr->ctx, 0, "%s, empty free que!\n", __func__);
-		goto out;
-	}
-
-	list_for_each_entry_safe(packet, tmp, &mgr->free_que, node) {
-		if (packet->index == INVALID_IDX) {
-			packet->addr = addr;
-			packet->size = size;
-			packet->index = index;
-			list_del(&packet->node);
-			list_add_tail(&packet->node, &mgr->used_que);
-			mgr->free_num--;
-			mgr->used_num++;
-			v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-				"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx), "
-				"size(%d), used_num(%d), free_num(%d)\n",
-				__func__, packet->index, packet->ref_mark,
-				packet->addr, packet->size,
-				mgr->used_num, mgr->free_num);
-			break;
-		}
-	}
-
-out:
-	mutex_unlock(&mgr->mutex);
-
-	/* for scenes where one frame of multi-packet data is not enough */
-	if (es_node_expand)
-		aml_es_node_expand(mgr, false);
-}
-
-void aml_es_node_del(struct aml_es_mgr *mgr, struct aml_es_node *packet, bool flag)
-{
-	struct aml_es_node *cur_packet, *tmp;
-
-	if (list_empty(&mgr->used_que)) {
-		v4l_dbg(mgr->ctx, 0, "%s, empty used que!\n", __func__);
-		goto out;
-	}
-
-	list_for_each_entry_safe(cur_packet, tmp, &mgr->used_que, node) {
-		if (cur_packet == packet) {
-			list_del(&packet->node);
-			if (flag == 0) {
-				mgr->used_num--;
-				v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-					"%s: delete, vb_idx(%d), ref_mark(%d), addr(0x%lx) "
-					"used_num(%d), free_num(%d)\n",
-					__func__, packet->index, packet->ref_mark,
-					packet->addr, mgr->used_num,
-					mgr->free_num);
-				vfree(packet);
-			} else {
-				list_add_tail(&packet->node, &mgr->free_que);
-				mgr->used_num--;
-				mgr->free_num++;
-				v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-					"%s: vb_idx(%d), ref_mark(%d), addr(0x%lx) "
-					"used_num(%d), free_num(%d)\n",
-					__func__, packet->index, packet->ref_mark,
-					packet->addr, mgr->used_num,
-					mgr->free_num);
-				packet->index = INVALID_IDX;
+	/* Checks the stbuf whether was consumed. */
+	if (Rp >= cursor_Wp) {
+		/*
+		 * If Rp is to the right of the cursor_Wp, except the AU_end
+		 * with around, the others just should be checked Rp >= AU_end,
+		 * means that the AU-data has been consumed.
+		 */
+		if (!is_turn_around(elem) &&
+			(Rp >= get_remain_pos(elem))) {
+			if (!kfifo_get(&stmgr->ref_q, &elem)) {
+				v4l_dbg(stmgr->ctx, 0, "Get elem from ref queue fail.\n");
+				return -EINVAL;
 			}
 
-			break;
-		}
-	}
-out:
-	return;
-}
+			aml_es_put_ref(stmgr, elem);
 
-static struct aml_es_node *get_consumed_es_node(struct aml_es_mgr *mgr, ulong rp)
-{
-	struct aml_es_node *packet;
-	ulong  wp;
-	ulong start = mgr->buf_start;
-	ulong end = mgr->buf_start + mgr->buf_size;
-
-	mutex_lock(&mgr->mutex);
-
-	packet = list_first_entry(&mgr->used_que, struct aml_es_node, node);
-	wp = packet->addr + packet->size;
-
-	mutex_unlock(&mgr->mutex);
-
-	v4l_dbg(mgr->ctx, V4L_DEBUG_CODEC_INPUT,
-		"%s: vb_idx(%d), addr(0x%lx), rp(0x%lx),"
-		" wp(0x%lx), cur_rp(0x%lx), cur_wp(0x%lx)\n",
-		__func__, packet->index, packet->addr,
-		rp, wp, mgr->cur_rp, mgr->cur_wp);
-
-	if (mgr->w_round > mgr->r_round) { /* wp turn around ahead of rp */
-		if (rp < mgr->cur_rp) {
-			if (rp < mgr->cur_wp)
-				return NULL;
-
-			mgr->cur_rp = rp;
-			mgr->r_round++;
-		} else {
-			mgr->cur_rp = rp;
-			return NULL;
-		}
-	} else if (mgr->w_round <  mgr->r_round) { /* rp turn around ahead of wp */
-		mgr->cur_wp = wp;
-		mgr->cur_rp = rp;
-
-		if (wp > end) {
-			mgr->cur_wp = start + wp - end;
-			mgr->cur_rp = rp;
-			if (rp < mgr->cur_wp)
-				return NULL;
-			mgr->w_round++;
+			if (!kfifo_is_empty(&stmgr->ref_q))
+				goto retry;
 		}
 	} else {
-		mgr->w_round = 0;
-		mgr->r_round = 0;
+		/*
+		 * Otherwise, there are 2 cases:
+		 * 1. As long as the AU-data is on the right side of the cursor_Wp
+		 *    and the AU_end is not around, then the AU-data is consumed
+		 * 2. If Rp > AU_end then indicates that the AU-data is consumed.
+		 */
+		if ((!is_turn_around(elem) &&
+			(elem->au_addr >= cursor_Wp)) ||
+			(Rp >= get_remain_pos(elem))) {
+			if (!kfifo_get(&stmgr->ref_q, &elem)) {
+				v4l_dbg(stmgr->ctx, 0, "Get elem from ref queue fail.\n");
+				return -EINVAL;
+			}
 
-		if (wp > end) {
-			mgr->cur_wp = start + wp - end;
-			mgr->cur_rp = rp;
-			mgr->w_round++;
-			return NULL;
-		} else if (rp < mgr->cur_rp) {
-			if (rp > mgr->cur_wp)
-				return NULL;
-			mgr->r_round++;
+			aml_es_put_ref(stmgr, elem);
+
+			if (!kfifo_is_empty(&stmgr->ref_q))
+				goto retry;
 		}
-
-		mgr->cur_wp = wp;
-		mgr->cur_rp = rp;
-
-		if (mgr->w_round == mgr->r_round &&
-			rp < mgr->cur_wp)
-			return NULL;
 	}
 
-	return packet;
+	return 0;
+}
+
+int aml_es_write(struct aml_vcodec_ctx *ctx, struct dma_buf *dbuf,
+			ulong addr, u32 size, u64 timestamp)
+{
+	int ret = -1;
+
+	/* 1.Increase dmabuf reference. */
+	ret = aml_es_ref_que(&ctx->es_mgr, dbuf, addr, size, timestamp);
+	if (ret)
+		return ret;
+
+	/* 2.PTS checkin. */
+	ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, timestamp);
+
+	return ret;
 }
 
 void aml_es_input_free(struct aml_vcodec_ctx *ctx, ulong addr)
 {
-	struct aml_es_node *packet;
-	struct vb2_v4l2_buffer *vb = NULL;
-	u32 recycle_index;
-	for (;;) {
-		packet = get_consumed_es_node(&ctx->es_mgr, addr);
-		if (packet == NULL)
-			break;
-		vb = aml_get_vb_by_index(ctx, packet->index);
-		if (vb == NULL) {
-			v4l_dbg(ctx, 0,
-				"Fail to get vb!\n");
-			return;
-		}
-		mutex_lock(&ctx->es_mgr.mutex);
-		if (packet->ref_mark) {
-			ref_unmark(packet);
-			aml_es_node_del(&ctx->es_mgr, packet, false);
-			mutex_unlock(&ctx->es_mgr.mutex);
-		} else {
-			recycle_index = packet->index;
-			aml_es_node_del(&ctx->es_mgr, packet, true);
-			mutex_unlock(&ctx->es_mgr.mutex);
-			aml_recycle_dma_buffers(ctx, recycle_index);
-		}
-	}
+	aml_es_ref_dque(&ctx->es_mgr, addr);
 }
 
-void aml_es_mgr_init(struct aml_vcodec_ctx *ctx)
+int aml_es_mgr_init(struct aml_vcodec_ctx *ctx)
 {
-	struct aml_es_mgr *mgr = &ctx->es_mgr;
+	struct aml_es_ref_elem *elems = NULL;
+	struct aml_es_mgr *stmgr = &ctx->es_mgr;
+	int ret = -1, i;
 
-	INIT_LIST_HEAD(&mgr->used_que);
-	INIT_LIST_HEAD(&mgr->free_que);
-	mutex_init(&mgr->mutex);
-	mgr->ctx = ctx;
+	INIT_KFIFO(stmgr->free_q);
+	INIT_KFIFO(stmgr->ref_q);
+
+	ret = kfifo_alloc(&stmgr->free_q, AML_ES_REF_MAX, GFP_KERNEL);
+	if (ret) {
+		v4l_dbg(stmgr->ctx, 0, "Alloc free_q fifo fail.\n");
+		return -ENOMEM;
+	}
+
+	ret = kfifo_alloc(&stmgr->ref_q, AML_ES_REF_MAX, GFP_KERNEL);
+	if (ret) {
+		kfifo_free(&stmgr->free_q);
+		v4l_dbg(stmgr->ctx, 0, "Alloc ref_q fifo fail.\n");
+		return -ENOMEM;
+	}
+
+	elems = vzalloc(sizeof(*elems) * AML_ES_REF_MAX);
+	if (!elems) {
+		kfifo_free(&stmgr->free_q);
+		kfifo_free(&stmgr->ref_q);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < AML_ES_REF_MAX; i++) {
+		kfifo_put(&stmgr->free_q, &elems[i]);
+	}
+
+	atomic_set(&stmgr->buf_cache, 0);
+
+	stmgr->cursor_Wp	= -1;
+	stmgr->elems		= elems;
+	stmgr->ctx		= ctx;
+
+	return 0;
 }
 
 void aml_es_mgr_release(struct aml_vcodec_ctx *ctx)
 {
-	struct aml_es_mgr *mgr = &ctx->es_mgr;
-	struct aml_es_node *packet, *tmp;
+	struct aml_es_ref_elem *elem;
+	struct aml_es_mgr *stmgr = &ctx->es_mgr;
 
-	mutex_lock(&mgr->mutex);
-	if (!list_empty(&mgr->used_que)) {
-		list_for_each_entry_safe(packet, tmp, &mgr->used_que, node) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-				"%s: vb_idx(%d), que_num(%d)\n",
-				__func__, packet->index, mgr->used_num);
-			list_del(&packet->node);
-			vfree(packet);
-			mgr->used_num--;
+	if (!stmgr->elems)
+		return;
+
+retry:
+	if (!kfifo_is_empty(&stmgr->ref_q)) {
+		if (!kfifo_get(&stmgr->ref_q, &elem)) {
+			v4l_dbg(stmgr->ctx, 0, "Get elem from ref queue fail.\n");
+			goto out;
 		}
+
+		aml_es_put_ref(stmgr, elem);
+
+		goto retry;
 	}
+out:
+	kfifo_free(&stmgr->free_q);
 
-	if (!list_empty(&mgr->free_que)) {
-		list_for_each_entry_safe(packet, tmp, &mgr->free_que, node) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT,
-				"%s: vb_idx(%d), que_num(%d)\n",
-				__func__, packet->index, mgr->free_num);
-			list_del(&packet->node);
-			vfree(packet);
-			mgr->free_num--;
-		}
-	}
+	kfifo_free(&stmgr->ref_q);
 
-	mgr->used_num = 0;
-	mgr->free_num = 0;
-
-	mutex_unlock(&mgr->mutex);
-}
-
-void aml_es_status_dump(struct aml_vcodec_ctx *ctx)
-{
-	struct aml_es_mgr *mgr = &ctx->es_mgr;
-	struct aml_es_node *packet;
-
-	mutex_lock(&mgr->mutex);
-	pr_info("\nUsed queue elements:\n");
-	if (!list_empty(&mgr->used_que)) {
-		list_for_each_entry(packet, &mgr->used_que, node) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-				"--> addr:%lx, size:%d, index:%d, ref:%d, used:%d\n",
-				packet->addr, packet->size, packet->index,
-				packet->ref_mark, mgr->used_num);
-		}
-	}
-
-	pr_info("\nFree queue elements:\n");
-	if (!list_empty(&mgr->free_que)) {
-		list_for_each_entry(packet, &mgr->free_que, node) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-				"--> addr:%lx, size:%d, index:%d, ref:%d, free:%d\n",
-				packet->addr, packet->size, packet->index,
-				packet->ref_mark, mgr->free_num);
-		}
-	}
-	mutex_unlock(&mgr->mutex);
+	vfree(stmgr->elems);
 }
 
 void aml_vcodec_dec_release(struct aml_vcodec_ctx *ctx)
@@ -3852,6 +3743,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 		src_mem.addr = es_data->data_start + offset;
 		src_mem.size = vb->planes[0].bytesused - offset;
+		src_mem.dbuf = vb->planes[0].dbuf;
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_INPUT, "update wp 0x%lx + sz 0x%x offset 0x%x ori start 0x%x pts %llu\n",
 			src_mem.addr, src_mem.size, offset, es_data->data_start, vb->timestamp);
@@ -3873,7 +3765,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 		v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 		/* frame mode and non-dbuf mode. */
-		if (!ctx->stream_mode && !ctx->output_dma_mode) {
+		if (ctx->stream_mode || !ctx->output_dma_mode) {
 			v4l2_buff_done(to_vb2_v4l2_buffer(vb),
 				VB2_BUF_STATE_DONE);
 		}
@@ -3888,7 +3780,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
 
 	/* frame mode and non-dbuf mode. */
-	if (!ctx->stream_mode && !ctx->output_dma_mode) {
+	if (ctx->stream_mode || !ctx->output_dma_mode) {
 		v4l2_buff_done(to_vb2_v4l2_buffer(vb),
 			VB2_BUF_STATE_DONE);
 	}
@@ -4166,8 +4058,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		if (ctx->state > AML_STATE_INIT) {
 			wake_up_interruptible(&ctx->cap_wq);
 			aml_vdec_reset(ctx);
-			if (ctx->stream_mode && es_node_expand)
-				aml_es_node_expand(&ctx->es_mgr, true);
 		}
 
 		mutex_lock(&ctx->capture_buffer_lock);

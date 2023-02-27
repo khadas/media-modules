@@ -30,6 +30,7 @@
 #include "aml_task_chain.h"
 #include "aml_buf_mgr.h"
 
+
 #ifdef CONFIG_AMLOGIC_MEDIA_VIDEO
 #include <linux/amlogic/media/video_sink/v4lvideo_ext.h>
 #else
@@ -145,32 +146,32 @@ struct aml_v4l2_buf {
 	ulong addr;
 };
 
-struct aml_es_node {
-	ulong addr;
-	u32 size;
-	int index; /* vb2 index */
-	struct list_head node;
-	u32 ref_mark;
-	struct dma_buf *dbuf;
-};
+#define AML_ES_REF_MAX (1024)
 
 struct aml_es_mgr {
-	struct list_head used_que;
-	struct list_head free_que;
-	u32 used_num;
-	u32 free_num;
-	struct mutex mutex;
-	struct aml_vcodec_ctx *ctx;
-	int count; /* vb2 count */
-	bool alloced;
+	DECLARE_KFIFO_PTR(ref_q, typeof(struct aml_es_ref_elem*));
+	DECLARE_KFIFO_PTR(free_q, typeof(struct aml_es_ref_elem*));
+	void *elems;
+
+	/* The start position of unconsumed. */
+	ulong cursor_Wp;
+
 	ulong buf_start;
 	u32 buf_size;
-	u32 buf_flag;
-	ulong cur_wp;
-	ulong cur_rp;
-	u32 r_round;
-	u32 w_round;
+
+	struct aml_vcodec_ctx *ctx;
+	atomic_t buf_cache;
 };
+
+struct aml_es_ref_elem {
+	struct dma_buf *dbuf;
+	ulong buf_start;
+	u32 buf_size;
+	ulong au_addr;
+	u32 au_size;
+	u64 timestamp;
+};
+
 
 extern const struct v4l2_ioctl_ops aml_vdec_ioctl_ops;
 extern const struct v4l2_m2m_ops aml_vdec_m2m_ops;
@@ -216,10 +217,11 @@ void aml_canvas_cache_put(struct aml_vcodec_dev *dev);
 int aml_canvas_cache_get(struct aml_vcodec_dev *dev, char *usr);
 int aml_uvm_buff_attach(struct vb2_buffer * vb);
 
-void aml_es_mgr_init(struct aml_vcodec_ctx *ctx);
+int aml_es_mgr_init(struct aml_vcodec_ctx *ctx);
 void aml_es_mgr_release(struct aml_vcodec_ctx *ctx);
-void aml_es_node_add(struct aml_es_mgr *mgr, ulong addr,
-	u32 size, s32 index);
+
+int aml_es_write(struct aml_vcodec_ctx *ctx, struct dma_buf *dbuf,
+			ulong addr, u32 size, u64 timestamp);
 
 void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 						  struct aml_buf *aml_buf,

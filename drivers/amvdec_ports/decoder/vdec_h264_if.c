@@ -699,9 +699,8 @@ static int vdec_h264_probe(unsigned long h_vdec,
 	int ret = 0;
 
 	if (ctx->stream_mode) {
-		ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, bs->timestamp);
+		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
 		vdec_write_stream_data(adapt_vdec, (u32)bs->addr, size);
-		aml_es_node_add(&ctx->es_mgr, bs->addr, size, bs->index);
 		return 0;
 	}
 
@@ -891,9 +890,8 @@ static int vdec_h264_decode(unsigned long h_vdec,
 	size = bs->size;
 
 	if (ctx->stream_mode) {
-		ctx->pts_serves_ops->checkin(ctx->ptsserver_id, size, bs->timestamp);
+		aml_es_write(ctx, bs->dbuf, bs->addr, size, bs->timestamp);
 		vdec_write_stream_data(vdec, (u32)bs->addr, size);
-		aml_es_node_add(&ctx->es_mgr, bs->addr, size, bs->index);
 		return size;
 	}
 
