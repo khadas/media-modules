@@ -3505,7 +3505,7 @@ s32 jpegenc_loadmc(const char *p)
         memset(mc_addr, 0, MC_SIZE);
     }
 
-    ret = get_data_from_name("t7_jpeg_enc", (u8 *)mc_addr);
+    ret = get_data_from_name("gxl_jpeg_enc", (u8 *)mc_addr);
     //ret = get_firmware_data(VIDEO_ENC_JPEG, (u8 *)mc_addr);
 
     dump_mem(mc_addr);
@@ -3534,7 +3534,7 @@ s32 jpegenc_loadmc(const char *p)
         jenc_pr(LOG_INFO, "sc2 HCODEC_IMEM_DMA_CTRL (0x8000 | (7 << 16))\n");
         WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (7 << 16))); // Endian : 4'b1000);
     } else
-        WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (0 & 0xffff))); // Endian : 4'b1000);
+        WRITE_HREG(HCODEC_IMEM_DMA_CTRL, (0x8000 | (7 << 16))); // Endian : 4'b1000);
 
     while (READ_HREG(HCODEC_IMEM_DMA_CTRL) & 0x8000) {
         if (time_before(jiffies, timeout)) {
