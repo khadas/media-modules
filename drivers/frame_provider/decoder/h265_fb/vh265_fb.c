@@ -8561,7 +8561,9 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->fb_wr_pos = 0;
 		hevc->fb_rd_pos = 0;
 		PRINT_LINE();
-		init_fb_bufstate(hevc);
+		ret = init_fb_bufstate(hevc);
+		if (ret)
+			return -1;
 		copy_loopbufs_ptr(&hevc->next_bk[hevc->fb_wr_pos], &hevc->fr);
 		PRINT_LINE();
 	}
@@ -16458,6 +16460,9 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		mutex_unlock(&vh265_mutex);
 		return ret;
+	}  else {
+		if (!vdec_secure(hw_to_vdec(hevc)))
+			codec_mm_memset(hevc->buf_start, 0, work_buf_size);
 	}
 	hevc->buf_size = work_buf_size;
 #endif

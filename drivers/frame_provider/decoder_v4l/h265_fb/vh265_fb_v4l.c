@@ -8087,7 +8087,9 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->fb_rd_pos = 0;
 		PRINT_LINE();
 		if (!hevc->reset_flag) {
-			init_fb_bufstate(hevc);
+			ret = init_fb_bufstate(hevc);
+			if (ret)
+				return -1;
 			copy_loopbufs_ptr(&hevc->next_bk[hevc->fb_wr_pos], &hevc->fr);
 		}
 		PRINT_LINE();
@@ -15677,12 +15679,13 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 		pdata->dec_status = NULL;
 		mutex_unlock(&vh265_mutex);
 		return ret;
+	} else {
+		if (!vdec_secure(hw_to_vdec(hevc)))
+			codec_mm_memset(hevc->buf_start, 0, work_buf_size);
 	}
-	hevc->buf_size = work_buf_size;
 
-	if (!vdec_secure(hw_to_vdec(hevc))) {
-		vdec_mm_dma_flush(hevc->buf_start, work_buf_size);
-	}
+
+	hevc->buf_size = work_buf_size;
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXTVBB) &&
 		(parser_sei_enable & 0x100) == 0)
