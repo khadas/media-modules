@@ -956,6 +956,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 
 	kfifo_put(&ge2d->in_done_q, in_buf);
 	update_ge2d_num_cache(ge2d);
+	aml_buf_update_holder(&ge2d->ctx->bm, aml_buf, BUF_USER_GE2D, BUF_GET);
 	up(&ge2d->sem_in);
 
 	return 0;

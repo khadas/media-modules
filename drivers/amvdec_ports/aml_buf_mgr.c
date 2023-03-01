@@ -538,7 +538,7 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 		kref_read(&bc->core_ref),
 		bc->free_num);
 
-	if (!task_chain_empty(buf->task)) {
+	if (entry->user != BUF_USER_MAX && !task_chain_empty(buf->task)) {
 		task_chain_clean(buf->task);
 	}
 
@@ -613,6 +613,33 @@ static void aml_buf_input(struct buf_core_mgr_s *bc,
 	buf->task->recycle(buf->task, user_to_task(user));
 }
 
+static int aml_buf_get_pre_user(struct buf_core_mgr_s *bc,
+		   struct buf_core_entry *entry,
+		   enum buf_core_user user)
+{
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	struct aml_buf *buf = entry_to_aml_buf(entry);
+	int type;
+
+	if (task_chain_empty(buf->task))
+		return BUF_USER_MAX;
+
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		__func__,
+		entry->user,
+		entry->key,
+		entry->state,
+		bc->state,
+		atomic_read(&entry->ref),
+		kref_read(&bc->core_ref),
+		bc->free_num);
+
+	type = buf->task->get_pre_user(buf->task, user_to_task(user));
+
+	return task_to_user(type);
+}
+
 int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 {
 	int ret = -1;
@@ -626,6 +653,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 	bm->bc.prepare		= aml_buf_prepare;
 	bm->bc.input		= aml_buf_input;
 	bm->bc.output		= aml_buf_output;
+	bm->bc.get_pre_user	= aml_buf_get_pre_user;
 	bm->bc.external_process	= aml_external_process;
 	bm->bc.mem_ops.alloc	= aml_buf_alloc;
 	bm->bc.mem_ops.free	= aml_buf_free;

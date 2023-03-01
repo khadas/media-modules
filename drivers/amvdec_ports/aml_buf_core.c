@@ -30,10 +30,129 @@ static bool bc_sanity_check(struct buf_core_mgr_s *bc)
 
 static void buf_core_destroy(struct kref *kref);
 
+static void direction_buf_get(struct buf_core_mgr_s *bc,
+			  struct buf_core_entry *entry,
+			  enum buf_core_user user)
+{
+	int type;
+	switch (user) {
+		case BUF_USER_DEC:
+			entry->holder = BUF_HOLDER_DEC;
+			entry->ref_bit_map += DEC_BIT;
+
+			break;
+		case BUF_USER_VPP:
+			entry->holder = BUF_HOLDER_VPP;
+			entry->ref_bit_map += VPP_BIT;
+
+			type = bc->get_pre_user(bc, entry, user);
+			if (type == BUF_USER_DEC)
+				entry->ref_bit_map -= DEC_BIT;
+			if (type == BUF_USER_GE2D)
+				entry->ref_bit_map -= GE2D_BIT;
+
+			break;
+		case BUF_USER_GE2D:
+			entry->holder = BUF_HOLDER_GE2D;
+			entry->ref_bit_map += GE2D_BIT;
+			entry->ref_bit_map -= DEC_BIT;
+
+			break;
+		case BUF_USER_VSINK:
+			entry->holder = BUF_HOLDER_VSINK;
+			entry->ref_bit_map += VSINK_BIT;
+
+			type = bc->get_pre_user(bc, entry, user);
+			if (type == BUF_USER_VPP)
+				entry->ref_bit_map -= VPP_BIT;
+			if (type == BUF_USER_DEC)
+				entry->ref_bit_map -= DEC_BIT;
+			if (type == BUF_USER_GE2D)
+				entry->ref_bit_map -= GE2D_BIT;
+
+			break;
+		default:
+			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+			"Invalid user(%d)!\n", user);
+			break;
+	}
+}
+
+static void direction_buf_put(struct buf_core_mgr_s *bc,
+			  struct buf_core_entry *entry,
+			  enum buf_core_user user)
+{
+	switch (user) {
+		case BUF_USER_DEC:
+			if (entry->ref_bit_map & DEC_MASK)
+				entry->ref_bit_map -= DEC_BIT;
+			if (entry->ref_bit_map & GE2D_MASK)
+				entry->holder = BUF_HOLDER_GE2D;
+			if (entry->ref_bit_map & VPP_MASK)
+				entry->holder = BUF_HOLDER_VPP;
+			if (entry->ref_bit_map & VSINK_MASK)
+				entry->holder = BUF_HOLDER_VSINK;
+
+			break;
+		case BUF_USER_VPP:
+			entry->ref_bit_map -= VPP_BIT;
+			if (entry->ref_bit_map & VPP_MASK)
+				entry->holder = BUF_HOLDER_VPP;
+			else {
+				if (entry->ref_bit_map & GE2D_MASK)
+					entry->holder = BUF_HOLDER_GE2D;
+				if (entry->ref_bit_map & DEC_MASK)
+					entry->holder = BUF_HOLDER_DEC;
+			}
+
+			break;
+		case BUF_USER_GE2D:
+			entry->ref_bit_map -= GE2D_BIT;
+			if (entry->ref_bit_map & GE2D_MASK)
+				entry->holder = BUF_HOLDER_GE2D;
+			else
+				entry->holder = BUF_HOLDER_DEC;
+
+			break;
+		case BUF_USER_VSINK:
+			entry->ref_bit_map -= VSINK_BIT;
+			entry->holder = BUF_HOLDER_DEC;
+
+			break;
+		default:
+			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
+			"Invalid user(%d)!\n", user);
+			break;
+	}
+}
+
+static void buf_core_update_holder(struct buf_core_mgr_s *bc,
+			  struct buf_core_entry *entry,
+			  enum buf_core_user user,
+			  enum buf_direction direction)
+{
+	if (direction == BUF_GET)
+		direction_buf_get(bc, entry, user);
+	else
+		direction_buf_put(bc, entry, user);
+
+	if (entry->ref_bit_map & 0x8888)
+		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+		"error! ref_bit_map(0x%x)\n", entry->ref_bit_map);
+
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, holder:%d, ref_bit_map(0x%x)\n",
+		__func__, user, entry->holder, entry->ref_bit_map);
+
+	return;
+}
+
 static void buf_core_free_que(struct buf_core_mgr_s *bc,
 			     struct buf_core_entry *entry)
 {
 	entry->state = BUF_STATE_FREE;
+	entry->holder = BUF_HOLDER_FREE;
+	entry->ref_bit_map = 0;
 	list_add_tail(&entry->node, &bc->free_que);
 	bc->free_num++;
 
@@ -76,10 +195,6 @@ static void buf_core_get(struct buf_core_mgr_s *bc,
 	entry->state	= BUF_STATE_USE;
 	atomic_inc(&entry->ref);
 
-	/* If handle with interlace streams, need to take one more reference. */
-	if (more_ref)
-		atomic_inc(&entry->ref);
-
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__, user,
@@ -94,6 +209,7 @@ static void buf_core_get(struct buf_core_mgr_s *bc,
 		user_change*/) {
 		bc->prepare(bc, entry);
 	}
+	buf_core_update_holder(bc, entry, user, BUF_GET);
 out:
 	*out_entry = entry;
 
@@ -130,6 +246,7 @@ static void buf_core_get_ref(struct buf_core_mgr_s *bc,
 	entry->state = BUF_STATE_REF;
 	atomic_inc(&entry->ref);
 	//kref_get(&bc->core_ref);
+	buf_core_update_holder(bc, entry, BUF_USER_DEC, BUF_GET);
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -169,6 +286,7 @@ static void buf_core_put_ref(struct buf_core_mgr_s *bc,
 		buf_core_free_que(bc, entry);
 	} else {
 		entry->state = BUF_STATE_REF;
+		buf_core_update_holder(bc, entry, BUF_USER_DEC, BUF_PUT);
 	}
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
@@ -253,7 +371,9 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		buf_core_free_que(bc, entry);
 	} else {
 		entry->state = BUF_STATE_REF;
+		buf_core_update_holder(bc, entry, user, BUF_PUT);
 	}
+
 out:
 	mutex_unlock(&bc->mutex);
 }
@@ -425,15 +545,20 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 	struct buf_core_entry *entry, *tmp;
 	struct hlist_node *h_tmp;
 	ulong bucket;
+	int dec_holders = 0;
+	int ge2d_holders = 0;
+	int vpp_holders = 0;
+	int vsink_holders = 0;
 
 	mutex_lock(&bc->mutex);
 
 	pr_info("\nFree queue elements:\n");
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO,
-			"--> key:%lx, user:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+			"--> key:%lx, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 			entry->key,
 			entry->user,
+			entry->holder,
 			entry->state,
 			bc->state,
 			atomic_read(&entry->ref),
@@ -443,16 +568,28 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 
 	pr_info("\nHash table elements:\n");
 	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
+		if (entry->holder == BUF_HOLDER_DEC)
+			dec_holders++;
+		if (entry->holder == BUF_HOLDER_GE2D)
+			ge2d_holders++;
+		if (entry->holder == BUF_HOLDER_VPP)
+			vpp_holders++;
+		if (entry->holder == BUF_HOLDER_VSINK)
+			vsink_holders++;
 		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO,
-			"--> key:%lx, user:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+			"--> key:%lx, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d, ref_map:0x%x\n",
 			entry->key,
 			entry->user,
+			entry->holder,
 			entry->state,
 			bc->state,
 			atomic_read(&entry->ref),
 			kref_read(&bc->core_ref),
-			bc->free_num);
+			bc->free_num,
+			entry->ref_bit_map);
 	}
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO, "holders: dec(%d), ge2d(%d), vpp(%d), vsink(%d)\n",
+		dec_holders, ge2d_holders, vpp_holders, vsink_holders);
 
 	mutex_unlock(&bc->mutex);
 }
@@ -492,6 +629,7 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->buf_ops.fill	= buf_core_fill;
 	bc->buf_ops.ready_num	= buf_core_ready_num;
 	bc->buf_ops.empty	= buf_core_empty;
+	bc->buf_ops.update_holder = buf_core_update_holder;
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 

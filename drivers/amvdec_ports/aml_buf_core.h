@@ -32,6 +32,17 @@
 
 #define BUF_HASH_BITS	(10)
 
+#define DEC_BIT  (UL(1) << (0))
+#define GE2D_BIT  (UL(1) << (4))
+#define VPP_BIT  (UL(1) << (8))
+#define VSINK_BIT  (UL(1) << (12))
+
+#define DEC_MASK  (0xf)
+#define GE2D_MASK  (0xf0)
+#define VPP_MASK  (0xf00)
+#define VSINK_MASK  (0xf000)
+
+
 struct buf_core_mgr_s;
 
 /*
@@ -84,6 +95,28 @@ enum buf_core_user {
 };
 
 /*
+ * enum buf_core_holder - Buffer holders.
+ *
+ * @BUF_HOLDER_DEC	: Indicates that the current buffer holder is decoder.
+ * @BUF_HOLDER_VPP	: Indicates that the current buffer holder is vpp wrapper.
+ * @BUF_HOLDER_GE2D	: Indicates that the current buffer holder is ge2d wrapper.
+ * @BUF_HOLDER_VSINK	: Indicates that the current buffer holder is vsink.
+ * @BUF_HOLDER_MAX	: Invalid holder.
+ */
+enum buf_core_holder {
+	BUF_HOLDER_DEC,
+	BUF_HOLDER_VPP,
+	BUF_HOLDER_GE2D,
+	BUF_HOLDER_VSINK,
+	BUF_HOLDER_FREE,
+};
+
+enum buf_direction {
+	BUF_GET,
+	BUF_PUT
+};
+
+/*
  * struct buf_core_entry - The entry of buffer.
  *
  * @key		: Record the actual physical address associated with vb.
@@ -94,6 +127,8 @@ enum buf_core_user {
  * @user	: Indicates the user that holds the current entry.
  * @vb2		: The handle of v4l2 video buffer2.
  * @priv	: Record associated private data.
+ * @ref_bit_map	: [0, 3]: dec ref, [4, 7]: ge2d ref,
+ *		  [8, 11]: vpp ref, [12, 15]: vsink ref.
  */
 struct buf_core_entry {
 	ulong			key;
@@ -102,8 +137,10 @@ struct buf_core_entry {
 	struct hlist_node	h_node;
 	enum buf_core_state	state;
 	enum buf_core_user	user;
+	enum buf_core_holder	holder;
 	void			*vb2;
 	void			*priv;
+	u32			ref_bit_map;
 };
 
 /*
@@ -127,6 +164,8 @@ struct buf_core_ops {
 	void	(*fill)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	int	(*ready_num)(struct buf_core_mgr_s *);
 	bool	(*empty)(struct buf_core_mgr_s *);
+	void	(*update_holder)(struct buf_core_mgr_s *, struct buf_core_entry *,
+		enum buf_core_user, enum buf_direction direction);
 };
 
 /*
@@ -183,6 +222,7 @@ struct buf_core_mgr_s {
 	void	(*input)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void	(*output)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void    (*external_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
+	int	(*get_pre_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;

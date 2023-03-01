@@ -52,6 +52,19 @@ static const u8 *type_to_name(enum task_type_e type)
 	return name;
 }
 
+static enum task_type_e name_to_type(const u8 *name)
+{
+	enum task_type_e type;
+	int i, size = ARRAY_SIZE(iname);
+
+	for (i = 0; i < size; i++) {
+		if (name == iname[i].name)
+			type = iname[i].type;
+	}
+
+	return type;
+}
+
 static struct task_item_s *find_task_item(struct task_chain_s *task,
 					  enum task_type_e type)
 {
@@ -129,10 +142,6 @@ static struct task_item_s *task_item_get(struct task_chain_s *task,
 	struct task_item_s *item = NULL;
 
 	item = find_task_item(task, type);
-	if (!item) {
-		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
-			"TSK(%px):%d get item:%d fail.\n", task, task->id, type);
-	}
 
 	return item;
 }
@@ -172,9 +181,13 @@ static void task_buffer_submit(struct task_chain_s *task,
 			task->direction = TASK_DIR_SUBMIT;
 
 			task_item_put(item2);
-		}
+		} else
+			v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
+				"TSK(%px):%d get item:%d fail.\n", task, task->id, type);
 		task_item_put(item);
-	}
+	} else
+		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
+			"TSK(%px):%d get item:%d fail.\n", task, task->id, type);
 }
 
 static void task_buffer_recycle(struct task_chain_s *task,
@@ -210,6 +223,27 @@ static void task_buffer_recycle(struct task_chain_s *task,
 		}
 		task_item_put(item);
 	}
+}
+
+static enum task_type_e task_buffer_get_pre_user(struct task_chain_s *task,
+			       enum task_type_e type)
+{
+	struct task_item_s *item = NULL;
+	struct task_item_s *item2 = NULL;
+	enum task_type_e type2 = TASK_TYPE_MAX;
+
+	item = task_item_get(task, type);
+	if (item) {
+		item2 = task_item_get(task, task->map[1][type]);
+
+		if (item2) {
+			type2 = name_to_type(item2->name);
+			task_item_put(item2);
+		}
+		task_item_put(item);
+	}
+
+	return type2;
 }
 
 void task_chain_show(struct task_chain_s *task)
@@ -382,6 +416,7 @@ int task_chain_init(struct task_chain_s **task_out,
 	task->attach	= task_order_attach;
 	task->submit	= task_buffer_submit;
 	task->recycle	= task_buffer_recycle;
+	task->get_pre_user	= task_buffer_get_pre_user;
 
 	*task_out = task;
 

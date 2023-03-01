@@ -64,7 +64,6 @@ int user_to_task(enum buf_core_user user)
 		break;
 	default:
 		t = TASK_TYPE_MAX;
-		pr_err("user:%d type invalid.\n", user);
 	}
 
 	return t;
@@ -90,7 +89,6 @@ int task_to_user(enum task_type_e task)
 		break;
 	default:
 		t = BUF_USER_MAX;
-		pr_err("task:%d type invalid.\n", task);
 	}
 
 	return t;

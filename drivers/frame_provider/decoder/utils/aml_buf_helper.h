@@ -137,6 +137,23 @@ static inline void aml_buf_fill(struct aml_buf_mgr_s *bm,
 }
 
 /*
+ * aml_buf_update_holder() - The update_holder interface is called if the holder changed.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ * @buf		: The structure of aml_buf.
+ * @user	: The current buffer user.
+ * @direction   : buffer pass direction.
+ * The update_holder interface is called if the the holder changed.
+ */
+static inline void aml_buf_update_holder(struct aml_buf_mgr_s *bm,
+			       struct aml_buf *buf,
+			       enum buf_core_user user,
+			       enum buf_direction direction)
+{
+	bm->bc.buf_ops.update_holder(&bm->bc, &buf->entry, user, direction);
+}
+
+/*
  * aml_buf_get() - Get a free buffer from free queue.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.

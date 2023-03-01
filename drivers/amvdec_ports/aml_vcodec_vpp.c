@@ -1341,6 +1341,8 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 
 	update_vpp_num_cache(vpp);
 
+	aml_buf_update_holder(&vpp->ctx->bm, aml_buf, BUF_USER_VPP, BUF_GET);
+
 	return 0;
 }
 

@@ -970,6 +970,7 @@ static void fill_capture_done_cb(void *v4l_ctx, void *fb_ctx)
 	kfifo_put(&ctx->capture_buffer, vb);
 	mutex_unlock(&ctx->capture_buffer_lock);
 	aml_thread_post_task(ctx, AML_THREAD_CAPTURE);
+	aml_buf_update_holder(&ctx->bm, aml_buf, BUF_USER_VSINK, BUF_GET);
 }
 
 static struct task_ops_s *get_v4l_sink_ops(void);
