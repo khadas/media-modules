@@ -45,7 +45,7 @@
 #include <linux/fs.h>
 #include "vdec.h"
 #include "frame_check.h"
-#include "amlogic_fbc_hook.h"
+#include <linux/amlogic/media/vfm/amlogic_fbc_hook_v1.h>
 #include <linux/highmem.h>
 #include <linux/page-flags.h>
 #include "../../../common/chips/decoder_cpu_ver_info.h"
@@ -1112,6 +1112,9 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 	struct pic_check_t *check = NULL;
 	struct pic_check_mgr_t *mgr = NULL;
 	int ret = 0;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+	struct fbc_decoder_param param;
+#endif
 
 	if (vdec == NULL) {
 		if (single_mode_vdec == NULL)
@@ -1181,6 +1184,12 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 
 	} else if  (vf->type & VIDTYPE_SCATTER) {
 		check = &mgr->pic_check;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+		param.compHeadAddr = vf->compHeadAddr;
+		param.compWidth = vf->compWidth;
+		param.compHeight = vf->compHeight;
+		param.bitdepth = vf->bitdepth;
+#endif
 
 		if (mgr->pic_dump.buf_addr != NULL) {
 			dbg_print(0, "scatter free yuv buf\n");
@@ -1194,7 +1203,11 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		planes[1] = check->fbc_planes[1];
 		planes[2] = check->fbc_planes[2];
 		planes[3] = check->fbc_planes[3];
-		ret = AMLOGIC_FBC_vframe_decoder(planes, vf, 0, 0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+		ret = AMLOGIC_FBC_vframe_decoder_v1(planes, &param, 0, 0);
+#else
+		ret = AMLOGIC_FBC_vframe_decoder_v1(planes, vf, 0, 0);
+#endif
 		if (ret < 0) {
 			dbg_print(0, "amlogic_fbc_lib.ko error %d\n", ret);
 		} else {
