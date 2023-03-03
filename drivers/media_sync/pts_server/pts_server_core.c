@@ -314,6 +314,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	u64 FrameDur64 = 0;
 	s32 number = -1;
 	s32 i = 0;
+
 	if (index < 0 || index >= MAX_INSTANCE_NUM) {
 		return -1;
 	}
@@ -361,6 +362,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				if (ptsserver_debuglevel > 1) {
 					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x)\n",i,offsetAbs,ptn->offset,cur_offset);
 				}
+
 				if (offsetAbs <=  pInstance->mLookupThreshold) {
 					if (offsetAbs <= offsetDiff && cur_offset > ptn->offset) {
 						offsetDiff = offsetAbs;
@@ -440,6 +442,9 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			}
 		}
 	}
+	if (find == 1 && (s64)mCheckoutPtsOffset->pts_64 == -1) {
+		find = 0; //invalid pts
+	}
 	if (!find) {
 		pInstance->mPtsCheckoutFailCount++;
 		if (ptsserver_debuglevel >= 1 || pInstance->mPtsCheckoutFailCount % 30 == 0) {
@@ -461,6 +466,13 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			}
 			if (pInstance->mFrameDuration64 != 0) {
 				pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mFrameDuration64;
+			}
+			if (pInstance->mPtsCheckoutStarted == 0) {
+
+				pts_pr_info(index,"first Checkout fail cur_offset:0x%x offsetDiff:0x%x\n",cur_offset,offsetDiff);
+				pInstance->mLastCheckoutPts = -1;
+				pInstance->mLastCheckoutPts64 = -1;
+
 			}
 			if (ptsserver_debuglevel >= 1) {
 				pts_pr_info(index,"Checkout fail FrameDuration(32:%d 64:%lld) pts(32:%d 64:%llu)\n",
