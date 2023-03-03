@@ -1629,7 +1629,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			ret = 0;
 
 			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
-				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
 				/*
 				 * for t3, after scaling before goto MFDIN, need to config canvas with scaler buffer
 				 * */
@@ -1855,7 +1856,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			input = input & 0xffff;
 
 			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
-				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
 				struct canvas_s cs0, cs1;//, cs2
 				u32 y_addr, uv_addr, canvas_w, picsize_y;
 				u8 iformat = MAX_FRAME_FMT;
@@ -2961,7 +2963,8 @@ static s32 avc_poweron(u32 clock)
 		hcodec_clk_config(1);
 		udelay(20);
 		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
 			vdec_poweron(VDEC_HCODEC);
 			enc_pr(LOG_INFO, "vdec_poweron VDEC_HCODEC\n");
 		} else {
@@ -2994,7 +2997,8 @@ static s32 avc_poweron(u32 clock)
 	WRITE_VREG(DOS_SW_RESET1, 0);
 	/* Enable Dos internal clock gating */
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
 		WRITE_VREG_BITS(DOS_GCLK_EN0, 0x7fff, 12, 15);
 		/*
 		 * WRITE_VREG(DOS_GCLK_EN0, 0xffffffff);
@@ -3034,7 +3038,8 @@ static s32 avc_poweroff(void)
 		udelay(20);
 
 		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
 			vdec_poweroff(VDEC_HCODEC);
 			enc_pr(LOG_INFO, "vdec_poweroff VDEC_HCODEC\n");
 		} else {
@@ -3058,7 +3063,8 @@ static s32 avc_poweroff(void)
 
 	/* disable HCODEC clock */
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) || \
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)) {
 		WRITE_VREG_BITS(DOS_GCLK_EN0, 0, 12, 15);
 	} else
 		hvdec_clock_disable();
