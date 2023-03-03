@@ -425,15 +425,18 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 						}
 					}
 				}
-				if (find_ptn) {
-					find = 1;
-					mCheckoutPtsOffset->pts = find_ptn->pts;
-					mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
-					if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
-						pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
-							pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
-					ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
+				if (!find_ptn) {
+					find_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
+					if (ptsserver_debuglevel >= 1)
+						pts_pr_info(index,"set first node as the selected node\n");
 				}
+				find = 1;
+				mCheckoutPtsOffset->pts = find_ptn->pts;
+				mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
+				if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
+					pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
+						pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
+				ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
 			}
 		}
 	}
