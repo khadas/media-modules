@@ -151,7 +151,7 @@ AVS2 HIGH LEVEL SYNTAX
 #define AVS2_HDR_Tec                       1
 #if AVS2_HDR_Tec
 #define HDR_CHROMA_DELTA_QP                1 /* M3905 */
-#define HDR_ADPTIVE_UV_DELTA                  1
+#define HDR_ADAPTIVE_UV_DELTA                  1
 #endif
 /*
  *************************************
@@ -725,7 +725,7 @@ struct avs2_frame_s {
 	byte ***ref;
 
 	int32_t imgtr_fwRefDistance;
-	int32_t refered_by_others;
+	int32_t referred_by_others;
 	int32_t is_output;
 	int32_t to_prepare_disp;
 #if M3480_TEMPORAL_SCALABLE
@@ -802,11 +802,11 @@ struct avs2_frame_s {
 	//unsigned char flush_mark;
 #endif
 #ifdef NEW_FRONT_BACK_CODE
-    int backend_ref;
-    int width;
-    int height;
-    int depth;
-    struct avs2_frame_s *ref_pic[MAXREF];
+	int backend_ref;
+	int width;
+	int height;
+	int depth;
+	struct avs2_frame_s *ref_pic[MAXREF];
 #endif
 	uint32_t luma_size;
 	uint32_t chroma_size;
@@ -838,7 +838,7 @@ struct ImageParameters_s {
 	int32_t   subblock_y;
 
 	int32_t num_of_references;
-    /* <! Bug Fix: correct picture size for outputted reconstructed pictures */
+	/* <! Bug Fix: correct picture size for outputted reconstructed pictures */
 	int32_t auto_crop_right;
 	int32_t auto_crop_bottom;
 	int32_t buf_cycle;
@@ -865,8 +865,8 @@ struct ImageParameters_s {
 
 	int32_t imgcoi_next_ref;
 
-    /* !< GH ipredmode[90][74];prediction mode for inter frames */
-    /* fix from ver 4.1 */
+	/* !< GH ipredmode[90][74];prediction mode for inter frames */
+	/* fix from ver 4.1 */
 	int32_t **ipredmode;
 	int32_t **rec_ipredmode;
 
@@ -877,7 +877,7 @@ struct ImageParameters_s {
 
 	int32_t block_y;
 	int32_t block_x;
-    /* <! final 4x4 block. Extended to 16x16 for AVS */
+	/* <! final 4x4 block. Extended to 16x16 for AVS */
 	int32_t resiUV[2][MAX_CU_SIZE][MAX_CU_SIZE];
 
 	int32_t **fw_refFrArr;                          /* <! [72][88]; */
@@ -917,7 +917,7 @@ struct ImageParameters_s {
 	int32_t framerate;
 
 	int32_t ***predBlockY;        /* !< all 9 prediction modes */
-     /* !< new chroma 8x8 intra prediction modes */
+	/* !< new chroma 8x8 intra prediction modes */
 	int32_t ****predBlockUV;
 
 	int32_t **Coeff_all;/* qyu 0821 */
@@ -1113,7 +1113,7 @@ struct Video_Com_data_s {
 	/* !< current encoding/decoding frame pointer */
 	struct avs2_frame_s *f_rec;
 	int32_t   seq_header;
-    /* !< Array for reference frames of each block */
+	/* !< Array for reference frames of each block */
 	int32_t    **refFrArr;
 	int32_t    **p_snd_refFrArr;
 
@@ -1171,7 +1171,7 @@ struct reference_management {
 	int32_t poc;
 	int32_t qp_offset;
 	int32_t num_of_ref;
-	int32_t referd_by_others;
+	int32_t referred_by_others;
 	int32_t ref_pic[MAXREF];
 	int32_t predict;
 	int32_t deltaRPS;
@@ -1323,8 +1323,8 @@ int32_t slice_vertical_position;
 int32_t slice_vertical_position_extension;
 int32_t fixed_slice_qp;
 int32_t slice_qp;
-int32_t slice_horizontal_positon;       /* added by mz, 2008.04 */
-int32_t slice_horizontal_positon_extension;
+int32_t slice_horizontal_position;       /* added by mz, 2008.04 */
+int32_t slice_horizontal_position_extension;
 
 int32_t StartCodePosition;
 int32_t background_pred_flag;
@@ -1578,7 +1578,7 @@ union param_u {
 		uint16_t displaydelay; /*???*/
 		uint16_t predict;     /*???*/
 		uint16_t RPS_idx;      /*???*/
-		uint16_t referd_by_others_cur;
+		uint16_t referred_by_others_cur;
 		uint16_t num_of_ref_cur;
 		uint16_t ref_pic_cur[8];
 		uint16_t num_to_remove_cur;
@@ -1754,6 +1754,7 @@ struct avs2_decoder_fb {
 	//uint32_t	instruction[256];
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
+	void *sys_imem_ptr_v;
 };
 
 extern void write_frame(struct avs2_decoder *avs2_dec, int32_t pos);

@@ -112,16 +112,18 @@ struct aml_buf_fbc {
 	u32		index;
 	void		*bmmu;
 	void		*mmu;
-	void		*mmu_1;
 	void		*bmmu_dw;
 	void		*mmu_dw;
-	void		*mmu_dw_1;
 	int		ref;
 	ulong		haddr;
 	u32		hsize;
 	ulong		haddr_dw;
 	u32		hsize_dw;
 	u32		frame_size;
+#ifdef NEW_FB_CODE
+	void		*mmu_1;
+	void		*mmu_dw_1;
+#endif
 	int		used[BUF_FBC_NUM_MAX];
 };
 
@@ -178,9 +180,12 @@ struct aml_buf_mgr_s {
 	/* fbc information */
 	void				*bmmu;
 	void				*mmu;
-	void				*mmu_1;
 	void				*bmmu_dw;
 	void				*mmu_dw;
+#ifdef NEW_FB_CODE
+	void				*mmu_1;
+	void				*mmu_dw_1;
+#endif
 	struct aml_buf_fbc		*fbc_array;
 	get_fbc_info			get_fbc_info;
 };

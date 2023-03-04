@@ -1,8 +1,6 @@
 #include "../../../include/regs/dos_registers.h"
 #include "../../../common/media_utils/media_utils.h"
 
-#define LMEM_STORE_ADR         HEVC_ASSIST_SCRATCH_O
-
 #ifdef FOR_S5
 ulong dos_reg_compat_convert(ulong adr);
 #endif

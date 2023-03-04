@@ -1212,11 +1212,13 @@ static void aom_init_decoder_hw_fb(struct AV1HW_s *hw, int32_t decode_pic_begin,
 	}
 
 	if (front_flag) {
+/*
 #ifdef ENABLE_SWAP_TEST
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
 #else
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
 #endif
+*/
 #ifdef NEW_FRONT_BACK_CODE
 		if (first_flag)
 			WRITE_VREG(HEVC_DECODE_COUNT, 0);
@@ -3026,8 +3028,12 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 	}
 
 	if (hw->front_back_mode == 1) {
+			struct aml_buf *aml_buf = NULL;
+			aml_buf = index_to_afbc_aml_buf(hw, pic->index);
+
 			ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 			ret = av1_alloc_mmu(hw,
+				aml_buf->fbc->mmu,
 				pic->index,
 				pic->y_crop_width,
 				pic->y_crop_height/2 + 64 + 8,
@@ -3040,6 +3046,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 				pr_err("can't alloc need mmu1,idx %d ret =%d\n", pic->index, ret);
 
 			ret = av1_alloc_mmu(hw,
+				aml_buf->fbc->mmu_1,
 				pic->index,
 				pic->y_crop_width,
 				pic->y_crop_height/2 + 64 + 8,
@@ -3052,6 +3059,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 #ifdef AOM_AV1_MMU_DW
 			if (hw->dw_mmu_enable) {
 				ret = av1_alloc_mmu_dw(hw,
+					aml_buf->fbc->mmu_dw,
 					pic->index,
 					pic->y_crop_width,
 					pic->y_crop_height/2 + 64 + 8,
@@ -3063,6 +3071,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 					pr_err("can't alloc need dw mmu1,idx %d ret =%d\n", pic->index, ret);
 
 				ret = av1_alloc_mmu_dw(hw,
+					aml_buf->fbc->mmu_dw_1,
 					pic->index,
 					pic->y_crop_width,
 					pic->y_crop_height/2 + 64 + 8,

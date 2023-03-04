@@ -261,7 +261,7 @@ Bit[10:8] - film_grain_params_ref_idx, For Write request
 #define DEBUG_REG2_DBE            HEVC_ASSIST_SCRATCH_Z
 
 #ifdef NEW_FRONT_BACK_CODE
-#define PIC_DECODE_COUNT_DBE      HEVC_ASSIST_SCRATCH_B
+#define PIC_DECODE_COUNT_DBE      HEVC_ASSIST_SCRATCH_10
 #endif
 
 /*
@@ -431,6 +431,8 @@ static unsigned int get_data_check_sum
 static void dump_pic_list(struct AV1HW_s *hw);
 static int vav1_mmu_map_alloc(struct AV1HW_s *hw);
 static void vav1_mmu_map_free(struct AV1HW_s *hw);
+static void update_vf_memhandle(struct AV1HW_s *hw,
+	struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic);
 static int av1_alloc_mmu(
 		struct AV1HW_s *hw,
 		void *mmu_box,
@@ -6383,6 +6385,7 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_B
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_AV1;
 }
 
 static int vav1_vf_states(struct vframe_states *states, void *op_arg)
@@ -6410,13 +6413,15 @@ static struct vframe_s *vav1_vf_peek(void *op_arg)
 	if (hw->front_back_mode) {
 		struct vframe_s *vf_tmp;
 		if (kfifo_peek(&hw->display_q, &vf_tmp) && vf_tmp) {
-				struct PIC_BUFFER_CONFIG_s *pic =
-					&hw->common.buffer_pool->frame_bufs[vf_tmp->index & 0xff].buf;
-				if (!pic->back_done_mark) {
-					//pr_info("%s %d pic %px\n", __func__, __LINE__, pic);
-					return NULL;
+				u32 index = vf_tmp->index & 0xff;
+				struct PIC_BUFFER_CONFIG_s *pic;
+
+				if (index < FRAME_BUFFERS) {
+					pic = &hw->common.buffer_pool->frame_bufs[index].buf;
+					if (!pic->back_done_mark) {
+						return NULL;
+					}
 				}
-				//pr_info("%s %d, backdone pic %px", __func__, __LINE__, pic);
 		} else
 			return NULL;
 	}
@@ -6454,10 +6459,14 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode) {
 		if (kfifo_peek(&hw->display_q, &vf) && vf) {
-			struct PIC_BUFFER_CONFIG_s *pic =
-				&hw->common.buffer_pool->frame_bufs[vf->index & 0xff].buf;
-			if (!pic->back_done_mark)
-				return NULL;
+			struct PIC_BUFFER_CONFIG_s *pic;
+			u32 index = vf->index & 0xff;
+
+			if (index < FRAME_BUFFERS) {
+				pic = &hw->common.buffer_pool->frame_bufs[index].buf;
+				if (!pic->back_done_mark)
+					return NULL;
+			}
 		} else
 			return NULL;
 	}
@@ -6466,6 +6475,8 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 	if (kfifo_get(&hw->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
 		uint8_t index = vf->index & 0xff;
+		struct BufferPool_s *pool = hw->common.buffer_pool;
+		struct PIC_BUFFER_CONFIG_s *pic = &pool->frame_bufs[index].buf;
 		ATRACE_COUNTER(hw->trace.disp_q_name, kfifo_len(&hw->display_q));
 		if (index < hw->used_buf_num ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
@@ -6473,9 +6484,6 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 			vf->index_disp = hw->vf_get_count;
 			vf->omx_index = hw->vf_get_count;
 			if (debug & AOM_DEBUG_VFRAME) {
-				struct BufferPool_s *pool = hw->common.buffer_pool;
-				struct PIC_BUFFER_CONFIG_s *pic =
-					&pool->frame_bufs[index].buf;
 				unsigned long flags;
 				lock_buffer_pool(hw->common.buffer_pool, flags);
 				av1_print(hw, AOM_DEBUG_VFRAME, "%s index 0x%x type 0x%x w/h %d/%d, aux size %d, pts %d, %lld, ts: %llu\n",
@@ -6507,6 +6515,8 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 				unlock_buffer_pool(hw->common.buffer_pool, flags);
 			}
 #endif
+			if (hw->front_back_mode == 1)
+				update_vf_memhandle(hw, vf, pic);
 			if (hw->front_back_mode == 1)
 				decoder_do_frame_check(hw_to_vdec(hw), vf);
 
@@ -6727,6 +6737,7 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 
 	if (pic->index < 0) {
 		vf->mem_handle = NULL;
+		vf->mem_handle_1 = NULL;
 		vf->mem_head_handle = NULL;
 		vf->mem_dw_handle = NULL;
 	} else if (vf->type & VIDTYPE_SCATTER) {
@@ -6736,6 +6747,8 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 			vf->mem_handle =
 				decoder_mmu_box_get_mem_handle(
 					hw->mmu_box_dw, pic->index);
+			if (hw->front_back_mode)
+				vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(hw->mmu_box_dw_1, pic->index);
 			vf->mem_head_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->bmmu_box,
@@ -6747,6 +6760,8 @@ static void update_vf_memhandle(struct AV1HW_s *hw,
 		vf->mem_handle =
 			decoder_mmu_box_get_mem_handle(
 				hw->mmu_box, pic->index);
+		if (hw->front_back_mode)
+			vf->mem_handle_1 = decoder_mmu_box_get_mem_handle(hw->mmu_box_1, pic->index);
 		vf->mem_head_handle =
 			decoder_bmmu_box_get_mem_handle(
 				hw->bmmu_box,
@@ -7023,7 +7038,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			else
 				vf->duration = 0;
 		}
-		update_vf_memhandle(hw, vf, pic_config);
+		if (hw->front_back_mode != 1)
+			update_vf_memhandle(hw, vf, pic_config);
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
 
@@ -7064,7 +7080,6 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		}
 
 		if (hw->is_used_v4l) {
-			//vf->codec_vfmt = VFORMAT_AV1;
 			update_vframe_src_fmt(vf,
 				pic_config->aux_data_buf,
 				pic_config->aux_data_size,
@@ -11158,8 +11173,6 @@ static void av1_work(struct work_struct *work)
 		hw->eos = 1;
 		av1_postproc(hw);
 
-		notify_v4l_eos(hw_to_vdec(hw));
-
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
@@ -11570,7 +11583,7 @@ static void run_front(struct vdec_s *vdec)
 	ATRACE_COUNTER(hw->trace.decode_run_time_name, TRACE_RUN_LOADING_RESTORE_START);
 #ifdef NEW_FB_CODE
 	if (hw->front_back_mode == 1) {
-		if (hw->pbi->frontend_decoded_count && (hw->common.prev_frame > 0)) {
+		if (hw->pbi->frontend_decoded_count && hw->common.prev_frame) {
 			int i;
 			WRITE_VREG(VP9_CONTROL, 0x610000); // set av1 mode
 			for (i = 0; i < 8; i++) {

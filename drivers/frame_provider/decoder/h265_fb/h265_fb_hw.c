@@ -1,6 +1,5 @@
 #include "../../../include/regs/dos_registers.h"
 
-#define LMEM_STORE_ADR         HEVC_ASSIST_SCRATCH_O
 #define DOS_PROJECT
 
 /* to do */
@@ -53,7 +52,12 @@ static void WRITE_BACK_8(hevc_stru_t* hevc, uint32_t spr_addr, uint8_t data)
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
 		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
-
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (hevc->ins_offset < 256 && (hevc->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(hevc);
+		hevc->ins_offset = 256;
+	}
+#endif
 }
 
 static void WRITE_BACK_16(hevc_stru_t* hevc, uint32_t spr_addr, uint8_t rd_addr, uint16_t data)
@@ -73,6 +77,12 @@ static void WRITE_BACK_16(hevc_stru_t* hevc, uint32_t spr_addr, uint8_t rd_addr,
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
 		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (hevc->ins_offset < 256 && (hevc->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(hevc);
+		hevc->ins_offset = 256;
+	}
+#endif
 }
 
 static void WRITE_BACK_32(hevc_stru_t* hevc, uint32_t spr_addr, uint32_t data)
@@ -97,6 +107,12 @@ static void WRITE_BACK_32(hevc_stru_t* hevc, uint32_t spr_addr, uint32_t data)
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
 		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (hevc->ins_offset < 256 && (hevc->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(hevc);
+		hevc->ins_offset = 256;
+	}
+#endif
 }
 
 static void READ_INS_WRITE(hevc_stru_t* hevc, uint32_t spr_addr0, uint32_t spr_addr1, uint8_t rd_addr, uint8_t position, uint8_t size)
@@ -120,6 +136,12 @@ static void READ_INS_WRITE(hevc_stru_t* hevc, uint32_t spr_addr0, uint32_t spr_a
 	hevc_print(hevc, H265_DEBUG_DETAIL,
 		"instruction[%3d] = %8x\n", hevc->ins_offset, hevc->instruction[hevc->ins_offset]);
 	hevc->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (hevc->ins_offset < 256 && (hevc->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(hevc);
+		hevc->ins_offset = 256;
+	}
+#endif
 }
 
 //Caution:  pc offset fixed to 4, the data of cmp_addr need ready before call this function
@@ -158,6 +180,12 @@ void READ_CMP_WRITE(hevc_stru_t* hevc, uint32_t spr_addr0, uint32_t spr_addr1, u
 	hevc_print(hevc, H265_DEBUG_DETAIL,
 		"instruction[%3d] = %8x\n", hevc->ins_offset, hevc->instruction[hevc->ins_offset]);
 	hevc->ins_offset++;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (hevc->ins_offset < 256 && (hevc->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(hevc);
+		hevc->ins_offset = 256;
+	}
+#endif
 }
 
 static void READ_WRITE_DATA16(hevc_stru_t* hevc, uint32_t spr_addr, uint16_t data, uint8_t position, uint8_t size)
@@ -186,6 +214,12 @@ static void READ_WRITE_DATA16(hevc_stru_t* hevc, uint32_t spr_addr, uint16_t dat
 	gbpc = READ_VREG(HEVC_MPC_E_DBE);
 	if ((gbpc >= 0x670 && gbpc < 0xc00) || print_reg_flag)
 		pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", gbpc);
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+	if (hevc->ins_offset < 256 && (hevc->ins_offset + 16) >= 256) {
+		WRITE_BACK_RET(hevc);
+		hevc->ins_offset = 256;
+	}
+#endif
 }
 
 #if 0
@@ -1904,11 +1938,11 @@ static void config_dw_fb(hevc_stru_t* hevc, PIC_t* pic, u32 mc_buffer_size_u_v_h
 		//data32 &= (~0xff0);
 #ifdef H265_10B_MMU_DW
 		if (hevc->dw_mmu_enable == 0)
-		data = ((hevc->endian >> 8) & 0xfff) >> 4; //data32 |= ((hevc->endian >> 8) & 0xfff); //endian: ((0x880 << 8) | 0x8) or ((0xff0 << 8) | 0xf)
+		data = ((hevc->endian >> 8) & 0xfff); //endian: ((0x880 << 8) | 0x8) or ((0xff0 << 8) | 0xf)
 #else
-		data = ((hevc->endian >> 8) & 0xfff) >> 4; //data32 |= ((hevc->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
+		data = ((hevc->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
 #endif
-		READ_WRITE_DATA16(hevc, HEVC_SAO_CTRL1, data, 4, 8);
+		READ_WRITE_DATA16(hevc, HEVC_SAO_CTRL1, data, 0, 12);
 
 		//data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
 		if (dw_mode == 0)

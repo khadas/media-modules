@@ -4697,6 +4697,7 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 	vf->canvas0_config[2].endian = endian_tmp;
 	vf->canvas1_config[2].endian = endian_tmp;
 #endif
+	vf->codec_vfmt = VFORMAT_H264;
 }
 
 static void get_picture_qos_info(struct StorablePicture *picture)
@@ -10971,10 +10972,10 @@ static int ammvdec_h264_remove(struct platform_device *pdev)
 		else {
 			if (is_support_dual_core())
 				vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
-					CORE_MASK_COMBINE);
+					CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
 			else
 				vdec_core_release(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC |
-					CORE_MASK_HEVC_BACK | CORE_MASK_COMBINE);
+					CORE_MASK_COMBINE);
 		}
 	} else
 		vdec_core_release(hw_to_vdec(hw), CORE_MASK_VDEC_1 | CORE_MASK_HEVC);

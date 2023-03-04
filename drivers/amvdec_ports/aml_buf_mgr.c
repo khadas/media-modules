@@ -52,28 +52,43 @@ static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 
 	/* init mmu box */
 	bm->mmu = decoder_mmu_box_alloc_box(bm->bc.name,
-					   bm->bc.id,
-					   BUF_FBC_NUM_MAX,
-					   fbc_info.max_size * SZ_1M,
-					   mmu_flag);
+						bm->bc.id,
+						BUF_FBC_NUM_MAX,
+						fbc_info.max_size * SZ_1M,
+						mmu_flag);
 	if (!bm->mmu) {
 		vfree(bm->fbc_array);
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
-			"fail to create bmmu box\n");
+			"fail to create mmu box\n");
 		return -EINVAL;
 	}
+
+#ifdef NEW_FB_CODE
+	if (ctx->front_back_mode) {
+		bm->mmu_1 = decoder_mmu_box_alloc_box(bm->bc.name,
+							bm->bc.id,
+							BUF_FBC_NUM_MAX,
+							fbc_info.max_size * SZ_1M,
+							mmu_flag);
+		if (!bm->mmu_1) {
+			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+				"fail to create mmu_1 box\n");
+			goto free_mmubox;
+		}
+	}
+#endif
 
 	/* init bmmu box */
 	bmmu_flag |= (CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER);
 	bm->bmmu = decoder_bmmu_box_alloc_box(bm->bc.name,
-					     bm->bc.id,
-					     BUF_FBC_NUM_MAX,
-					     4 + PAGE_SHIFT,
-					     bmmu_flag, BMMU_ALLOC_FLAGS_WAIT);
+						bm->bc.id,
+						BUF_FBC_NUM_MAX,
+						4 + PAGE_SHIFT,
+						bmmu_flag, BMMU_ALLOC_FLAGS_WAIT);
 	if (!bm->bmmu) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
-			"fail to create mmu box\n");
-		goto free_mmubox;
+			"fail to create bmmu box\n");
+		goto free_mmubox1;
 	}
 
 	if (dw_mode & 0x20) {
@@ -89,6 +104,21 @@ static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 			goto free_bmmubox;
 		}
 
+#ifdef NEW_FB_CODE
+		if (ctx->front_back_mode) {
+			bm->mmu_dw_1 = decoder_mmu_box_alloc_box("v4ldec-m2m-dw",
+							bm->bc.id,
+							BUF_FBC_NUM_MAX,
+							fbc_info.max_size * SZ_1M,
+							mmu_flag);
+			if (!bm->mmu_dw_1) {
+				v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+					"fail to create dw mmu_1 box\n");
+				goto free_mmubox_dw;
+			}
+		}
+#endif
+
 		/* init bmmu box dw*/
 		bm->bmmu_dw = decoder_bmmu_box_alloc_box("v4ldec-m2m-dw",
 							bm->bc.id,
@@ -98,8 +128,8 @@ static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 							BMMU_ALLOC_FLAGS_WAIT);
 		if (!bm->bmmu_dw) {
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
-				"fail to create dw mmu box\n");
-			goto free_mmubox_dw;
+				"fail to create dw bmmu box\n");
+			goto free_mmubox_dw1;
 		}
 	}
 
@@ -107,7 +137,19 @@ static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 		"box init, bmmu: %px, mmu: %px, bmmu_dw: %px mmu_dw: %px\n",
 		bm->bmmu, bm->mmu, bm->bmmu_dw, bm->mmu_dw);
 
+#ifdef NEW_FB_CODE
+	if (ctx->front_back_mode) {
+		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+			"box init, mmu_1: %px, mmu_dw_1: %px\n",
+			bm->mmu_1, bm->mmu_dw_1);
+	}
+#endif
+
 	return 0;
+
+free_mmubox_dw1:
+	decoder_mmu_box_free(bm->mmu_dw_1);
+	bm->mmu_dw_1 = NULL;
 
 free_mmubox_dw:
 	decoder_mmu_box_free(bm->mmu_dw);
@@ -116,6 +158,10 @@ free_mmubox_dw:
 free_bmmubox:
 	decoder_bmmu_box_free(bm->bmmu);
 	bm->bmmu = NULL;
+
+free_mmubox1:
+	decoder_mmu_box_free(bm->mmu_1);
+	bm->mmu_1 = NULL;
 
 free_mmubox:
 	vfree(bm->fbc_array);
@@ -158,6 +204,10 @@ static int aml_buf_fbc_init(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 	fbc->mmu	= bm->mmu;
 	fbc->bmmu_dw	= bm->bmmu_dw;
 	fbc->mmu_dw	= bm->mmu_dw;
+#ifdef NEW_FB_CODE
+	fbc->mmu_1	= bm->mmu_1;
+	fbc->mmu_dw_1	= bm->mmu_dw_1;
+#endif
 	fbc->used[i]	= 0;
 	fbc->ref	= 1;
 
@@ -207,6 +257,8 @@ static int aml_buf_fbc_release(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 {
 	struct aml_buf_fbc *fbc = buf->fbc;
 	int ret;
+	struct aml_vcodec_ctx *ctx = container_of(bm,
+		struct aml_vcodec_ctx, bm);
 
 	ret = decoder_bmmu_box_free_idx(bm->bmmu, fbc->index);
 	if (ret < 0) {
@@ -222,6 +274,17 @@ static int aml_buf_fbc_release(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 		return -ENOMEM;
 	}
 
+#ifdef NEW_FB_CODE
+	if (ctx->front_back_mode) {
+		ret = decoder_mmu_box_free_idx(bm->mmu_1, fbc->index);
+		if (ret < 0) {
+			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+				"fail to free %dth mmu 1\n", fbc->index);
+			return -ENOMEM;
+		}
+	}
+#endif
+
 	if (bm->mmu_dw) {
 		ret = decoder_mmu_box_free_idx(bm->mmu_dw, fbc->index);
 		if (ret < 0) {
@@ -230,6 +293,18 @@ static int aml_buf_fbc_release(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 			return -ENOMEM;
 		}
 	}
+
+#ifdef NEW_FB_CODE
+	if (ctx->front_back_mode && bm->mmu_dw_1) {
+		ret = decoder_mmu_box_free_idx(bm->mmu_dw_1, fbc->index);
+		if (ret < 0) {
+			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+				"fail to free %dth mmu dw 1\n", fbc->index);
+			return -ENOMEM;
+		}
+	}
+#endif
+
 	if (bm->bmmu_dw) {
 		decoder_bmmu_box_free_idx(bm->bmmu_dw, fbc->index);
 		if (ret < 0) {
@@ -282,6 +357,13 @@ static void aml_buf_fbc_destroy(struct aml_buf_mgr_s *bm)
 		decoder_mmu_box_free(bm->mmu_dw);
 	if (bm->bmmu_dw)
 		decoder_bmmu_box_free(bm->bmmu_dw);
+
+#ifdef NEW_FB_CODE
+	decoder_mmu_box_free(bm->mmu_1);
+	if (bm->mmu_dw_1)
+		decoder_mmu_box_free(bm->mmu_dw_1);
+#endif
+
 	vfree(bm->fbc_array);
 }
 

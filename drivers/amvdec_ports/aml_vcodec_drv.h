@@ -43,8 +43,6 @@
 #define AML_VCODEC_ENC_NAME	"aml-vcodec-enc"
 #define AML_PLATFORM_STR	"platform:amlogic"
 
-#define NEW_FB_CODE
-
 #define AML_VCODEC_MAX_PLANES	3
 #define AML_V4L2_BENCHMARK	0
 #define WAIT_INTR_TIMEOUT_MS	1000

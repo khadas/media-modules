@@ -28,6 +28,8 @@
 #include <linux/hash.h>
 #include <linux/hashtable.h>
 
+#define NEW_FB_CODE
+
 #define BUF_HASH_BITS	(10)
 
 struct buf_core_mgr_s;

@@ -77,7 +77,7 @@ static struct pm_pd_s pm_domain_data[] = {
 	{ .name = "pwrc-hcodec",},
 	{ .name = "pwrc-vdec-2", },
 	{ .name = "pwrc-hevc", },
-	{ .name = "pwrc-hevc-b", },
+	{ .name = "pwrc-hevcb", },
 	{ .name = "pwrc-wave", },
 };
 

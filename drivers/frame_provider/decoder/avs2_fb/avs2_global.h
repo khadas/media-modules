@@ -701,7 +701,7 @@ struct avs2_frame_s {
 	byte ***ref;
 
 	int32_t imgtr_fwRefDistance;
-	int32_t refered_by_others;
+	int32_t referred_by_others;
 	int32_t is_output;
 	int32_t to_prepare_disp;
 #if M3480_TEMPORAL_SCALABLE
@@ -1131,7 +1131,7 @@ struct reference_management {
 	int32_t poc;
 	int32_t qp_offset;
 	int32_t num_of_ref;
-	int32_t referd_by_others;
+	int32_t referred_by_others;
 	int32_t ref_pic[MAXREF];
 	int32_t predict;
 	int32_t deltaRPS;
@@ -1530,7 +1530,7 @@ union param_u {
 		uint16_t displaydelay; /*???*/
 		uint16_t predict;     /*???*/
 		uint16_t RPS_idx;      /*???*/
-		uint16_t referd_by_others_cur;
+		uint16_t referred_by_others_cur;
 		uint16_t num_of_ref_cur;
 		uint16_t ref_pic_cur[8];
 		uint16_t num_to_remove_cur;

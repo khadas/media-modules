@@ -1,8 +1,6 @@
 #include "../../../include/regs/dos_registers.h"
 #include "../../../common/media_utils/media_utils.h"
 
-#define LMEM_STORE_ADR         HEVC_ASSIST_SCRATCH_O
-
 #ifdef FOR_S5
 ulong dos_reg_compat_convert(ulong adr);
 #endif
@@ -1774,6 +1772,7 @@ int32_t g_WqMDefault8x8[64] = {
 	return;
 }
 
+extern void config_cuva_buf(struct AVS3Decoder_s *dec);
 static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8_t back_flag)
 {
 	uint32_t data32;
@@ -1912,6 +1911,7 @@ static int32_t avs3_hw_init(struct AVS3Decoder_s *dec, uint8_t front_flag, uint8
 		"%s set decode_mode 0x%x\n", __func__, decode_mode);
 		WRITE_VREG(DECODE_MODE, decode_mode); //DECODE_MODE_MULTI_STREAMBASE
 		WRITE_VREG(HEVC_DECODE_SIZE, 0xffffffff);
+		config_cuva_buf(dec);
 	#endif
 
 		//WRITE_VREG(XIF_DOS_SCRATCH31, 0x0);
@@ -2634,11 +2634,11 @@ static void config_dw_fb(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic,
 		//data32 &= (~0xff0);
 #ifdef AVS3_10B_MMU_DW
 		if (dec->dw_mmu_enable == 0)
-		data = ((dec->endian >> 8) & 0xfff) >> 4; //data32 |= ((dec->endian >> 8) & 0xfff); //endian: ((0x880 << 8) | 0x8) or ((0xff0 << 8) | 0xf)
+		data = ((dec->endian >> 8) & 0xfff); //endian: ((0x880 << 8) | 0x8) or ((0xff0 << 8) | 0xf)
 #else
-		data = ((dec->endian >> 8) & 0xfff) >> 4; //data32 |= ((dec->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
+		data = ((dec->endian >> 8) & 0xfff);    /* data32 |= 0x670; Big-Endian per 64-bit */
 #endif
-		READ_WRITE_DATA16(avs3_dec, HEVC_SAO_CTRL1, data, 4, 8);
+		READ_WRITE_DATA16(avs3_dec, HEVC_SAO_CTRL1, data, 0, 12);
 
 		//data32 &= (~0x3); /*[1]:dw_disable [0]:cm_disable*/
 		if (dw_mode == 0)

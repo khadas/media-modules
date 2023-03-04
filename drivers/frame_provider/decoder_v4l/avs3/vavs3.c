@@ -1549,9 +1549,6 @@ static DEFINE_MUTEX(vavs3_mutex);
 #define PIC_DECODE_COUNT_DBE            HEVC_ASSIST_SCRATCH_X
 #define DEBUG_REG1_DBE                  HEVC_ASSIST_SCRATCH_Y
 #define DEBUG_REG2_DBE                  HEVC_ASSIST_SCRATCH_Z
-#define HEVC_ASSIST_SLICE_LMEM_CNT      HEVC_ASSIST_SCRATCH_10
-#define HEVC_ASSIST_SLICE_IMEM_CNT      HEVC_ASSIST_SCRATCH_11
-#define HEVC_ASSIST_SCALELUT_CNT        HEVC_ASSIST_SCRATCH_12
 #endif
 /*
 ucode parser/search control
@@ -4459,6 +4456,7 @@ static void set_frame_info(struct AVS3Decoder_s *dec, struct vframe_s *vf)
 
 	vf->sidebind_type = dec->sidebind_type;
 	vf->sidebind_channel_id = dec->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_AVS3;
 
 	return;
 }
@@ -4632,6 +4630,8 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 			vf->compHeadAddr,
 			vf->pts,
 			vf->pts_us64);
+		if (dec->front_back_mode == 1)
+			decoder_do_frame_check(hw_to_vdec(dec), vf);
 		return vf;
 		}
 	}
@@ -5159,7 +5159,8 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 			struct vdec_info tmp4x;
 			int stream_offset = pic->stream_offset;
 			set_vframe(dec, vf, pic, 0);
-			decoder_do_frame_check(pvdec, vf);
+			if (dec->front_back_mode != 1)
+				decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->trace.pts_name, vf->pts);
@@ -8592,11 +8593,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	}
 
 	ATRACE_COUNTER(dec->trace.decode_run_time_name, TRACE_RUN_LOADING_FW_START);
-#ifdef PXP_DEBUG
-	if (avs3_dec->frontend_decoded_count > 0) {
-#else
 	if (vdec->mc_loaded) {
-#endif
 		/*firmware have load before,
 			and not changes to another.
 			ignore reload.

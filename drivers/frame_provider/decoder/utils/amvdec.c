@@ -1277,7 +1277,7 @@ int amvdec_suspend(struct platform_device *dev, pm_message_t event)
 
 	vdec_disconnect(vdec);
 
-		flags = vdec_power_lock(vdec);
+	flags = vdec_power_lock(vdec);
 
 	amvdec_pg_enable(false);
 
@@ -1301,7 +1301,7 @@ EXPORT_SYMBOL(amvdec_suspend);
 int amvdec_resume(struct platform_device *dev)
 {
 	struct vdec_s *vdec = *(struct vdec_s **)dev->dev.platform_data;
-		unsigned long flags;
+	unsigned long flags;
 
 	flags = vdec_power_lock(vdec);
 	amvdec_pg_enable(true);

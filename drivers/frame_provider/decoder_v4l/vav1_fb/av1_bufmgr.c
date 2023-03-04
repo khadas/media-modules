@@ -2051,6 +2051,19 @@ int av1_decode_frame_headers_and_setup(AV1Decoder *pbi, int trailing_bits_presen
 	// assign_frame_buffer_p()!
 	assert(!cm->cur_frame->raw_frame_buffer.data);
 
+	if (frame_to_show->buf.vf_ref) {
+		frame_to_show->buf.v4l_buf_index = cm->cur_frame->buf.index;
+		frame_to_show->buf.repeat_count ++;
+		cm->cur_frame->buf.repeat_pic = &frame_to_show->buf;
+		frame_to_show->buf.timestamp = cm->cur_frame->buf.timestamp;
+		cm->repeat_buf.frame_bufs[cm->repeat_buf.used_size] = frame_to_show;
+
+		cm->repeat_buf.used_size++;
+		av1_print2(AV1_DEBUG_BUFMGR, "repeat frame_bufs %px used size %d\n",
+				cm->repeat_buf.frame_bufs[cm->repeat_buf.used_size],
+				cm->repeat_buf.used_size);
+	}
+
 	assign_frame_buffer_p(&cm->cur_frame, frame_to_show);
 	pbi->reset_decoder_state = frame_to_show->frame_type == KEY_FRAME;
 	unlock_buffer_pool(pool, flags);

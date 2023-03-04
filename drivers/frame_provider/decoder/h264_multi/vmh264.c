@@ -5060,6 +5060,7 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 #ifndef NV21
 	vf->canvas1_config[2] = p_canvas_config[2];
 #endif
+	vf->codec_vfmt = VFORMAT_H264;
 }
 
 static void get_picture_qos_info(struct StorablePicture *picture)

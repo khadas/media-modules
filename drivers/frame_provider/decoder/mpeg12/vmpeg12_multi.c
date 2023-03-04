@@ -822,6 +822,7 @@ static void set_frame_info(struct vdec_mpeg12_hw_s *hw, struct vframe_s *vf)
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
+	vf->codec_vfmt = VFORMAT_MPEG12;
 
 	debug_print(DECODE_ID(hw), PRINT_FLAG_PARA_DATA,
 	"mpeg2dec: w(%d), h(%d), dur(%d), dur-ES(%d)\n",
@@ -2967,6 +2968,8 @@ static int vmpeg12_canvas_init(struct vdec_mpeg12_hw_s *hw)
 					decbuf_size, i);
 				return ret;
 			}
+			if (!vdec_secure(hw_to_vdec(hw)))
+				codec_mm_memset(decbuf_start, 0, decbuf_size);
 
 			if (vdec->vdata == NULL) {
 				vdec->vdata = vdec_data_get();
