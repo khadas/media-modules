@@ -5841,7 +5841,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		if (hw->kpi_first_i_comming == 0) {
 			hw->kpi_first_i_comming = 1;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
-				"[vdec_kpi][%s] First I frame comming.\n", __func__);
+				"[vdec_kpi][%s] First I frame coming.\n", __func__);
 		}
 
 		buf_size = (hw->mb_total << 8) + (hw->mb_total << 7);
