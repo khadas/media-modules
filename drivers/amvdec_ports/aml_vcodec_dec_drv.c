@@ -147,6 +147,7 @@ static int fops_vcodec_open(struct file *file)
 	ctx->empty_flush_buf->lastframe = true;
 	ctx->vdec_pic_info_update = aml_vdec_pic_info_update;
 	ctx->cal_compress_buff_info = cal_compress_buff_info;
+	ctx->fbc_transcode_and_set_vf = fbc_transcode_and_set_vf;
 	aml_vcodec_dec_set_default_params(ctx);
 	ctx->is_stream_off = true;
 	ctx->set_ext_buf_flg = false;
@@ -494,6 +495,7 @@ static ssize_t status_show(struct class *cls,
 
 		/* buffers status. */
 		aml_buffer_status(ctx);
+		dump_cma_and_sys_memsize(ctx);
 	}
 out:
 	mutex_unlock(&dev->dev_mutex);

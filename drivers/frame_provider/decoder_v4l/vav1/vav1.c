@@ -6313,6 +6313,11 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		vf->src_fmt.play_id = vdec->inst_cnt;
 
+		if (v4l2_ctx->no_fbc_output &&
+			(v4l2_ctx->picinfo.bitdepth != 0 &&
+			 v4l2_ctx->picinfo.bitdepth != 8))
+			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+				aml_buf, &aml_buf->vframe);
 		av1_inc_vf_ref(hw, pic_config->v4l_buf_index);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		if (pic_config->v4l_buf_index != pic_config->BUF_index)	{
@@ -7072,7 +7077,6 @@ static int av1_get_current_fbc_index(struct AV1HW_s *hw, int index)
 
 	return i;
 }
-
 
 int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 {
@@ -9756,6 +9760,7 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 
 			aml_buf = (struct aml_buf *)hw->m_BUF[i].v4l_ref_buf_addr;
 
+
 			av1_print(hw, AV1_DEBUG_BUFMGR,
 				"%s i: %d buf idx: %d fb: 0x%lx vb idx: %d dma addr: 0x%lx vf_ref %d\n",
 				__func__, i, frame_bufs[i].buf.index,
@@ -9769,17 +9774,19 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 				aml_buf_put_ref(&ctx->bm, aml_buf);
 			}
 
-			if (mmu_mem_save && hw->mmu_enable &&
-				(ctx->config.parm.dec.cfg.double_write_mode == 0x21) &&
-				frame_bufs[i].buf.vf_ref) {
+			if (hw->mmu_enable && ((frame_bufs[i].buf.vf_ref &&
+				mmu_mem_save &&
+				(ctx->config.parm.dec.cfg.double_write_mode == 0x21)) ||
+				(ctx->no_fbc_output))) {
 				if (aml_buf->fbc->used[aml_buf->fbc->index] & 1) {
 					decoder_mmu_box_free_idx(aml_buf->fbc->mmu,
 								aml_buf->fbc->index);
 					aml_buf->fbc->used[aml_buf->fbc->index] &= ~0x1;
 					av1_print(hw, AV1_DEBUG_BUFMGR,
-						"free mmu buffer frame idx %d afbc_index: %d\n",
+						"free mmu buffer frame idx %d afbc_index: %d, dma addr: 0x%lx\n",
 						frame_bufs[i].buf.index,
-						aml_buf->fbc->index);
+						aml_buf->fbc->index,
+						frame_bufs[i].buf.cma_alloc_addr);
 				}
 			}
 
@@ -11278,7 +11285,6 @@ MODULE_PARM_DESC(v4l_bitstream_id_enable, "\n v4l_bitstream_id_enable\n");
 
 module_param(enable_single_slice, uint, 0664);
 MODULE_PARM_DESC(enable_single_slice, "\n  enable_single_slice\n");
-
 
 module_init(amvdec_av1_driver_init_module);
 module_exit(amvdec_av1_driver_remove_module);

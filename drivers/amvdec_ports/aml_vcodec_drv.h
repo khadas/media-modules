@@ -306,6 +306,7 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 19	: no-surface flag.
 	 * bit 18	: release vpp early. 0:false, 1:true
 	 * bit 17	: force di permission.
 	 * bit 16	: force progressive output flag.
@@ -617,6 +618,16 @@ struct canvas_cache {
 	struct mutex		lock;
 };
 
+struct cma_sys_size_info {
+	int max_total_size;
+	int cma_part;
+	int sys_part;
+	int max_cma_size;
+	int max_sys_size;
+	int cur_cma_size;
+	int cur_sys_size;
+};
+
 /*
  * struct aml_vcodec_ctx - Context (instance) private data.
  * @id: index of the context that this structure describes.
@@ -825,6 +836,10 @@ struct aml_vcodec_ctx {
 #endif
 	atomic_t 		local_buf_out;
 	struct mutex		v4l_intf_lock;
+	void (*fbc_transcode_and_set_vf)(struct aml_vcodec_ctx *,  struct aml_buf *,
+						  struct vframe_s *);
+	bool			no_fbc_output;
+	struct cma_sys_size_info mem_size_info;
 };
 
 /**

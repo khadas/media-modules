@@ -1730,6 +1730,9 @@ int vp9_alloc_mmu(
 				aml_buf->fbc->frame_size,
 				mmu_index_adr);
 
+	if (!ret)
+		aml_buf->fbc->used[aml_buf->fbc->index] |= 1;
+
 	vp9_print(pbi, VP9_DEBUG_BUFMGR, "%s afbc_index %d, haddr:%lx, dma 0x%lx\n",
 			__func__, aml_buf->fbc->index, aml_buf->fbc->haddr, aml_buf->planes[0].addr);
 
@@ -7529,6 +7532,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vdec_fill_vdec_frame(pvdec, &pbi->vframe_qos, &tmp4x,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
+
+			if (v4l2_ctx->no_fbc_output &&
+				(v4l2_ctx->picinfo.bitdepth != 0 &&
+				v4l2_ctx->picinfo.bitdepth != 8))
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, &aml_buf->vframe);
 			if (without_display_mode == 0) {
 				if (v4l2_ctx->is_stream_off) {
 					vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);
@@ -10128,6 +10137,19 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			if (!frame_bufs[i].buf.vf_ref) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
+			}
+
+			if (pbi->mmu_enable && ctx->no_fbc_output) {
+				if (aml_buf->fbc->used[aml_buf->fbc->index] & 1) {
+					decoder_mmu_box_free_idx(aml_buf->fbc->mmu,
+								aml_buf->fbc->index);
+					aml_buf->fbc->used[aml_buf->fbc->index] &= ~0x1;
+					vp9_print(pbi, VP9_DEBUG_BUFMGR,
+						"free mmu buffer frame idx %d afbc_index: %d, dma addr: 0x%lx\n",
+						frame_bufs[i].buf.index,
+						aml_buf->fbc->index,
+						frame_bufs[i].buf.cma_alloc_addr);
+				}
 			}
 
 			lock_buffer_pool(cm->buffer_pool, flags);

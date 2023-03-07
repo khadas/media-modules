@@ -221,6 +221,12 @@ void aml_es_mgr_release(struct aml_vcodec_ctx *ctx);
 void aml_es_node_add(struct aml_es_mgr *mgr, ulong addr,
 	u32 size, s32 index);
 
+void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
+						  struct aml_buf *aml_buf,
+						  struct vframe_s *vf);
+void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx);
+
+
 
 
 

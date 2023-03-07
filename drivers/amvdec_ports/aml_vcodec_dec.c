@@ -56,6 +56,8 @@
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 #include <linux/amlogic/media/amdolbyvision/dolby_vision.h>
 #endif
+#include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/codec_mm/codec_mm_scatter.h>
 
 
 #define OUT_FMT_IDX		(0) //default h264
@@ -705,6 +707,83 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	dmabuf_set_vframe(vb->planes[0].dbuf, vf, VF_SRC_DECODER);
 }
 
+void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
+						  struct aml_buf *aml_buf,
+						  struct vframe_s *vf)
+{
+	struct vb2_buffer *vb2_buf = aml_buf->vb;
+	struct vb2_v4l2_buffer *vb = to_vb2_v4l2_buffer(vb2_buf);
+	struct aml_v4l2_buf *dstbuf =
+		container_of(vb, struct aml_v4l2_buf, vb);
+
+	if (is_cpu_t7()) {
+		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) {
+			if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
+				(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
+				(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
+				(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
+				(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
+				vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+			}
+			else {
+				if (aml_buf->state == FB_ST_GE2D)
+					vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+			}
+		}
+	} else {
+		if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+	}
+
+	vf->index_disp = ctx->index_disp;
+	vf->omx_index = vf->index_disp;
+
+	if (vb2_buf->memory == VB2_MEMORY_DMABUF) {
+		struct dma_buf * dma;
+
+		dma = dstbuf->vb.vb2_buf.planes[0].dbuf;
+		if (dmabuf_is_uvm(dma)) {
+			/* only Y will contain vframe */
+			comp_buf_set_vframe(ctx, vb2_buf, vf);
+			v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+				"set vf(%px) into %dth buf\n",
+				vf, vb2_buf->index);
+		}
+	}
+}
+
+void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx)
+{
+	 struct cma_sys_size_info *info = &ctx->mem_size_info;
+	 int cma_size = codec_mm_alloc_cma_size();
+	 int sys_size = codec_mm_alloc_sys_size();
+	 int total_size = cma_size + sys_size;
+
+	 if (total_size > info->max_total_size) {
+		 info->max_total_size = total_size;
+		 info->cma_part = cma_size;
+		 info->sys_part = sys_size;
+	 }
+
+	 info->max_cma_size = cma_size > info->max_cma_size ?
+			 cma_size : info->max_cma_size;
+
+	 info->max_sys_size = sys_size > info->max_sys_size ?
+			 sys_size : info->max_sys_size;
+
+	 info->cur_cma_size = cma_size;
+	 info->cur_sys_size = sys_size;
+
+	 if (debug_mode & V4L_DEBUG_CODEC_COUNT)
+		 v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
+			 "TOTAL[Max:%dM(CMA:%dM, SYS:%dM), CUR:%dM], "
+			 "CMA[%dM, Max:%dM], SYS[%dM, Max:%dM]\n",
+			 info->max_total_size, info->cma_part,
+			 info->sys_part, total_size,
+			 info->cur_cma_size, info->max_cma_size,
+			 info->cur_sys_size, info->max_sys_size);
+}
+
  static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
 	struct aml_buf *aml_buf)
 {
@@ -713,6 +792,8 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	struct aml_v4l2_buf *dstbuf =
 		container_of(vb, struct aml_v4l2_buf, vb);
 	struct vframe_s *vf = &aml_buf->vframe;
+
+	dump_cma_and_sys_memsize(ctx);
 
 	vf->index_disp = ctx->index_disp;
 	if ((vf->type & VIDTYPE_V4L_EOS) == 0)
@@ -828,41 +909,11 @@ static void comp_buf_set_vframe(struct aml_vcodec_ctx *ctx,
 	}
 
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
-		/* binding vframe handle. */
-		if (is_cpu_t7()) {
-			if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) {
-				if ((ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
-					(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
-					(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
-					(ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
-					(ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
-					vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
-				}
-				else {
-					if (aml_buf->state == FB_ST_GE2D)
-						vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
-				}
-			}
-		} else {
-			if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
-				vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
-		}
+		if (!ctx->no_fbc_output || ctx->picinfo.bitdepth == 0 ||
+			ctx->picinfo.bitdepth == 8)
+			ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
 
-		vf->omx_index = vf->index_disp;
 		dstbuf->privdata.vf = *vf;
-
-		if (vb2_buf->memory == VB2_MEMORY_DMABUF) {
-			struct dma_buf * dma;
-
-			dma = dstbuf->vb.vb2_buf.planes[0].dbuf;
-			if (dmabuf_is_uvm(dma)) {
-				/* only Y will contain vframe */
-				comp_buf_set_vframe(ctx, vb2_buf, vf);
-				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-					"set vf(%px) into %dth buf\n",
-					vf, vb2_buf->index);
-			}
-		}
 
 		if (vf->frame_type & V4L2_BUF_FLAG_ERROR)
 			v4l2_buff_done(&dstbuf->vb, VB2_BUF_STATE_ERROR);
@@ -4663,6 +4714,7 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->internal_dw_scale = dec->cfg.metadata_config_flag & (1 << 13);
 		ctx->second_field_pts_mode = dec->cfg.metadata_config_flag & (1 << 12);
 		ctx->force_di_permission = dec->cfg.metadata_config_flag & (1 << 17);
+		ctx->no_fbc_output = dec->cfg.metadata_config_flag & (1 << 19);
 		if (force_di_permission)
 			ctx->force_di_permission = true;
 

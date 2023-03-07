@@ -7260,6 +7260,9 @@ static int H265_alloc_mmu(struct hevc_state_s *hevc, struct PIC_s *new_pic,
 				aml_buf->fbc->frame_size,
 				mmu_index_adr);
 
+	if (!ret)
+		aml_buf->fbc->used[aml_buf->fbc->index] |= 1;
+
 	ATRACE_COUNTER(hevc->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 	new_pic->scatter_alloc = 1;
 
@@ -9095,6 +9098,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			pr_debug("[vdec_kpi][%s] First I frame decoded.\n",
 				__func__);
 		}
+
+		if (v4l2_ctx->no_fbc_output &&
+			(v4l2_ctx->picinfo.bitdepth != 0 &&
+			 v4l2_ctx->picinfo.bitdepth != 8))
+			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+				aml_buf, &aml_buf->vframe);
 
 		if (without_display_mode == 0) {
 			if (v4l2_ctx->is_stream_off) {
@@ -12032,6 +12041,19 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 						aml_buf_put_ref(&ctx->bm, aml_buf);
 						aml_buf_put_ref(&ctx->bm, aml_buf);
 					}
+				}
+			}
+
+			if (ctx->no_fbc_output && pic->vf_ref) {
+				if (aml_buf->fbc->used[aml_buf->fbc->index] & 1) {
+					decoder_mmu_box_free_idx(aml_buf->fbc->mmu,
+								aml_buf->fbc->index);
+					aml_buf->fbc->used[aml_buf->fbc->index] &= ~0x1;
+					hevc_print(hevc, H265_DEBUG_BUFMGR,
+						"free mmu buffer frame idx %d afbc_index: %d, dma addr: 0x%lx\n",
+						pic->index,
+						aml_buf->fbc->index,
+						pic->cma_alloc_addr);
 				}
 			}
 
