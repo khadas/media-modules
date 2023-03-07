@@ -58,7 +58,9 @@ typedef enum {
 
 typedef enum {
 	GET_UPDATE_INFO = 0,
+	GET_SLOW_SYNC_ENABLE,
 	SET_VIDEO_FRAME_ADVANCE = 500,
+	SET_SLOW_SYNC_ENABLE,
 } mediasync_control_cmd;
 
 typedef struct m_control {
@@ -106,7 +108,6 @@ typedef struct discontinue_frame_info{
 	int64_t discontinuePtsAfter;
 	int isDiscontinue;
 } mediasync_discontinue_frame_info;
-
 
 typedef struct avsync_state_cur_time_us{
 	avsync_state state;
@@ -224,6 +225,7 @@ typedef struct instance{
 	mediasync_discontinue_frame_info mAudioDiscontinueInfo;
 	aml_Source_Type mSourceType;
 	mediasync_audio_format mAudioFormat;
+	bool mSlowSyncEnable;
 	char atrace_video[32];
 	char atrace_audio[32];
 	char atrace_pcrscr[32];

@@ -53,7 +53,7 @@ MediaSyncManage vMediaSyncInsList[MAX_INSTANCE_NUM];
 u64 last_system;
 u64 last_pcr;
 
-#ifdef CONFIG_AMLOGIC_DVB_DMX
+#if IS_ENABLED(CONFIG_AMLOGIC_DVB_DMX)
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
 #else
 int demux_get_pcr(int demux_device_index, int index, u64 *pcr) {return -1;}
@@ -2684,6 +2684,23 @@ long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_p
 		{
 			pInstance->isVideoFrameAdvance = mediasyncControl.value;
 			ret = 0;
+			break;
+		}
+		case SET_SLOW_SYNC_ENABLE:
+		{
+			pInstance->mSlowSyncEnable = mediasyncControl.value;
+			ret = 0;
+			break;
+		}
+		case GET_SLOW_SYNC_ENABLE:
+		{
+			mediasyncControl.value = pInstance->mSlowSyncEnable;
+			if (copy_to_user((void *)arg,&mediasyncControl,sizeof(mediasyncControl))) {
+				pr_info("copy_to_user arg -EFAULT \n");
+				return -EFAULT;
+			}
+			ret = 0;
+			break;
 		}
 		default:
 			break;
