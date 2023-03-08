@@ -195,7 +195,8 @@ static void pm_vdec_clock_off(int id)
 
 static void dos_local_config(bool is_on, int id)
 {
-	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5)
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5 &&
+		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M)
 		return;
 
 	if (is_on) {
