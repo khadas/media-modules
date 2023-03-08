@@ -265,7 +265,9 @@ static u32 mjpeg_get_endian(struct vdec_mjpeg_hw_s *hw)
 	/* mjpeg convert endian to match display. */
 	if ((is_cpu_t7()) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W)) {
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M)) {
 		endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 7 : 0;
 	} else {
 		endian = (hw->canvas_mode == CANVAS_BLKMODE_LINEAR) ? 0 : 7;

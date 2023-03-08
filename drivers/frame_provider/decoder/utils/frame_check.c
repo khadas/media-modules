@@ -268,7 +268,7 @@ static int canvas_get_virt_addr(struct pic_check_mgr_t *pic,
 		} else {
 			pic->extra_v_phyaddr = vf->canvas0_config[2].phy_addr;
 		}
-		pic->extra_v_vaddr = codec_mm_phys_to_virt(phy_uv_addr);
+		pic->extra_v_vaddr = codec_mm_phys_to_virt(pic->extra_v_phyaddr);
 
 		if (!pic->extra_v_vaddr && !pic->extra_v_phyaddr)
 			return -1;
