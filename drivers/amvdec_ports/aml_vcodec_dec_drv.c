@@ -110,7 +110,6 @@ static int fops_vcodec_open(struct file *file)
 	INIT_KFIFO(ctx->capture_buffer);
 	atomic_set(&ctx->vpp_cache_num, 0);
 	atomic_set(&ctx->ge2d_cache_num, 0);
-	atomic_set(&ctx->local_buf_out, 0);
 	mutex_init(&ctx->v4l_intf_lock);
 
 	ctx->post_to_upper_done = true;
