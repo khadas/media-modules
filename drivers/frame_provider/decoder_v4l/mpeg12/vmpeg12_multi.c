@@ -1976,7 +1976,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 				vmpeg2_get_ps_info(hw, frame_width, frame_height, frame_prog, &ps);
 				hw->v4l_params_parsed = true;
-				hw->report_field = frame_prog ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
+				hw->report_field = (hw->force_prog_only || frame_prog) ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 				vdec_v4l_set_ps_infos(ctx, &ps);
 				if (vdec_frame_based(vdec)) {
 					cal_chunk_offset_and_size(hw);
@@ -2151,6 +2151,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->frame_prog = 0;
 #endif
 		force_interlace_check(hw);
+		if (hw->force_prog_only)
+			hw->frame_prog = PICINFO_PROG;
 
 		if (is_ref_error(hw)) {
 			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
