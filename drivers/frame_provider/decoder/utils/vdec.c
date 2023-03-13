@@ -2792,7 +2792,8 @@ EXPORT_SYMBOL(vdec_destroy);
 static bool is_tunnel_pipeline(u32 pl)
 {
 	return ((pl & BIT(FRAME_BASE_PATH_DTV_TUNNEL_MODE)) ||
-		(pl & BIT(FRAME_BASE_PATH_AMLVIDEO_AMVIDEO))) ?
+		(pl & BIT(FRAME_BASE_PATH_AMLVIDEO_AMVIDEO)) ||
+		(pl & BIT(FRAME_BASE_PATH_DTV_AMLVIDEO_AMVIDEO))) ?
 		true : false;
 }
 
@@ -3304,6 +3305,14 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 					"vdec-map-%d", vdec->id);
 #endif
+		}else if (p->frame_base_video_path ==
+			FRAME_BASE_PATH_DTV_AMLVIDEO_AMVIDEO) {
+			snprintf(vdec->vfm_map_chain,
+				 VDEC_MAP_NAME_SIZE, "%s %s",
+				 vdec->vf_provider_name,
+				 "amlvideo deinterlace amvideo");
+			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
+				"vdec-map-%d", vdec->id);
 		}
 
 		if (vfm_map_add(vdec->vfm_map_id,
