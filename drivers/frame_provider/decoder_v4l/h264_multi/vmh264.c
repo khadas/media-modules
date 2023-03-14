@@ -2131,7 +2131,7 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 		if (v4l->vpp_is_need &&
 			p_H264_Dpb->mVideo.dec_picture) {
 			pic_struct = p_H264_Dpb->mVideo.dec_picture->pic_struct;
-			if (!((hw->seq_info >> 15) & 0x01) || //frame_mbs_only_flag
+			if (v4l->picinfo.field == V4L2_FIELD_INTERLACED || //frame_mbs_only_flag
 				pic_struct == PIC_DOUBLE_FRAME ||
 				pic_struct == PIC_TRIPLE_FRAME ||
 				pic_struct == PIC_TOP_BOT ||
@@ -2234,7 +2234,7 @@ int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw)
 			if (!pic->vf_ref)
 				aml_buf_put_ref(&ctx->bm, aml_buf);
 
-			if (!((hw->seq_info >> 15) & 0x01))
+			if (ctx->picinfo.field == V4L2_FIELD_INTERLACED)
 				aml_buf_put_ref(&ctx->bm, aml_buf);
 
 			while (pic->vf_ref) {
@@ -2529,7 +2529,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 		return false;
 	}
 
-	if (!((hw->seq_info >> 15) & 0x01) &&
+	if (ctx->picinfo.field == V4L2_FIELD_INTERLACED &&
 		atomic_read(&ctx->vpp_cache_num) > 1) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s vpp cache: %d full!\n",
@@ -6476,7 +6476,7 @@ static void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 
 		aml_buf = (struct aml_buf *)hw->buffer_spec[buf_spec_num].cma_alloc_addr;
 
-		if (!((hw->seq_info >> 15) & 0x01) || //frame_mbs_only_flag
+		if (ctx->picinfo.field == V4L2_FIELD_INTERLACED || //frame_mbs_only_flag
 			pic_struct == PIC_DOUBLE_FRAME ||
 			pic_struct == PIC_TRIPLE_FRAME)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
