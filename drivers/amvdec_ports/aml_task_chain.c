@@ -366,8 +366,8 @@ int task_chain_init(struct task_chain_s **task_out,
 
 	task = kzalloc(sizeof(struct task_chain_s), GFP_ATOMIC);
 	if (!task) {
-		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
-			"TSK(%px):%d alloc task fail.\n", task, task->id);
+		v4l_dbg(v4l_ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s alloc task %d fail.\n", __func__, vb_idx);
 		return -ENOMEM;
 	}
 
