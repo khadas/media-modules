@@ -3419,7 +3419,7 @@ static int config_pic(struct AV1HW_s *hw,
 				data_buf.alloc_policy = ALLOC_AUX_BUF;
 				data_buf.aux_buf_size = SEI_BUF_SIZE;
 
-				data_buf.alloc_policy &= ALLOC_HDR10P_BUF;
+				data_buf.alloc_policy |= ALLOC_HDR10P_BUF;
 				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
 
 				if (pic_config->vdec_data_index == -1) {
@@ -3616,7 +3616,7 @@ static void init_pic_list(struct AV1HW_s *hw)
 				data_buf.alloc_policy = ALLOC_AUX_BUF;
 				data_buf.aux_buf_size = SEI_BUF_SIZE;
 
-				data_buf.alloc_policy &= ALLOC_HDR10P_BUF;
+				data_buf.alloc_policy |= ALLOC_HDR10P_BUF;
 				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
 
 				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
