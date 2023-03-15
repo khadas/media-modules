@@ -1434,14 +1434,14 @@ static int dvb_ca_en50221_thread(void *data)
 
 					/* if a CAMCHANGE occurred at some point, do not do any more processing of this slot */
 					if (dvb_ca_en50221_check_camstatus(ca, slot)) {
-						// we dont want to sleep on the next iteration so we can handle the cam change
+						// we don't want to sleep on the next iteration so we can handle the cam change
 						ca->wakeup = 1;
 						break;
 					}
 
 					/* check if we've hit our limit this time */
 					if (++pktcount >= MAX_RX_PACKETS_PER_ITERATION) {
-						// dont sleep; there is likely to be more data to read
+						// don't sleep; there is likely to be more data to read
 						ca->wakeup = 1;
 						break;
 					}

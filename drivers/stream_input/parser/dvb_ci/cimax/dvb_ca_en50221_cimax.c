@@ -1158,7 +1158,7 @@ static int dvb_ca_en50221_slot_process(struct dvb_ca_private *ca, int slot)
 			/* if a CAMCHANGE occurred at some point,
 			   do not do any more processing of this slot */
 			if (dvb_ca_en50221_check_camstatus(ca, slot)) {
-				/* we dont want to sleep on the next iteration
+				/* we don't want to sleep on the next iteration
 				   so we can handle the cam change*/
 				ca->wakeup = 1;
 				break;
@@ -1166,7 +1166,7 @@ static int dvb_ca_en50221_slot_process(struct dvb_ca_private *ca, int slot)
 
 			/* check if we've hit our limit this time */
 			if (++pktcount >= MAX_RX_PACKETS_PER_ITERATION) {
-				/*dont sleep;
+				/*don't sleep;
 				  there is likely to be more data to read*/
 				ca->wakeup = 1;
 				break;

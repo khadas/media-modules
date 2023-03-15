@@ -1050,7 +1050,7 @@ static int fbc_check_prepare(struct pic_check_t *check,
 		}
 		return -1;
 	} else
-		dbg_print(FC_CRC_DEBUG, "vmalloc static_planes successed\n");
+		dbg_print(FC_CRC_DEBUG, "vmalloc static_planes succeeded\n");
 
 	return 0;
 }
