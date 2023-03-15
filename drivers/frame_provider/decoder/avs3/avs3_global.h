@@ -463,7 +463,7 @@ int dec_eco_alf_param(union param_u *rpm_param, COM_PIC_HEADER *sh
 #define AVS3_DBG_PIC_LEAK                 0x1000
 #define AVS3_DBG_PIC_LEAK_WAIT            0x2000
 #define AVS3_DBG_HDR_INFO                 0x4000
-#define AVS3_DBG_HDR_DATA                 0x8000
+#define AVS3_DBG_QOS_INFO                 0x8000
 #define AVS3_DBG_DIS_LOC_ERROR_PROC       0x10000
 #define AVS3_DBG_DIS_SYS_ERROR_PROC   0x20000
 #define AVS3_DBG_DUMP_PIC_LIST       0x40000

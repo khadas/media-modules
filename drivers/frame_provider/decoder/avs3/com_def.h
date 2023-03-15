@@ -37,6 +37,7 @@
 
 #include "com_typedef.h"
 #include "com_port.h"
+#include <linux/amlogic/media/utils/amstream.h>
 
 #if TSCPM
 #define MAX_INT                     2147483647  ///< max. value of signed 32-bit integer
@@ -1533,15 +1534,7 @@ typedef struct avs3_frame_s{
 	u32 pts;
 	u64 pts64;
 	/* picture qos information*/
-	int max_qp;
-	int avg_qp;
-	int min_qp;
-	int max_skip;
-	int avg_skip;
-	int min_skip;
-	int max_mv;
-	int min_mv;
-	int avg_mv;
+	struct vframe_qos_s vqos;
 
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode
@@ -1549,6 +1542,10 @@ typedef struct avs3_frame_s{
 	int  cuva_data_size;
 	bool in_dpb;
 	u64 time;
+	s32 poc;
+	u32 hw_front_decode_time;
+	struct vdec_info vinfo;
+	u32 stream_size; // For stream base mode
 #endif
 #ifdef OW_TRIPLE_WRITE
 	unsigned int tw_y_adr;
