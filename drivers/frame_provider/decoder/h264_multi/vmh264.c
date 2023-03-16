@@ -8153,17 +8153,6 @@ static void check_timer_func(struct timer_list *timer)
 
 	flags = vdec_power_lock(vdec);
 
-	if ((vdec->next_status == VDEC_STATUS_DISCONNECTED ||
-		vdec->suspend) &&
-		!hw->is_used_v4l) {
-		hw->dec_result = DEC_RESULT_FORCE_EXIT;
-		WRITE_VREG(ASSIST_MBOX1_MASK, 0);
-		vdec_schedule_work(&hw->work);
-		vdec_power_unlock(vdec, flags);
-		pr_debug("vdec requested to be disconnected\n");
-		return;
-	}
-
 	if (radr != 0) {
 		if (rval != 0) {
 			WRITE_VREG(radr, rval);
