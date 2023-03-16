@@ -220,6 +220,11 @@ static void get_pic_info(struct vdec_h264_inst *inst,
 		 pic->y_len_sz, pic->c_bs_sz, pic->c_len_sz);
 }
 
+static void get_cfg_info(struct vdec_h264_inst *inst, struct aml_vdec_cfg_infos *cfg)
+{
+	memcpy(cfg, &inst->ctx->config.parm.dec.cfg, sizeof(struct aml_vdec_cfg_infos));
+}
+
 static void get_crop_info(struct vdec_h264_inst *inst, struct v4l2_rect *cr)
 {
 	cr->left = inst->vsi->crop.left;
@@ -1003,12 +1008,16 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 	case GET_PARAM_DW_MODE:
 	{
 		unsigned int* mode = out;
-		*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
+		*mode = inst->parms.cfg.double_write_mode;
 		break;
 	}
 
 	case GET_PARAM_COMP_BUF_INFO:
 		get_param_comp_buf_info(inst, out);
+		break;
+
+	case GET_PARAM_CFG_INFO:
+		get_cfg_info(inst, out);
 		break;
 
 	default:
@@ -1023,6 +1032,15 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 static void set_param_write_sync(struct vdec_h264_inst *inst)
 {
 	complete(&inst->comp);
+}
+
+static void set_cfg_info(struct vdec_h264_inst *inst,
+	struct aml_vdec_cfg_infos *cfg)
+{
+	memcpy(&inst->ctx->config.parm.dec.cfg,
+		cfg, sizeof(struct aml_vdec_cfg_infos));
+	memcpy(&inst->parms.cfg,
+		cfg, sizeof(struct aml_vdec_cfg_infos));
 }
 
 static void set_param_ps_info(struct vdec_h264_inst *inst,
@@ -1139,6 +1157,9 @@ static int vdec_h264_set_param(unsigned long h_vdec,
 		break;
 	case SET_PARAM_COMP_BUF_INFO:
 		set_param_comp_buf_info(inst, in);
+		break;
+	case SET_PARAM_CFG_INFO:
+		set_cfg_info(inst, in);
 		break;
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
