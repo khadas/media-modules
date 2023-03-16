@@ -7538,7 +7538,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				(v4l2_ctx->picinfo.bitdepth != 0 &&
 				v4l2_ctx->picinfo.bitdepth != 8))
 				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
-					aml_buf, &aml_buf->vframe);
+					aml_buf, vf);
 			if (without_display_mode == 0) {
 				if (v4l2_ctx->is_stream_off) {
 					vvp9_vf_put(vvp9_vf_get(pvdec), pvdec);

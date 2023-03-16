@@ -9104,7 +9104,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			(v4l2_ctx->picinfo.bitdepth != 0 &&
 			 v4l2_ctx->picinfo.bitdepth != 8))
 			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
-				aml_buf, &aml_buf->vframe);
+				aml_buf, vf);
 
 		if (without_display_mode == 0) {
 			if (v4l2_ctx->is_stream_off) {

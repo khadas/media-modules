@@ -6318,7 +6318,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			(v4l2_ctx->picinfo.bitdepth != 0 &&
 			 v4l2_ctx->picinfo.bitdepth != 8))
 			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
-				aml_buf, &aml_buf->vframe);
+				aml_buf, vf);
 		av1_inc_vf_ref(hw, pic_config->v4l_buf_index);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
 		if (pic_config->v4l_buf_index != pic_config->BUF_index)	{

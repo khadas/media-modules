@@ -910,7 +910,8 @@ void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx)
 
 	if (dstbuf->vb.vb2_buf.state == VB2_BUF_STATE_ACTIVE) {
 		if (!ctx->no_fbc_output || ctx->picinfo.bitdepth == 0 ||
-			ctx->picinfo.bitdepth == 8)
+			ctx->picinfo.bitdepth == 8 ||
+			vf->flag & VFRAME_FLAG_EMPTY_FRAME_V4L)
 			ctx->fbc_transcode_and_set_vf(ctx, aml_buf, vf);
 
 		dstbuf->privdata.vf = *vf;
