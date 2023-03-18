@@ -405,7 +405,7 @@ static void update_audio_cache(mediasync_ins* pInstance,int64_t pts, int64_t dur
 						pTable->mCacheInfo.cacheDuration -= rec->frame_info.remainedduration;
 						rec->frame_info.remainedduration = rec->frame_info.frameduration - (pts - rec->frame_info.framePts);
 						pTable->mCacheInfo.cacheDuration += rec->frame_info.remainedduration;
-						mediasync_pr_info(2,pInstance,"aFrame multi frame es:[%llx,%llx],to pts:%lld ms,duration:%d/%d ms",\
+						mediasync_pr_info(2,pInstance,"aFrame multi frame es:[%llx,%llx],to pts:%lld ms,duration:%lld/%lld ms",\
 							rec->frame_info.framePts, rec->frame_info.frameid, div_u64((pts-rec->frame_info.framePts), 90),\
 							div_u64(rec->frame_info.remainedduration, 90), div_u64(rec->frame_info.frameduration, 90));
 						pTable->mMinPtsFrame = rec->frame_info;
@@ -415,7 +415,7 @@ static void update_audio_cache(mediasync_ins* pInstance,int64_t pts, int64_t dur
 			}
 		}
 	}
-	mediasync_pr_info(1,pInstance,"(%s)aCache:%d ms(%d) pts:[%llx,%llx,%llx], a_add:%lld ms, interval:%d ms",\
+	mediasync_pr_info(1,pInstance,"(%s)aCache:%lld ms(%d) pts:[%llx,%llx,%llx], a_add:%lld ms, interval:%lld ms",\
 		(duration_add > 0) ? "+":"-", div_u64(pTable->mCacheInfo.cacheDuration, 90),\
 		pTable->mFrameCount, pTable->mMinPtsFrame.framePts, pts, pTable->mLastQueued.framePts, div_u64(duration_add, 90),div_u64(pTable->mLastQueued.frameduration, 90));
 }
@@ -462,7 +462,7 @@ static void update_video_cache(mediasync_ins* pInstance,int64_t pts, int64_t dur
 					if (pts >= minelement.framePts && pts <= maxelement.framePts) {
 						diff_pts_2_seg_min_pts = pts - minelement.framePts;
 					}
-					mediasync_pr_info(1,pInstance,"video segment jump back %lldms,%llx->%llx,id:%llx->%llx, seg_cache:%d(%d)/%dms",\
+					mediasync_pr_info(1,pInstance,"video segment jump back %lldms,%llx->%llx,id:%llx->%llx, seg_cache:%d(%d)/%lldms",\
 						div_u64((rec->frame_info.framePts - next->frame_info.framePts), 90), rec->frame_info.framePts, next->frame_info.framePts,\
 						rec->frame_info.frameid, next->frame_info.frameid, (int)div_u64((maxelement.framePts - minelement.framePts),90), segment_size,\
 						div_u64(pTable->mCacheInfo.cacheDuration, 90));
@@ -493,7 +493,7 @@ static void update_video_cache(mediasync_ins* pInstance,int64_t pts, int64_t dur
 		if (pTable->mCacheInfo.cacheDuration < 0)
 			pTable->mCacheInfo.cacheDuration = 0;
 	}
-	mediasync_pr_info(1,pInstance,"(%s)vCache:%d ms(%d) pts:[%llx,%llx,%llx] v_add:%lld ms",\
+	mediasync_pr_info(1,pInstance,"(%s)vCache:%lld ms(%d) pts:[%llx,%llx,%llx] v_add:%lld ms",\
 		(duration_add != 0) ? "+":"-", div_u64(pTable->mCacheInfo.cacheDuration, 90),\
 		pTable->mFrameCount, pTable->mMinPtsFrame.framePts, pts, pTable->mLastQueued.framePts, div_u64(duration_add, 90));
 }
@@ -2630,7 +2630,7 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 					info->cacheDuration = Before_diff + After_diff;
 					// sometimes stream not descramble, lead pts jump, cache_duration will have error
 					if (pInstance->mAudioDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90 * 2)) {
-						mediasync_pr_info(0,pInstance,"get_audio_cache, cache=%dms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
+						mediasync_pr_info(0,pInstance,"get_audio_cache, cache=%lldms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
 						info->cacheDuration = 0;
 					}
 				} else {
@@ -2783,7 +2783,7 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 
 					// sometimes stream not descramble, lead pts jump, cache_duration will have error
 					if (pInstance->mVideoDiscontinueInfo.isDiscontinue && (info->cacheDuration < 0 || info->cacheDuration > MAX_CACHE_TIME_MS * 90)) {
-						mediasync_pr_info(0,pInstance,"get_video_cache, cache=%dms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
+						mediasync_pr_info(0,pInstance,"get_video_cache, cache=%lldms, maybe cache cal have problem, need check more\n", div_u64(info->cacheDuration, 90));
 						info->cacheDuration = 0;
 					}
 				} else {
@@ -3398,7 +3398,7 @@ long mediasync_ins_set_cache_frames(s32 sSyncInsId, s64 cache) {
 		return -1;
 	}
 
-	mediasync_pr_info(0,pInstance,"mCacheFrames=%d",cache);
+	mediasync_pr_info(0,pInstance,"mCacheFrames=%lld",cache);
 	pInstance->mCacheFrames = cache;
 	mutex_unlock(&(pSyncManage->m_lock));
 
