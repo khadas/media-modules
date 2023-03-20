@@ -305,6 +305,12 @@ static u32 double_write_mode = 0x80000003;
 static u32 without_display_mode;
 static u32 dump_yuv_frame = 0;
 
+/*
+bit0: if dpb abnormal, check dpb buffer status and flush dpb.
+bit1: 0:show error frame.
+*/
+static unsigned int error_proc_policy = 0x3;
+
 static u32 mv_buf_dynamic_alloc;
 
 #define DRIVER_NAME "amvdec_avs2_fb"
@@ -898,6 +904,7 @@ struct AVS2Decoder_s {
 	int decoder_size;
 	u32 last_stbuf_level;
 	u32 again_count;
+	u32 error_proc_policy;
 };
 
 static int  compute_losless_comp_body_size(
@@ -5016,14 +5023,6 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 		uint8_t index = vf->index & 0xff;
 		struct vdec_s *vdec = hw_to_vdec(dec);
 
-		ATRACE_COUNTER(dec->trace.vf_get_name, (long)vf);
-		ATRACE_COUNTER(dec->trace.disp_q_name, kfifo_len(&dec->display_q));
-#ifdef MULTI_INSTANCE_SUPPORT
-		ATRACE_COUNTER(dec->trace.set_canvas0_addr, vf->canvas0_config[0].phy_addr);
-#else
-		ATRACE_COUNTER(dec->trace.get_canvas0_addr, vf->canvas0Addr);
-#endif
-
 		if (index < dec->used_buf_num) {
 			struct avs2_frame_s *pic = get_pic_by_index(dec, index);
 			if (pic == NULL &&
@@ -5042,6 +5041,26 @@ static struct vframe_s *vavs2_vf_get(void *op_arg)
 					debug |= AVS2_DBG_PIC_LEAK_WAIT;
 				return NULL;
 			}
+
+			if ((dec->error_proc_policy & 0x2) &&
+				pic && pic->error_mark) {
+				kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
+				if (pic->vf_ref > 0)
+					pic->vf_ref--;
+				avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic has error_mark, get err\n", __func__);
+#ifdef MULTI_INSTANCE_SUPPORT
+				vdec_up(vdec);
+#endif
+				return NULL;
+			}
+
+			ATRACE_COUNTER(dec->trace.vf_get_name, (long)vf);
+			ATRACE_COUNTER(dec->trace.disp_q_name, kfifo_len(&dec->display_q));
+#ifdef MULTI_INSTANCE_SUPPORT
+			ATRACE_COUNTER(dec->trace.set_canvas0_addr, vf->canvas0_config[0].phy_addr);
+#else
+			ATRACE_COUNTER(dec->trace.get_canvas0_addr, vf->canvas0Addr);
+#endif
 
 			vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
 			vf->vf_ud_param.ud_param.buf_len = 0;
@@ -5520,7 +5539,8 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			continue;
 		}
 
-		if (pic->error_mark) {
+		if ((dec->error_proc_policy & 0x2) &&
+			pic->error_mark) {
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL, "!!!error pic, skip\n", 0);
 			continue;
 		}
@@ -6360,16 +6380,21 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, AVS2_DEC_IDLE);
 		WRITE_VREG(HEVC_ASSIST_FB_PIC_CLR, 2);
 		}
+
+		pic->backend_ref--;
+		for (i = 0; i < MAXREF; i++) {
+			if (pic->ref_pic[i]) {
+				if (pic->ref_pic[i]->error_mark) {
+					pic->error_mark = 1;
+				}
+				pic->ref_pic[i]->backend_ref--;
+			}
+		}
+
 		avs2_dec->backend_decoded_count++;
 #ifdef NEW_FB_CODE
 		pic->back_done_mark = 1;
 #endif
-		pic->backend_ref--;
-		for (i = 0; i < MAXREF; i++) {
-			if (pic->ref_pic[i])
-				pic->ref_pic[i]->backend_ref--;
-		}
-		//if (debug&H265_DEBUG_BUFMGR_MORE) dump_pic_list(dec);
 
 #if 0
 #ifdef AVS2_10B_MMU
@@ -9147,7 +9172,7 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 
 	dec->index = pdev->id;
 	dec->m_ins_flag = 1;
-
+	dec->error_proc_policy = error_proc_policy;
 	config_hevc_irq_num(dec);
 
 	if (is_rdma_enable()) {
@@ -9562,6 +9587,9 @@ static void __exit amvdec_avs2_driver_remove_module(void)
 /****************************************/
 module_param(bit_depth_luma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_luma, "\n amvdec_avs2 bit_depth_luma\n");
+
+module_param(error_proc_policy, uint, 0664);
+MODULE_PARM_DESC(error_proc_policy, "\n amvdec_avs2 error_proc_policy\n");
 
 module_param(bit_depth_chroma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_chroma, "\n amvdec_avs2 bit_depth_chroma\n");
