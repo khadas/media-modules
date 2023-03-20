@@ -106,6 +106,7 @@ static int picman_get_num_allocated_pics(COM_PM * pm)
 	return cnt;
 }
 #endif
+
 static int picman_move_pic(COM_PM *pm, int from, int to)
 {
 	int i;

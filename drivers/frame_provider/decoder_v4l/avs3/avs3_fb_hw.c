@@ -1693,7 +1693,7 @@ static void release_free_mmu_buffers(struct AVS3Decoder_s *dec)
 			pic->backend_ref == 0 &&
 #endif
 			pic->mmu_alloc_flag) {
-			struct aml_buf *aml_buf = index_to_afbc_aml_buf(dec, pic->index);
+			struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
 			pic->mmu_alloc_flag = 0;
 			decoder_mmu_box_free_idx(aml_buf->fbc->mmu, aml_buf->fbc->index);
 			avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "%s decoder_mmu_box_free_idx index=%d\n", __func__, aml_buf->fbc->index);
@@ -1850,7 +1850,7 @@ static void BackEnd_StartDecoding(struct AVS3Decoder_s *dec)
 {
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	struct avs3_frame_s *pic = avs3_dec->next_be_decode_pic[avs3_dec->fb_rd_pos];
-	struct aml_buf *aml_buf = index_to_afbc_aml_buf(dec, pic->index);
+	struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
 	avs3_print(dec, PRINT_FLAG_VDEC_STATUS,
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d) pic index %d\n",
 		avs3_dec->backend_decoded_count, avs3_dec->fb_wr_pos, avs3_dec->fb_rd_pos, pic->index);
@@ -2138,7 +2138,7 @@ static void config_dw_fb(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic)
 
 	struct avs3_decoder *avs3_dec = &dec->avs3_dec;
 	int dw_mode = get_double_write_mode(dec);
-	uint32_t data, data32;
+	uint32_t data = 0, data32;
 	struct aml_vcodec_ctx * v4l2_ctx = dec->v4l2_ctx;
 	if ((dw_mode & 0x10) == 0) {
 		WRITE_BACK_8(avs3_dec, HEVC_SAO_CTRL26, 0);

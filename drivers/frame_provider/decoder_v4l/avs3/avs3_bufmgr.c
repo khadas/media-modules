@@ -819,7 +819,7 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 #else
 			tmpbuf[0] = 0;
 #endif
-		printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s in_dpb %d time %lld\n",
+		printk("%d (%p): buf_cfg index %d depth %d dtr %d ptr %d is_ref %d need_for_out %d, backend_ref %d, vf_ref %d, output_delay %d, w/h(%d,%d) id %d slicetype %d error_mark %d ref index:%s in_dpb %d time %lld cam addr:%lx\n",
 			i, pic, pic->buf_cfg.index, pic->buf_cfg.depth,
 			pic->dtr, pic->ptr, pic->is_ref,
 			pic->need_for_out,
@@ -830,8 +830,8 @@ void print_pic_pool(struct avs3_decoder *hw, char *mark)
 			pic->buf_cfg.error_mark,
 			tmpbuf,
 			pic->buf_cfg.in_dpb,
-			pic->buf_cfg.time
-			);
+			pic->buf_cfg.time,
+			pic->buf_cfg.cma_alloc_addr);
 		}
 	}
 

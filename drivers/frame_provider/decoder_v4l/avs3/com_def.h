@@ -1553,6 +1553,7 @@ typedef struct avs3_frame_s {
 	uint32_t chroma_size;
 	bool in_dpb;
 	u64 time;
+	int is_display;
 #endif
 } avs3_frame_t;
 #endif
