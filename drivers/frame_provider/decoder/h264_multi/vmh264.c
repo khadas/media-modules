@@ -6727,7 +6727,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					}
 				} else {
 					pts_info.offset = (((u64)hw->frame_dur << 32) & 0xffffffff00000000) | offset;
-					if (ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
+					if (!ptsserver_peek_pts_offset((vdec->pts_server_id & 0xff), &pts_info)) {
 						vpts = pts_info.pts;
 						vpts_valid = 1;
 					}
