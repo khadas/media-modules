@@ -4129,9 +4129,13 @@ void vdec_prepare_run(struct vdec_s *vdec, unsigned long mask)
 	{
 		tee_config_device_state(DMC_DEV_ID_PARSER, 0);
 	}
-	if (input->target == VDEC_INPUT_TARGET_VLD)
+
+	if (input->target == VDEC_INPUT_TARGET_VLD) {
 		tee_config_device_state(DMC_DEV_ID_VDEC, secure);
-	else if (input->target == VDEC_INPUT_TARGET_HEVC)
+
+		if (mask & CORE_MASK_HEVC)
+			tee_config_device_state(DMC_DEV_ID_HEVC, secure);
+	} else if (input->target == VDEC_INPUT_TARGET_HEVC)
 		tee_config_device_state(DMC_DEV_ID_HEVC, secure);
 
 	if (vdec_stream_based(vdec) &&
