@@ -28,6 +28,7 @@
 
 
 #define MIN_UPDATETIME_THRESHOLD_US 50000
+#define RECORD_SLOPE_NUM 5
 
 typedef enum {
 	MEDIA_SYNC_VMASTER = 0,
@@ -255,7 +256,6 @@ typedef struct instance{
 	u32 isVideoFrameAdvance;
 	s64 mLastCheckSlopeSystemtime;
 	s64 mLastCheckSlopeDemuxPts;
-	u32 mLastCheckPcrSlope;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
@@ -270,6 +270,9 @@ typedef struct instance{
 	char atrace_audio[32];
 	char atrace_pcrscr[32];
 	struct frame_table_s frame_table[2];
+	u32 mRcordSlope[RECORD_SLOPE_NUM];
+	u32 mRcordSlopeCount;
+	s32 mlastCheckVideocacheDuration;
 }mediasync_ins;
 
 long mediasync_init(void);
