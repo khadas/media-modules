@@ -2569,8 +2569,9 @@ static bool is_available_buffer(struct vdec_mpeg4_hw_s *hw)
 		return false;
 	}
 
-	if ((hw->report_field & V4L2_FIELD_INTERLACED) &&
-		atomic_read(&ctx->vpp_cache_num) > 1) {
+	if (((hw->report_field & V4L2_FIELD_INTERLACED) &&
+		atomic_read(&ctx->vpp_cache_num) > 1) ||
+		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
 		mmpeg4_debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s vpp cache: %d full!\n",
 			__func__, atomic_read(&ctx->vpp_cache_num));

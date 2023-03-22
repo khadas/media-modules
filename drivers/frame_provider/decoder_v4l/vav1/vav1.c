@@ -9872,6 +9872,14 @@ static bool is_available_buffer(struct AV1HW_s *hw)
 	} else if (free_slot < 2)
 		force_recycle_repeat_frame(hw);
 
+	if (atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
+		av1_print(hw, PRINT_FLAG_VDEC_DETAIL,
+			"%s vpp cache: %d full!\n",
+			__func__, atomic_read(&ctx->vpp_cache_num));
+
+		return false;
+	}
+
 	if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
 		hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
 		if (!hw->aml_buf) {

@@ -768,8 +768,9 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 	}
 
 	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		if ((hw->interlace_flag) &&
-			atomic_read(&ctx->vpp_cache_num) > 1) {
+		if (((hw->interlace_flag) &&
+			atomic_read(&ctx->vpp_cache_num) > 1) ||
+			atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
 			debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
 				"%s vpp cache: %d full!\n",
 				__func__, atomic_read(&ctx->vpp_cache_num));

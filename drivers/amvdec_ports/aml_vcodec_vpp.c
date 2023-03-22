@@ -158,6 +158,11 @@ static void release_DI_buff(struct aml_v4l2_vpp* vpp)
 	}
 }
 
+static void update_vpp_num_cache(struct aml_v4l2_vpp *vpp)
+{
+	atomic_set(&vpp->ctx->vpp_cache_num, VPP_FRAME_SIZE - kfifo_len(&vpp->input));
+}
+
 static int is_di_input_buff_full(struct aml_v4l2_vpp *vpp)
 {
 	return ((vpp->in_num[INPUT_PORT] - vpp->in_num[OUTPUT_PORT])
@@ -221,8 +226,10 @@ static enum DI_ERRORTYPE
 
 	kfifo_put(&vpp->out_done_q, vpp_buf);
 
-	if (vpp->is_prog)
+	if (vpp->is_prog) {
 		kfifo_put(&vpp->input, vpp_buf->inbuf);
+		update_vpp_num_cache(vpp);
+	}
 
 	if (aml_buf->vpp_buf == NULL) {
 		aml_buf->vpp_buf = vzalloc(sizeof(struct aml_v4l2_vpp_buf));
@@ -258,11 +265,6 @@ static enum DI_ERRORTYPE
 	vpp->in_num[OUTPUT_PORT]++;
 
 	return DI_ERR_NONE;
-}
-
-static void update_vpp_num_cache(struct aml_v4l2_vpp *vpp)
-{
-	atomic_set(&vpp->ctx->vpp_cache_num, VPP_FRAME_SIZE - kfifo_len(&vpp->input));
 }
 
 static enum DI_ERRORTYPE
@@ -318,6 +320,7 @@ static enum DI_ERRORTYPE
 
 	if (vpp->work_mode == VPP_MODE_S4_DW_MMU) {
 		kfifo_put(&vpp->input, vpp_buf);
+		update_vpp_num_cache(vpp);
 	}
 
 	if (vpp->buffer_mode != BUFFER_MODE_ALLOC_BUF)

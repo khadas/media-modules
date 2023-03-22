@@ -13267,7 +13267,7 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 	}
 
 	if (is_interlace(hevc) &&
-		atomic_read(&ctx->vpp_cache_num) > 1) {
+		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
 		hevc_print(hevc, H265_DEBUG_DETAIL,
 			"%s vpp cache: %d full!\n",
 			__func__, atomic_read(&ctx->vpp_cache_num));

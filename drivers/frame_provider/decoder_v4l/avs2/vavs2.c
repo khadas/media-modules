@@ -6970,6 +6970,14 @@ static bool is_available_buffer(struct AVS2Decoder_s *dec)
 		return false;
 	}
 
+	if (atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
+		avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
+			"%s vpp cache: %d full!\n",
+			__func__, atomic_read(&ctx->vpp_cache_num));
+
+		return false;
+	}
+
 	if (!dec->aml_buf && !aml_buf_empty(&ctx->bm)) {
 		dec->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
 		if (!dec->aml_buf) {

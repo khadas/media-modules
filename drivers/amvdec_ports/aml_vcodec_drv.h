@@ -96,6 +96,8 @@
 #define CTX_BUF_TOTAL(ctx) (ctx->dpb_size + ctx->vpp_size + ctx->ge2d_size)
 
 #define MAX_AVBC_BUFFER_SIZE	16
+
+#define MAX_VPP_BUFFER_CACHE_NUM 16
 /**
  * enum aml_hw_reg_idx - AML hw register base index
  */

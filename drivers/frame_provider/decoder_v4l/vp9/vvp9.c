@@ -10233,6 +10233,14 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 	} else if (free_slot < 2)
 		force_recycle_repeat_frame(pbi);
 
+	if (atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
+		vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+			"%s vpp cache: %d full!\n",
+			__func__, atomic_read(&ctx->vpp_cache_num));
+
+		return false;
+	}
+
 	if (!pbi->aml_buf && !aml_buf_empty(&ctx->bm)) {
 		pbi->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
 		if (!pbi->aml_buf) {
