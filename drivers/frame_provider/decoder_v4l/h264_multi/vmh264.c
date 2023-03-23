@@ -1106,7 +1106,7 @@ static int  compute_losless_comp_body_size(int width,
 	int height, bool is_bit_depth_10);
 static int  compute_losless_comp_header_size(int width, int height);
 
-static int check_force_interlace(struct vdec_h264_hw_s *hw);
+static int check_force_interlace(struct vdec_h264_hw_s *hw, int width, int height);
 
 
 #if 0
@@ -2142,7 +2142,7 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 				pic_struct == PIC_BOT_TOP_BOT ||
 				pic_struct == PIC_TRIPLE_FRAME) {
 				aml_buf_get_ref(&v4l->bm, aml_buf);
-			} else if (check_force_interlace(hw)) {
+			} else if (check_force_interlace(hw, hw->frame_width, hw->frame_height)) {
 				aml_buf_get_ref(&v4l->bm, hw->aml_buf);
 			}
 		}
@@ -2587,7 +2587,7 @@ static int get_buf_spec_by_canvas_pos(struct vdec_h264_hw_s *hw,
 	return -1;
 }
 
-static int check_force_interlace(struct vdec_h264_hw_s *hw)
+static int check_force_interlace(struct vdec_h264_hw_s *hw, int width, int height)
 {
 	struct aml_vcodec_ctx * ctx = hw->v4l2_ctx;
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
@@ -2604,14 +2604,14 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw)
 
 	if ((dec_control & DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE)
 		&& p_H264_Dpb->bitstream_restriction_flag
-		&& (hw->frame_width == 1920)
-		&& (hw->frame_height >= 1080)) {
+		&& (width == 1920)
+		&& (height >= 1080)) {
 		bForceInterlace = 1;
 	}
 
 	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-					"%s bForceInterlace %d\n",
-					__func__, bForceInterlace);
+		"%s bForceInterlace %d, frame_width %d, frame_height %d, bitstream_restriction_flag %d\n",
+		__func__, bForceInterlace, hw->frame_width, hw->frame_height, p_H264_Dpb->bitstream_restriction_flag);
 
 	return bForceInterlace;
 }
@@ -2741,7 +2741,7 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 
 	/* SWPL-18973 96000/15=6400, less than 15fps check */
 	if ((!hw->duration_from_pts_done) && (hw->frame_dur > 6400ULL)) {
-		if ((check_force_interlace(hw)) &&
+		if ((check_force_interlace(hw, hw->frame_width, hw->frame_height)) &&
 			(frame->slice_type == I_SLICE) &&
 			(hw->pts_outside)) {
 			if ((!hw->h264_pts_count) || (!hw->h264pts1)) {
@@ -2842,7 +2842,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	else
 		vf_count = 2;
 
-	bForceInterlace = check_force_interlace(hw);
+	bForceInterlace = check_force_interlace(hw, hw->frame_width, hw->frame_height);
 	if (bForceInterlace)
 		vf_count = 2;
 
@@ -9158,7 +9158,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 	ps->field 		= hw->high_bandwidth_flag ?
 		V4L2_FIELD_NONE : ps->field;
-	ps->field = check_force_interlace(hw) ?
+	ps->field = check_force_interlace(hw, frame_width, frame_height) ?
 		V4L2_FIELD_INTERLACED : ps->field;
 
 	if ((ps->field == V4L2_FIELD_INTERLACED) &&
