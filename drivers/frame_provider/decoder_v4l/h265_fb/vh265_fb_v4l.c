@@ -6007,9 +6007,10 @@ static int get_idle_pos(struct hevc_state_s *hevc)
 			(hevc->resolution_change) ||
 			(!hevc->first_pic_flag && hevc->eos)) &&
 #ifdef NEW_FRONT_BACK_CODE
-			(hevc->m_PIC[i]->backend_ref == 0) &&
+			(pic->backend_ref == 0) &&
 #endif
-			(pic->vf_ref == 0) && !hevc->m_PIC[i]->cma_alloc_addr)
+			(pic->vf_ref == 0) &&
+			!pic->cma_alloc_addr)
 			break;
 	}
 
@@ -9847,8 +9848,6 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 		pr_info("[%d] H265 EOS notify.\n", ctx->id);
 	}
 
-	pr_info("[%d] H265 EOS notify.\n", ctx->id);
-
 	return 0;
 }
 
@@ -10470,7 +10469,7 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 		pic->cma_alloc_addr = 0;
-		hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
+		hevc->m_BUF[pic->index].v4l_ref_buf_addr = 0;
 		pic->referenced = 0;
 	}
 }
@@ -10562,6 +10561,7 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		|| hevc->front_back_mode == 3) {
 		PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
 		PIC_t* ref_pic;
+		struct aml_buf *aml_buf = index_to_afbc_aml_buf(hevc, pic->BUF_index);
 
 		vdec->back_pic_done = true;
 		reset_process_time_back(hevc);
@@ -10615,11 +10615,9 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			dump_pic_list(hevc);
 
 		if (hevc->front_back_mode == 1 || hevc->front_back_mode == 3) {
-			struct aml_buf *aml_buf =
-						index_to_afbc_aml_buf(hevc, pic->BUF_index);
-
 			unsigned used_4k_num0;
 			unsigned used_4k_num1;
+
 			used_4k_num0 = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
 			if (hevc->front_back_mode == 3)
 				used_4k_num1 = used_4k_num0;
@@ -13035,7 +13033,7 @@ static int h265_reset_frame_buffer(struct hevc_state_s *hevc)
 			pic->backend_ref = 0;
 #endif
 			pic->referenced = 0;
-			hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
+			hevc->m_BUF[pic->index].v4l_ref_buf_addr = 0;
 
 			spin_unlock_irqrestore(&h265_lock, flags);
 		}
@@ -13059,6 +13057,9 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			continue;
 		if ((pic->referenced == 0) &&
 			(pic->vf_ref || pic->error_mark) &&
+#ifdef NEW_FRONT_BACK_CODE
+			(pic->backend_ref == 0) &&
+#endif
 			pic->cma_alloc_addr) {
 
 			if (!ctx->force_recycle && ctx->vpp_is_need &&
@@ -13105,10 +13106,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			pic->output_ready = 0;
 			pic->cma_alloc_addr = 0;
 			pic->vf_ref = 0;
-#ifdef NEW_FRONT_BACK_CODE
-			pic->backend_ref = 0;
-#endif
-			hevc->m_BUF[pic->index].v4l_ref_buf_addr =0;
+			hevc->m_BUF[pic->index].v4l_ref_buf_addr = 0;
 
 			spin_unlock_irqrestore(&h265_lock, flags);
 

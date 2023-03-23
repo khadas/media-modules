@@ -3029,12 +3029,12 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 
 	if (hw->front_back_mode == 1) {
 			struct aml_buf *aml_buf = NULL;
-			aml_buf = index_to_afbc_aml_buf(hw, pic->index);
+			aml_buf = index_to_aml_buf(hw, pic->index);
 
 			ATRACE_COUNTER(hw->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
 			ret = av1_alloc_mmu(hw,
 				aml_buf->fbc->mmu,
-				pic->index,
+				aml_buf->fbc->index,
 				pic->y_crop_width,
 				pic->y_crop_height/2 + 64 + 8,
 				hw->aom_param.p.bit_depth,
@@ -3047,7 +3047,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 
 			ret = av1_alloc_mmu(hw,
 				aml_buf->fbc->mmu_1,
-				pic->index,
+				aml_buf->fbc->index,
 				pic->y_crop_width,
 				pic->y_crop_height/2 + 64 + 8,
 				hw->aom_param.p.bit_depth,
@@ -3060,7 +3060,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 			if (hw->dw_mmu_enable) {
 				ret = av1_alloc_mmu_dw(hw,
 					aml_buf->fbc->mmu_dw,
-					pic->index,
+					aml_buf->fbc->index,
 					pic->y_crop_width,
 					pic->y_crop_height/2 + 64 + 8,
 					hw->aom_param.p.bit_depth,
@@ -3072,7 +3072,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 
 				ret = av1_alloc_mmu_dw(hw,
 					aml_buf->fbc->mmu_dw_1,
-					pic->index,
+					aml_buf->fbc->index,
 					pic->y_crop_width,
 					pic->y_crop_height/2 + 64 + 8,
 					hw->aom_param.p.bit_depth,

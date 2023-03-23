@@ -3720,7 +3720,7 @@ int vp9_bufmgr_postproc(struct VP9Decoder_s *pbi)
 			mutex_unlock(&pbi->fence_mutex);
 			if (signed_count != 0) {
 				for (i = 0; i < signed_count; i++)
-					vvp9_vf_put(signed_fence[i], vdec);
+					vvp9_vf_put(signed_fence[i], pbi);
 			}
 		} else {
 			prepare_display_buf(pbi, &sd);
@@ -13382,6 +13382,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 #ifdef NEW_FB_CODE
 	timer_setup(&pbi->timer_back, vvp9_put_timer_func_back, 0);
 	pbi->stat |= STAT_TIMER_BACK_INIT;
+	mutex_init(&pbi->fb_mutex);
 #endif
 	if (vvp9_local_init(pbi) < 0)
 		return -EBUSY;

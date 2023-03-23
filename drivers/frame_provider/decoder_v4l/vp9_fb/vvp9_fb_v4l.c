@@ -4859,7 +4859,7 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 	if (pbi->mmu_enable) {
 		struct aml_buf *aml_buf = NULL;
 
-		aml_buf = index_to_afbc_aml_buf(pbi, pic->index);
+		aml_buf = index_to_aml_buf(pbi, pic->index);
 		ret = decoder_mmu_box_alloc_idx(
 				aml_buf->fbc->mmu,
 				aml_buf->fbc->index,
@@ -9965,19 +9965,17 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 
 	if (without_display_mode == 0) {
 		if (ctx->is_stream_off) {
-			vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+			vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 			pr_info("[%d] VP9 EOS notify.\n", ctx->id);
 		} else {
 			v4l_submit_vframe(pbi);
 		}
 	} else {
-		vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+		vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 		pr_info("[%d] VP9 EOS notify.\n", ctx->id);
 	}
 
 	hw->eos = true;
-
-	pr_info("[%d] VP9 EOS notify.\n", ctx->id);
 
 	return 0;
 }
@@ -11026,10 +11024,13 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	unsigned int dec_status = pbi->dec_status_back;
 	int i;
+
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if ((dec_status == HEVC_BE_DECODE_DATA_DONE)  || pbi->front_back_mode == 2 || pbi->front_back_mode == 3) {
 		struct PIC_BUFFER_CONFIG_s* pic = pbi->next_be_decode_pic[pbi->fb_rd_pos];
 		struct PIC_BUFFER_CONFIG_s* ref_pic;
+		struct aml_buf *aml_buf = index_to_aml_buf(pbi, pic->index);
+
 		reset_process_time_back(pbi);
 		vdec->back_pic_done = true;
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "BackEnd data done %d, fb_rd_pos %d pic index %d\n",
@@ -11063,34 +11064,33 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		if (without_display_mode == 0) {
 			if (ctx->is_stream_off) {
-				vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+				vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 			} else {
 				v4l_submit_vframe(pbi);
 			}
 		} else
-			vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+			vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 
 		if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {
-				unsigned used_4k_num0;
-				unsigned used_4k_num1;
-				struct aml_buf *aml_buf = index_to_afbc_aml_buf(pbi, pic->index);;
+			unsigned used_4k_num0;
+			unsigned used_4k_num1;
 
-				used_4k_num0 = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
-				if (pbi->front_back_mode == 3)
-					used_4k_num1 = used_4k_num0;
-				else
-					used_4k_num1 = READ_VREG(HEVC_SAO_MMU_STATUS_DBE1) >> 16;
-				vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
-					"decoder_mmu_box_free_idx_tail core0 %d core1 %d\n",
-					used_4k_num0, used_4k_num1);
-				decoder_mmu_box_free_idx_tail(
-						aml_buf->fbc->mmu,
-						aml_buf->fbc->index,
-						used_4k_num0);
-				decoder_mmu_box_free_idx_tail(
-						aml_buf->fbc->mmu_1,
-						aml_buf->fbc->index,
-						used_4k_num1);
+			used_4k_num0 = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
+			if (pbi->front_back_mode == 3)
+				used_4k_num1 = used_4k_num0;
+			else
+				used_4k_num1 = READ_VREG(HEVC_SAO_MMU_STATUS_DBE1) >> 16;
+			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
+				"decoder_mmu_box_free_idx_tail core0 %d core1 %d\n",
+				used_4k_num0, used_4k_num1);
+			decoder_mmu_box_free_idx_tail(
+					aml_buf->fbc->mmu,
+					aml_buf->fbc->index,
+					used_4k_num0);
+			decoder_mmu_box_free_idx_tail(
+					aml_buf->fbc->mmu_1,
+					aml_buf->fbc->index,
+					used_4k_num1);
 		}
 
 		if (pbi->front_back_mode == 1)
@@ -12142,6 +12142,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 #ifdef NEW_FB_CODE
 	timer_setup(&pbi->timer_back, vvp9_put_timer_func_back, 0);
 	pbi->stat |= STAT_TIMER_BACK_INIT;
+	mutex_init(&pbi->fb_mutex);
 #endif
 
 	if (vvp9_local_init(pbi) < 0)
@@ -12535,11 +12536,11 @@ static void vp9_work_back(struct work_struct *work)
 		pic->error_mark = 1;
 #endif
 		if (without_display_mode) {
-			vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+			vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 		} else {
 			struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 			if (ctx->is_stream_off) {
-				vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+				vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 			} else {
 				v4l_submit_vframe(pbi);
 			}
@@ -12576,7 +12577,7 @@ static void vp9_work_back(struct work_struct *work)
 	else if (fb_ucode_debug == 1)
 		amhevc_stop();
 	if (without_display_mode == 1) {
-		vvp9_vf_put(vvp9_vf_get(pbi), pbi);
+		vvp9_vf_put(vvp9_vf_get(vdec), vdec);
 	}
 	vdec_core_finish_run(vdec, CORE_MASK_HEVC_BACK);
 
@@ -12983,9 +12984,6 @@ static int vp9_recycle_frame_buffer(struct VP9Decoder_s *pbi)
 
 			frame_bufs[i].buf.cma_alloc_addr = 0;
 			frame_bufs[i].buf.vf_ref = 0;
-#ifdef NEW_FRONT_BACK_CODE
-			frame_bufs[i].buf.backend_ref = 0;
-#endif
 			pbi->m_BUF[i].v4l_ref_buf_addr = 0;
 
 			atomic_add(1, &pbi->vf_put_count);

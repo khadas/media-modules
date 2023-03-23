@@ -5990,7 +5990,7 @@ static struct vframe_s *vav1_vf_get(void *op_arg)
 	if (step == 2)
 		return NULL;
 	else if (step == 1)
-			step = 2;
+		step = 2;
 
 	if (kfifo_get(&hw->display_q, &vf)) {
 		struct vframe_s *next_vf = NULL;
@@ -6660,8 +6660,6 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	}
 
 	hw->eos = true;
-
-	av1_print(hw, 0, "[%d] AV1 EOS notify.\n", ctx->id);
 
 	return 0;
 }
@@ -7447,8 +7445,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		ret, cm->error.error_code);
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AOM_AV1_SEARCH_HEAD);
 		return 0;
-	}
-	else if (ret == 0) {
+	} else if (ret == 0) {
 		PIC_BUFFER_CONFIG* cur_pic_config = &cm->cur_frame->buf;
 		PIC_BUFFER_CONFIG* prev_pic_config = &cm->prev_frame->buf;
 		if (debug &
@@ -7604,8 +7601,8 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
 			(get_double_write_mode(hw) != 0x10))
 #else
-			if (ret >= 0 && (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
-				(get_double_write_mode(hw) != 0x10))
+		if (ret >= 0 && (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
+			(get_double_write_mode(hw) != 0x10))
 #endif
 		{
 			struct aml_buf *aml_buf = NULL;
@@ -8728,7 +8725,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			reset_process_time(hw);
 
 #ifdef NEW_FB_CODE
-				if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3)) {
+			if ((hw->front_back_mode != 1) && (hw->front_back_mode != 3)) {
 #endif
 				if (get_picture_qos)
 					get_picture_qos_info(hw);
@@ -9685,10 +9682,10 @@ static void vav1_work_back_implement(struct AV1HW_s *hw,
 			if (pic->showable_frame || pic->show_frame) {
 				pic->back_done_mark = 1;
 				if (without_display_mode) {
-					vav1_vf_put(vav1_vf_get(hw), hw);
+					vav1_vf_put(vav1_vf_get(vdec), vdec);
 				} else {
 					if (ctx->is_stream_off) {
-						vav1_vf_put(vav1_vf_get(hw), hw);
+						vav1_vf_put(vav1_vf_get(vdec), vdec);
 					} else {
 						v4l_submit_vframe(hw);
 					}
@@ -10599,9 +10596,6 @@ static int av1_recycle_frame_buffer(struct AV1HW_s *hw)
 
 			frame_bufs[i].buf.cma_alloc_addr = 0;
 			frame_bufs[i].buf.vf_ref = 0;
-#ifdef NEW_FRONT_BACK_CODE
-			frame_bufs[i].buf.backend_ref = 0;
-#endif
 			hw->m_BUF[i].v4l_ref_buf_addr = 0;
 
 			atomic_add(1, &hw->vf_put_count);
@@ -11478,12 +11472,14 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 	/*simulation code: if (READ_VREG(HEVC_DEC_STATUS_DBE)==HEVC_BE_DECODE_DATA_DONE)*/
 	if (dec_status == HEVC_BE_DECODE_DATA_DONE) {
 		PIC_BUFFER_CONFIG* pic;
+		struct aml_buf *aml_buf = NULL;
 
 		vdec->back_pic_done = true;
 		mutex_lock(&hw->fb_mutex);
 		pic = pbi->next_be_decode_pic[pbi->fb_rd_pos];
 		mutex_unlock(&hw->fb_mutex);
 
+		aml_buf = index_to_aml_buf(hw, pic->index);
 		reset_process_time_back(hw);
 		if (hw->front_back_mode == 1) {
 			if (front_back_debug & 2) {
@@ -11539,12 +11535,14 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			if (pic->showable_frame || pic->show_frame) {
 				if (without_display_mode == 0) {
 					if (ctx->is_stream_off) {
-						vav1_vf_put(vav1_vf_get(hw), hw);
+						if (kfifo_len(&hw->display_q) > 0)
+							vav1_vf_put(vav1_vf_get(vdec), vdec);
 					} else {
 						v4l_submit_vframe(hw);
 					}
 				} else
-					vav1_vf_put(vav1_vf_get(hw), hw);
+					if (kfifo_len(&hw->display_q) > 0)
+						vav1_vf_put(vav1_vf_get(vdec), vdec);
 			}
 		}
 
@@ -11553,7 +11551,7 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		/*to do: change hevc->used_4k_num*/
 		if (hw->m_ins_flag && hw->mmu_enable && (hw->front_back_mode == 1) &&
-		(debug & AOM_DEBUG_DIS_RECYCLE_MMU_TAIL) == 0) {
+			(debug & AOM_DEBUG_DIS_RECYCLE_MMU_TAIL) == 0) {
 			long used_4k_num0;
 			long used_4k_num1;
 
@@ -11564,7 +11562,6 @@ irqreturn_t vav1_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 				used_4k_num1 = READ_VREG(HEVC_SAO_MMU_STATUS_DBE1) >> 16;
 
 			if (pic != NULL) {
-				struct aml_buf *aml_buf = index_to_afbc_aml_buf(hw, pic->index);;
 				/* is necessary ?
 				hevc_mmu_dma_check(hw_to_vdec(hw));
 				*/
