@@ -545,6 +545,7 @@ struct vdec_avs_hw_s {
 	ulong user_data_handle;
 	ulong lmem_phy_handle;
 	bool force_interlaced_frame;
+	bool pic_put_dpb;
 };
 
 static void reset_process_time(struct vdec_avs_hw_s *hw);
@@ -2819,8 +2820,9 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		hw->buf_use[i] = 0;
 	}
 
-
-	if (!hw->vf_ref[hw->refs[0]]) {
+	if (hw->refs[0] >= 0
+		&& hw->refs[0] < VF_BUF_NUM_MAX &&
+		!hw->vf_ref[hw->refs[0]]) {
 		hw->ref_use[hw->refs[0]]++;
 		hw->vf_ref[hw->refs[0]]++;
 		if (ctx->vpp_is_need && hw->interlace_flag)
@@ -2829,7 +2831,9 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		vdec_v4l_post_error_frame_event(ctx);
 	}
 
-	if (!hw->vf_ref[hw->refs[1]]) {
+	if (hw->refs[1] >= 0
+		&& hw->refs[1] < VF_BUF_NUM_MAX &&
+		!hw->vf_ref[hw->refs[1]]) {
 		hw->ref_use[hw->refs[1]]++;
 		hw->vf_ref[hw->refs[1]]++;
 		if (ctx->vpp_is_need && hw->interlace_flag)
@@ -3782,7 +3786,9 @@ static void flush_output(struct vdec_avs_hw_s * hw)
 {
 	struct pic_info_t *pic;
 
-	if (hw->vfbuf_use[hw->refs[1]] > 0) {
+	if (hw->refs[1] >= 0 &&
+		hw->refs[1] < VF_BUF_NUM_MAX &&
+		hw->vfbuf_use[hw->refs[1]] > 0) {
 		pic = &hw->pics[hw->refs[1]];
 		prepare_display_buf(hw, pic);
 	}
@@ -4060,6 +4066,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 		if (UserDataHandler(hw))
 			return IRQ_HANDLED;
 #endif
+		hw->pic_put_dpb = false;
 		reg = READ_VREG(AVS_BUFFEROUT);
 		if (reg) {
 			unsigned short decode_pic_count
@@ -4122,6 +4129,7 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 				WRITE_VREG(AVS_BUFFERIN, ~(1 << hw->decoding_index));
 				hw->buf_use[hw->decoding_index]--;
 			} else {
+				hw->pic_put_dpb = true;
 				if ((picture_type == I_PICTURE) ||
 					(picture_type == P_PICTURE)) {
 					buffer_index = update_reference(hw, hw->decoding_index);
@@ -4219,7 +4227,8 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 					vdec_v4l_post_error_frame_event(ctx);
 				} else
 					hw->dec_result = DEC_RESULT_AGAIN;
-				avs_buf_ref_process_for_exception(hw);
+				if (!hw->pic_put_dpb)
+					avs_buf_ref_process_for_exception(hw);
 				debug_print(hw, PRINT_FLAG_DECODING,
 					"%s BUF_EMPTY, READ_VREG(DECODE_STATUS) = 0x%x, decode_status 0x%x, buf_status 0x%x, scratch_8 (AVS_BUFFERIN) 0x%x, dec_result = 0x%x, decode_pic_count = %d, bit_cnt=0x%x, hw->decode_status_skip_pic_done_flag = %d, hw->decode_decode_cont_start_code = 0x%x, AV_SCRATCH_B=0x%x\n",
 					__func__, status_reg, decode_status,
