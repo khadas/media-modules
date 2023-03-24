@@ -2662,7 +2662,6 @@ static int is_iframe(struct FrameStore *frame) {
 static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 {
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
-	struct aml_vcodec_ctx * v4l2_ctx = hw->v4l2_ctx;
 	int buffer_index = frame->buf_spec_num;
 
 	if (buffer_index < 0 || buffer_index >= BUFSPEC_POOL_SIZE) {
@@ -2716,30 +2715,6 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 				"%s Error  frame_num %d  used %d\n",
 				__func__, frame->frame_num, frame->is_used);
 		}
-	}
-	if (vdec_stream_based(vdec) && !(frame->data_flag & NODISP_FLAG)) {
-		if (vdec->is_v4l || (vdec->vbuf.no_parser == 0) || (vdec->vbuf.use_ptsserv)) {
-			struct checkoutptsoffset pts_st;
-			u64 dur_offset = hw->frame_dur;
-			dur_offset = (dur_offset << 32 ) | frame->offset_delimiter;
-			if (!v4l2_ctx->pts_serves_ops->checkout(v4l2_ctx->ptsserver_id, dur_offset, &pts_st)) {
-				frame->pts = pts_st.pts;
-				frame->pts64 = pts_st.pts_64;
-				hw->right_frame_count++;
-			} else {
-				frame->pts64 = hw->last_pts64 +DUR2PTS(hw->frame_dur) ;
-				frame->pts = hw->last_pts + DUR2PTS(hw->frame_dur);
-				hw->wrong_frame_count++;
-			}
-		}
-
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-		"%s error= 0x%x poc = %d  offset= 0x%x pts= 0x%x last_pts =0x%x  pts64 = %lld  last_pts64= %lld  duration = %d\n",
-		__func__, (frame->data_flag & ERROR_FLAG), frame->poc,
-		frame->offset_delimiter, frame->pts,hw->last_pts,
-		frame->pts64, hw->last_pts64, hw->frame_dur);
-		hw->last_pts64 = frame->pts64;
-		hw->last_pts = frame->pts;
 	}
 
 	/* SWPL-18973 96000/15=6400, less than 15fps check */
@@ -2855,6 +2830,22 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 	if (((vdec->prog_only) || (!v4l2_ctx->vpp_is_need)))
 		vf_count = 1;
+	if (v4l2_ctx->vpp_is_need && (vf_count == 1) && (picinfo->field != V4L2_FIELD_NONE)) {
+		struct StorablePicture *valid_pic = frame->top_field ? frame->top_field : frame->bottom_field;
+
+		aml_buf = (struct aml_buf *)hw->buffer_spec[buffer_index].cma_alloc_addr;
+		if (aml_buf) {
+			aml_buf_put_ref(&v4l2_ctx->bm, aml_buf);
+			if (valid_pic) {
+				int pic_struct = valid_pic->pic_struct;
+				if (pic_struct == PIC_TOP_BOT_TOP || pic_struct == PIC_BOT_TOP_BOT)
+					aml_buf_put_ref(&v4l2_ctx->bm, aml_buf);
+			}
+
+			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
+				"%s the vf_count of interlace video is set as one.\n", __func__);
+		}
+	}
 
 	for (i = 0; i < vf_count; i++) {
 		if (kfifo_get(&hw->newframe_q, &vf) == 0 || vf == NULL) {
@@ -2880,8 +2871,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			if ((i > 0) && v4l2_ctx->second_field_pts_mode) {
 				vf->timestamp = 0;
 			}
-			if (vdec_stream_based(vdec) && (i > 0))
-				vf->pts_us64 = frame->pts64;
 
 			vf->index = VF_INDEX(frame->index, buffer_index);
 		}
@@ -6321,7 +6310,19 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					p_H264_Dpb->mSlice.slice_type,
 					hw->chunk->pts, 1);
 #endif
+			} else if (vdec_stream_based(vdec)) { // v4l2 streambase
+				struct StorablePicture *pic =
+					p_H264_Dpb->mVideo.dec_picture;
+				u32 offset = pic->offset_delimiter;
+				struct checkoutptsoffset pts_st;
+				u64 dur_offset = hw->frame_dur;
+				dur_offset = (dur_offset << 32) | offset;
 
+				if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+					p_H264_Dpb->mVideo.dec_picture->pts = pts_st.pts;
+					p_H264_Dpb->mVideo.dec_picture->pts64 = pts_st.pts_64;
+					p_H264_Dpb->mVideo.dec_picture->timestamp = pts_st.pts_64;
+				}
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			} else if (vdec->master) {
 				/*dv enhance layer,
@@ -6505,6 +6506,31 @@ static void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 		hw->buffer_spec[buf_spec_num].buf_adr = 0;
 		hw->dpb.cur_idx = INVALID_IDX;
 	}
+}
+
+void vh264_report_pts(struct vdec_h264_hw_s *hw)
+{
+	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	u32 offset_lo, offset_hi;
+	u32 offset;
+	struct checkoutptsoffset pts_st;
+
+	offset_lo  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_LO];
+	offset_hi  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_HI];
+
+	offset = offset_lo | offset_hi << 16;
+
+	if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, offset, &pts_st)) {
+		ctx->current_timestamp = pts_st.pts_64;
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
+		"pts cal_offset current pts:0x%x pts_64:%llx\n",
+		pts_st.pts, pts_st.pts_64);
+	} else {
+		dpb_print(DECODE_ID(hw), 0, "pts cal_offset fail\n");
+		ctx->current_timestamp = 0;
+	}
+	vdec_v4l_post_error_frame_event(ctx);
 }
 
 static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
@@ -6865,6 +6891,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					hw->dec_result = DEC_RESULT_DONE;
 					if (input_frame_based(vdec))
 						vdec_v4l_post_error_frame_event(ctx);
+					else
+						vh264_report_pts(hw);
 					vdec_schedule_work(&hw->work);
 					dpb_print(DECODE_ID(hw),
 						PRINT_FLAG_UCODE_EVT,
@@ -6925,6 +6953,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				buf_ref_process_for_exception(hw);
 			if (input_frame_based(vdec))
 				vdec_v4l_post_error_frame_event(ctx);
+			else
+				vh264_report_pts(hw);
 			amvdec_stop();
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
@@ -7024,6 +7054,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						buf_ref_process_for_exception(hw);
 						if (input_frame_based(vdec))
 							vdec_v4l_post_error_frame_event(ctx);
+						else
+							vh264_report_pts(hw);
 						hw->reset_bufmgr_flag = 1;
 						hw->reflist_error_count = 0;
 						amvdec_stop();
@@ -7047,6 +7079,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					buf_ref_process_for_exception(hw);
 					if (input_frame_based(vdec))
 						vdec_v4l_post_error_frame_event(ctx);
+					else
+						vh264_report_pts(hw);
 					hw->reset_bufmgr_flag = 1;
 					amvdec_stop();
 					vdec->mc_loaded = 0;
@@ -7066,6 +7100,8 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					buf_ref_process_for_exception(hw);
 					if (input_frame_based(vdec))
 						vdec_v4l_post_error_frame_event(ctx);
+					else
+						vh264_report_pts(hw);
 					release_cur_decoding_buf(hw);
 					hw->reset_bufmgr_flag = 1;
 					hw->dec_result = DEC_RESULT_DONE;
@@ -7338,6 +7374,8 @@ send_again:
 		buf_ref_process_for_exception(hw);
 		if (input_frame_based(vdec))
 			vdec_v4l_post_error_frame_event(ctx);
+		else
+			vh264_report_pts(hw);
 		release_cur_decoding_buf(hw);
 		hw->data_flag |= ERROR_FLAG;
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
@@ -9340,32 +9378,6 @@ static int v4l_res_change(struct vdec_h264_hw_s *hw,
 
 	return ret;
 }
-
-void vh264_report_pts(struct vdec_h264_hw_s *hw)
-{
-	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-	u32 offset_lo, offset_hi;
-	u32 offset;
-	struct checkoutptsoffset pts_st;
-
-	offset_lo  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_LO];
-	offset_hi  = p_H264_Dpb->dpb_param.l.data[OFFSET_DELIMITER_HI];
-
-	offset = offset_lo | offset_hi << 16;
-
-	if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, offset, &pts_st)) {
-		ctx->current_timestamp = pts_st.pts_64;
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
-		"pts cal_offset current pts:0x%x pts_64:%llx\n",
-		pts_st.pts, pts_st.pts_64);
-	} else {
-		dpb_print(DECODE_ID(hw), 0, "pts cal_offset fail\n");
-		ctx->current_timestamp = 0;
-	}
-	vdec_v4l_post_error_frame_event(ctx);
-}
-
 
 static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 	struct vdec_s *vdec, int from)

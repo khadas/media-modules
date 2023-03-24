@@ -309,30 +309,6 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 }
 EXPORT_SYMBOL(ptsserver_checkin_pts_size);
 
-void ptsserver_delete_invalid_pts_node(ptsserver_ins* pInstance, pts_node* ptn){
-	pts_node* ptn_cur = NULL;
-	pts_node* ptn_tmp = NULL;
-
-	if (ptn == NULL || pInstance == NULL)
-		return;
-
-	list_for_each_entry_safe(ptn_cur,ptn_tmp,&pInstance->pts_list, node) {
-		if (ptn_cur == ptn)
-			break;
-		if (ptn->offset > ptn_cur->offset) {
-			if (ptsserver_debuglevel >= 1 ||
-				!pInstance->mPtsCheckoutStarted) {
-				pts_pr_info(0,"delete invalid node offset:0x%x pts(32:0x%x 64:%llu)\n",
-					ptn_cur->offset,ptn_cur->pts,ptn_cur->pts_64);
-			}
-			list_del(&ptn_cur->node);
-			list_add_tail(&ptn_cur->node, &pInstance->pts_free_list);
-			pInstance->mListSize--;
-		}
-	}
-}
-
-
 long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPtsOffset) {
 	PtsServerManage* vPtsServerIns = NULL;
 	ptsserver_ins* pInstance = NULL;
@@ -440,42 +416,56 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 									find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
 			}
 
-			if (pInstance->setC2Mode) {
-				ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
-			} else {
-				list_del(&find_ptn->node);
-				list_add_tail(&find_ptn->node, &pInstance ->pts_free_list);
-				pInstance->mListSize--;
-			}
+			list_del(&find_ptn->node);
+			list_add_tail(&find_ptn->node, &pInstance ->pts_free_list);
+			pInstance->mListSize--;
 		} else if(pInstance->setC2Mode) {
-			if (cur_offset != 0xFFFFFFFF && !list_empty(&pInstance->pts_list)) {
+			if (cur_offset != 0xFFFFFFFF) {
 				u32 min_offsetAbs = 0xFFFFFFFF;
-				find_framenum = 0;
-				list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
 
-					if (ptn != NULL && (cur_offset > ptn->offset)) {
+				if (pInstance->mPtsCheckoutStarted) {
+					mCheckoutPtsOffset->pts = pInstance->mLastCheckoutPts;
+					mCheckoutPtsOffset->pts_64 = pInstance->mLastCheckoutPts64;
+					min_offsetAbs = abs(cur_offset - pInstance->mLastCheckoutCurOffset);
+				}
+
+				list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
+					if (ptn != NULL && (cur_offset > ptn->offset) && (ptn->offset >= pInstance->mLastCheckoutCurOffset)) {
 						offsetAbs = abs(cur_offset - ptn->offset);
 
 						if (offsetAbs < min_offsetAbs) {
 							min_offsetAbs = offsetAbs;
 							find_ptn = ptn;
 							if (ptsserver_debuglevel >= 1)
-								pts_pr_info(index,"Checkout change to i:%d offset(diff:%d L:0x%x C:0x%x)\n",i,offsetAbs,find_ptn->offset,cur_offset);
+								pts_pr_info(index,"Checkout change to i:%d offset(diff:%d L:0x%x C:0x%x)\n",
+								i,offsetAbs,find_ptn->offset,cur_offset);
 						}
 					}
 				}
-				if (!find_ptn) {
-					find_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
-					if (ptsserver_debuglevel >= 1)
-						pts_pr_info(index,"set first node as the selected node\n");
+				if (find_ptn) {
+					mCheckoutPtsOffset->pts = find_ptn->pts;
+					mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
+					cur_offset = find_ptn->offset;
+					if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
+						pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
+							pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
+				} else {
+					if (!pInstance->mPtsCheckoutStarted && !list_empty(&pInstance->pts_list)) {
+						find_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
+						mCheckoutPtsOffset->pts = find_ptn->pts;
+						mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
+						cur_offset = find_ptn->offset;
+						if (ptsserver_debuglevel >= 1)
+							pts_pr_info(index,"set first pts in list as the selected node pts(32:0x%x 64:%llu)\n",
+							mCheckoutPtsOffset->pts, mCheckoutPtsOffset->pts_64);
+					} else {
+						cur_offset = pInstance->mLastCheckoutCurOffset;
+						if (ptsserver_debuglevel >= 1)
+							pts_pr_info(index,"set lastCheck pts as the selected node pts(32:0x%x 64:%llu)\n",
+							mCheckoutPtsOffset->pts, mCheckoutPtsOffset->pts_64);
+					}
 				}
 				find = 1;
-				mCheckoutPtsOffset->pts = find_ptn->pts;
-				mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
-				if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
-					pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
-						pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
-				ptsserver_delete_invalid_pts_node(pInstance, find_ptn);
 			}
 		}
 	}

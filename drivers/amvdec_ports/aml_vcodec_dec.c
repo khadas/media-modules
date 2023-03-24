@@ -809,10 +809,6 @@ void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx)
 		ctx->index_disp++;
 	ctx->post_to_upper_done = false;
 
-	if (ctx->stream_mode) {
-		vf->timestamp = vf->pts_us64;
-	}
-
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_OUTPUT,
 		"OUT_BUFF (%s, st:%d, seq:%d) vb:(%d, %px), vf:(%d, %px), ts:%llu, flag: 0x%x "
 		"Y:(%lx, %u) C/U:(%lx, %u) V:(%lx, %u)\n",

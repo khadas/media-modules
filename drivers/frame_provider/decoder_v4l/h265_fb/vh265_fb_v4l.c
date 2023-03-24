@@ -9126,6 +9126,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				if (!v4l2_ctx->pts_serves_ops->checkout(v4l2_ctx->ptsserver_id, dur_offset, &pts_st)) {
 					vf->pts = pts_st.pts;
 					vf->pts_us64 = pts_st.pts_64;
+					vf->timestamp = pts_st.pts_64;
 #ifdef DEBUG_PTS
 					hevc->pts_hit++;
 #endif

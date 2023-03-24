@@ -1652,8 +1652,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 		if (i > 0) {
 			vf->pts = 0;
 			vf->pts_us64 = 0;
-			if (vdec_stream_based(vdec))
-				vf->pts_us64 = (pic->pts_valid) ? pic->pts64 : 0;
 			vf->timestamp = pic->timestamp;
 			if (v4l2_ctx->second_field_pts_mode) {
 				vf->timestamp = 0;
@@ -2235,6 +2233,27 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 					debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
 						"pts invalid\n");
 				}
+			} else {
+				if (vdec_stream_based(vdec)) {
+					struct checkoutptsoffset pts_st;
+					u64 dur_offset = hw->frame_dur;
+					dur_offset = (dur_offset << 32 ) | offset;
+					if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+						new_pic->pts_valid = true;
+						new_pic->pts = pts_st.pts;
+						if (hw->first_field_timestamp_valid)
+							new_pic->last_timestamp = hw->first_field_timestamp;
+						else
+							new_pic->last_timestamp = pts_st.pts_64;
+						hw->first_field_timestamp_valid = false;
+						new_pic->timestamp = pts_st.pts_64;
+
+						debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+							"stream checkout pts is%lx\n", new_pic->pts);
+					} else {
+						new_pic->pts_valid = false;
+					}
+				}
 			}
 		} else {
 			if (hw->chunk) {
@@ -2246,6 +2265,28 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->first_field_timestamp_valid = false;
 				new_pic->timestamp = hw->chunk->timestamp;
 				new_pic->pts_valid = false;
+			} else {
+				if (vdec_stream_based(vdec)) {
+					struct checkoutptsoffset pts_st;
+					u64 dur_offset = hw->frame_dur;
+					dur_offset = (dur_offset << 32 ) | offset;
+					if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+						new_pic->pts_valid = true;
+						new_pic->pts = pts_st.pts;
+
+						if (hw->first_field_timestamp_valid)
+							new_pic->last_timestamp = hw->first_field_timestamp;
+						else
+							new_pic->last_timestamp = pts_st.pts_64;
+						hw->first_field_timestamp_valid = false;
+
+						new_pic->timestamp = pts_st.pts_64;
+						debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+							"stream checkout pts is%lx\n", new_pic->pts);
+					} else {
+						new_pic->pts_valid = false;
+					}
+				}
 			}
 		}
 
@@ -2329,21 +2370,6 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) &&
 			((info & PICINFO_ERROR) == 0)) {
 			hw->first_i_frame_ready = 1;
-		}
-
-		if (vdec_stream_based(vdec)) {
-			struct checkoutptsoffset pts_st;
-			u64 dur_offset = hw->frame_dur;
-			dur_offset = (dur_offset << 32 ) | disp_pic->offset;
-			if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
-				disp_pic->pts_valid = true;
-				disp_pic->pts = pts_st.pts;
-				disp_pic->pts64 = pts_st.pts_64;
-				debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
-					"stream checkout pts is%lx\n", disp_pic->pts);
-			} else {
-				disp_pic->pts_valid = false;
-			}
 		}
 
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
@@ -2561,6 +2587,18 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 		if (hw->chunk != NULL) {
 			hw->first_field_timestamp = hw->chunk->timestamp;
 			hw->first_field_timestamp_valid = true;
+		} else if (vdec_stream_based(vdec)){
+			u32 offset = READ_VREG(MREG_FRAME_OFFSET);
+			struct checkoutptsoffset pts_st;
+			u64 dur_offset = hw->frame_dur;
+			dur_offset = (dur_offset << 32 ) | offset;
+			if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
+				hw->first_field_timestamp = pts_st.pts_64;
+				hw->first_field_timestamp_valid = true;
+
+				debug_print(DECODE_ID(hw), PRINT_FLAG_TIMEINFO,
+					"stream first filed checkout pts is%lx\n", pts_st.pts);
+			}
 		}
 
 		vdec_vframe_dirty(vdec, hw->chunk);
