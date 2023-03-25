@@ -1429,9 +1429,6 @@ static int get_used_buf_count(struct AVS2Decoder_s *dec)
 				avs2_dec->fref[i]->is_output != -1 ||
 				avs2_dec->fref[i]->bg_flag != 0 ||
 				avs2_dec->fref[i]->vf_ref != 0 ||
-#ifdef NEW_FRONT_BACK_CODE
-				avs2_dec->fref[i]->backend_ref != 0 ||
-#endif
 				avs2_dec->fref[i]->to_prepare_disp != 0) {
 			count++;
 		}
@@ -5189,6 +5186,7 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 	struct aml_buf *aml_buf = NULL;
 	struct vframe_s *vf = NULL;
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(dec->v4l2_ctx);
+	struct vdec_s *vdec = hw_to_vdec(dec);
 
 #ifdef NEW_FB_CODE
 	mutex_lock(&dec->fb_mutex);
@@ -5204,7 +5202,7 @@ static void v4l_submit_vframe(struct AVS2Decoder_s *dec)
 #endif
 			if ((dec->error_proc_policy & 0x2) &&
 				pic && pic->error_mark) {
-				vavs2_vf_put(vavs2_vf_get(dec), dec);
+				vavs2_vf_put(vavs2_vf_get(vdec), vdec);
 				avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic has error_mark, get err\n", __func__);
 				break;
 			}
@@ -6330,12 +6328,12 @@ irqreturn_t avs2_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 
 		if (without_display_mode == 0) {
 			if (ctx->is_stream_off) {
-				vavs2_vf_put(vavs2_vf_get(dec), dec);
+				vavs2_vf_put(vavs2_vf_get(vdec), vdec);
 			} else {
 				v4l_submit_vframe(dec);
 			}
 		} else
-			vavs2_vf_put(vavs2_vf_get(dec), dec);
+			vavs2_vf_put(vavs2_vf_get(vdec), vdec);
 #if 0
 #ifdef AVS2_10B_MMU
 		release_unused_4k(&avs2_mmumgr_0, pic->index);
