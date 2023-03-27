@@ -219,9 +219,7 @@
 #define ITER_NUM                            4
 #define INTERVAL_NUM_X 8
 #define INTERVAL_NUM_Y 8
-//temporary fix reconstructCoefInfo brk crash
-//#define NO_VAR_BINS                        INTERVAL_NUM_X*INTERVAL_NUM_Y
-#define NO_VAR_BINS                        16
+#define NO_VAR_BINS                        INTERVAL_NUM_X*INTERVAL_NUM_Y
 #define NO_VAR_BINS_16                     16
 #else
 #define NO_VAR_BINS                        16
@@ -445,7 +443,8 @@ extern int fp_trace_counter;
 
 #define NUM_NEIB                           1  //since SUCO is not implemented
 
-#define MINI_SIZE                          8
+#define MINI_SIZE_LOG2                     3
+#define MINI_SIZE                          (1 << MINI_SIZE_LOG2)
 #define MAX_CU_LOG2                        7
 #define MIN_CU_LOG2                        2
 #define MAX_CU_SIZE                       (1 << MAX_CU_LOG2)
@@ -1442,8 +1441,8 @@ typedef struct _ALF_PARAM
 #endif
 	int component_id;
 #ifdef AML
-	int32_t filter_pattern[16];
-	int32_t coeff_multi[16][9];
+	int32_t filter_pattern[NO_VAR_BINS];
+	int32_t coeff_multi[NO_VAR_BINS][ALF_MAX_NUM_COEF];
 #else
 	int *filter_pattern;
 	int **coeff_multi;
@@ -1548,6 +1547,8 @@ typedef struct avs3_frame_s{
 	u32 frame_size; // For frame base mode
 	char *cuva_data_buf;
 	int  cuva_data_size;
+	bool in_dpb;
+	u64 time;
 #endif
 } avs3_frame_t;
 #endif

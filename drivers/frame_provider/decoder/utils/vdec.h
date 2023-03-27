@@ -94,6 +94,10 @@ struct trace_decoder_name {
 	char decode_header_time_name[32];
 	char decode_work_time_name[32];
 	char decode_header_memory_time_name[32];
+	char decode_back_time_name[32];
+	char decode_back_run_time_name[32];
+	char decode_back_work_time_name[32];
+	char decode_back_ready_name[32];
 };
 
 
@@ -121,6 +125,12 @@ enum e_trace_run_status {
 	TRACE_RUN_LOADING_FW_END   = 2,
 	TRACE_RUN_LOADING_RESTORE_START = 3,
 	TRACE_RUN_LOADING_RESTORE_END = 4,
+	TRACE_RUN_BACK_ALLOC_MMU_START = 5,
+	TRACE_RUN_BACK_ALLOC_MMU_END = 6,
+	TRACE_RUN_BACK_CONFIGURE_REGISTER_START = 7,
+	TRACE_RUN_BACK_CONFIGURE_REGISTER_END = 8,
+	TRACE_RUN_BACK_FW_START = 9,
+	TRACE_RUN_BACK_FW_END = 10,
 };
 
 enum e_trace_header_status {
@@ -213,6 +223,13 @@ enum vdec_fr_hint_state {
 	VDEC_NEED_HINT,
 	VDEC_HINTED,
 };
+
+enum frame_type_flag {
+	KEYFRAME_FLAG = 1,	/* Frame is a keyframe (I-frame) */
+	PFRAME_FLAG,		/* Frame is a P-frame */
+	BFRAME_FLAG,		/* Frame is a B-frame */
+};
+
 extern s32 vdec_request_threaded_irq(enum vdec_irq_num num,
 			irq_handler_t handler,
 			irq_handler_t thread_fn,

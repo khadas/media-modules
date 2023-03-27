@@ -25,6 +25,7 @@
 #define RPM_BEGIN                                              0x080  //0x100
 #define ALF_BEGIN                                              0x100  //0x180
 #define RPM_END                                                0x200  //0x280
+#define RPM_VALID_END                                          0x1b8
 
 typedef union param_u {
 	struct {
@@ -380,6 +381,7 @@ typedef struct avs3_decoder {
 #ifdef AML
 	int max_pb_size;
 	int8_t bufmgr_error_flag;
+	u64 start_time;
 #endif
 } avs3_decoder_t;
 
@@ -449,6 +451,7 @@ int dec_eco_alf_param(union param_u *rpm_param, COM_PIC_HEADER *sh
 #define IGNORE_PARAM_FROM_CONFIG         0x8000000
 /*MULTI_INSTANCE_SUPPORT*/
 #define PRINT_FLAG_ERROR        0
+#define	PRINT_FLAG_V4L_DETAIL			0x10000000
 #define PRINT_FLAG_VDEC_STATUS             0x20000000
 #define PRINT_FLAG_VDEC_DETAIL             0x40000000
 #define PRINT_FLAG_VDEC_DATA             0x80000000
@@ -459,21 +462,49 @@ bool is_avs3_print_bufmgr_detail(void);
 
 struct AVS3Decoder_s;
 
-int avs3_print(struct AVS3Decoder_s *dec,
-	int flag, const char *fmt, ...);
+extern u32 debug_mask;
+extern	int avs3_debug(struct AVS3Decoder_s *dec,
+		int flag, const char *fmt, ...);
+
+
+#define avs3_print(dec, flag, fmt, args...)					\
+	do {									\
+		if (dec == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << dec->index)) \
+		&& (debug & flag))) { \
+			avs3_debug(dec, flag, fmt, ##args);	\
+			} \
+	} while (0)
+
+//int avs3_print(struct AVS3Decoder_s *dec,
+//	int flag, const char *fmt, ...);
+
 
 #define assert(x)
 #ifdef DEBUG_AMRISC
+#ifndef DEBUG_RELEASE_MODE
 #define printf(...) do {\
 	if (is_avs3_print_bufmgr_detail()) \
-		avs3_print(NULL, 0, __VA_ARGS__); \
-} while(0)
+	avs3_debug(NULL, 0, __VA_ARGS__); \
+} while (0)
 
 #define PRINT_LINE() \
-do { \
+	do { \
 	if (avs3_get_debug_flag() & AVS3_DBG_PRINT_SOURCE_LINE)\
-		avs3_print(NULL, 0, "%s line %d\n", __func__, __LINE__);\
-} while (0)
+	avs3_debug(NULL, 0, "%s line %d\n", __func__, __LINE__);\
+	} while (0)
+#else
+#define printf(...) do {\
+		; \
+	} while (0)
+
+#define PRINT_LINE() \
+		do { \
+		; \
+		} while (0)
+#endif
 
 #else
 
@@ -500,6 +531,7 @@ int avs3_bufmgr_post_process(struct avs3_decoder *hw);
 void avs3_cleanup_useless_pic_buffer_in_pm(struct avs3_decoder *hw);
 void print_alf_param(union param_u * param);
 void print_param(union param_u * param);
+int get_free_frame_buffer(struct avs3_decoder * avs3_dec);
 
 #endif
 
