@@ -15,7 +15,7 @@ endif
 ${MODULE_NAME}-objs	+=	parser/dvb_common.o
 ${MODULE_NAME}-objs	+=	subtitle/subtitle.o
 
-obj-$(CONFIG_AMLOGIC_DVB)   += parser/hw_demux/
+obj-$(CONFIG_AMLOGIC_HW_DEMUX)   += parser/hw_demux/
 obj-$(CONFIG_AMLOGIC_DVB)   += parser/dvb_ci/
 
 ccflags-y += -I.
