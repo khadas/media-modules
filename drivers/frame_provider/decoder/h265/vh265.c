@@ -1713,6 +1713,8 @@ struct PIC_s {
 	int mc_canvas_u_v;
 	int width;
 	int height;
+	int crop_w;
+	int crop_h;
 
 	int y_canvas_index;
 	int uv_canvas_index;
@@ -5833,6 +5835,8 @@ static void crop_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 				pic->conf_win_bottom_offset,
 				hevc->crop_w, hevc->crop_h, pic->width, pic->height);
 	}
+	pic->crop_w = hevc->crop_w;
+	pic->crop_h = hevc->crop_h;
 }
 
 static struct PIC_s *get_new_pic(struct hevc_state_s *hevc,
@@ -9186,8 +9190,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			if (hevc->mmu_enable)
 				vf->type |= VIDTYPE_SCATTER;
 		}
-		vf->compWidth = pic->width;
-		vf->compHeight = pic->height;
+		vf->compWidth = pic->crop_w;
+		vf->compHeight = pic->crop_h;
 		update_vf_memhandle(hevc, vf, pic);
 		switch (pic->bit_depth_luma) {
 		case 9:
@@ -9222,8 +9226,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			vf->flag |= VFRAME_FLAG_HIGH_BANDWIDTH;
 		}
 
-		vf->width = hevc->crop_w;
-		vf->height = hevc->crop_h;
+		vf->width = pic->crop_w;
+		vf->height = pic->crop_h;
 
 		if (force_w_h != 0) {
 			vf->width = (force_w_h >> 16) & 0xffff;
@@ -10937,7 +10941,7 @@ force_output:
 				hevc->lcu_size = 1 << (log + 3 + log_s);
 				hevc->lcu_size_log2 = log2i(hevc->lcu_size);
 				hevc->crop_w = hevc->pic_w;
-				hevc->crop_h = hevc->pic_w;
+				hevc->crop_h = hevc->pic_h;
 
 				if (performance_profile &&((!is_oversize(hevc->pic_w, hevc->pic_h))
 					&& IS_8K_SIZE(hevc->pic_w,hevc->pic_h)))
