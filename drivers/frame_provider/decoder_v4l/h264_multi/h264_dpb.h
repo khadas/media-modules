@@ -1004,4 +1004,6 @@ int post_picture_early(struct vdec_s *vdec, int index);
 
 int is_used_for_reference(struct FrameStore *fs);
 
+bool check_num_ref(struct DecodedPictureBuffer *p_Dpb);
+
 #endif

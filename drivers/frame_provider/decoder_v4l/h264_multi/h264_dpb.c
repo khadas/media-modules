@@ -2381,7 +2381,7 @@ static void sliding_window_memory_management(
 	p->is_long_term = 0;
 }
 
-static void check_num_ref(struct DecodedPictureBuffer *p_Dpb)
+bool check_num_ref(struct DecodedPictureBuffer *p_Dpb)
 {
 	if ((int)(p_Dpb->ltref_frames_in_buffer +
 			p_Dpb->ref_frames_in_buffer) >
@@ -2393,7 +2393,11 @@ static void check_num_ref(struct DecodedPictureBuffer *p_Dpb)
 			  p_Dpb->ltref_frames_in_buffer,
 			  p_Dpb->ref_frames_in_buffer,
 			  p_Dpb->num_ref_frames);
+
+		return false;
 	}
+
+	return true;
 }
 
 void dump_dpb(struct DecodedPictureBuffer *p_Dpb, u8 force)

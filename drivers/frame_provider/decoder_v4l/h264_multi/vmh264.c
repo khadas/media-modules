@@ -2231,11 +2231,11 @@ int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw)
 
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 
-			if (!pic->vf_ref)
+			if (!pic->vf_ref) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
-
-			if (ctx->picinfo.field == V4L2_FIELD_INTERLACED)
-				aml_buf_put_ref(&ctx->bm, aml_buf);
+				if (ctx->picinfo.field == V4L2_FIELD_INTERLACED)
+					aml_buf_put_ref(&ctx->bm, aml_buf);
+			}
 
 			while (pic->vf_ref) {
 				atomic_add(1, &hw->vf_put_count);
@@ -5943,7 +5943,8 @@ static bool is_buffer_available(struct vdec_s *vdec)
 			spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 			inner_size = p_Dpb->used_size - frame_outside_count;
 
-			if (inner_size >= p_H264_Dpb->dec_dpb_size) {
+			if (inner_size >= p_H264_Dpb->dec_dpb_size ||
+				!check_num_ref(&p_H264_Dpb->mDPB)) {
 				bufmgr_recover(hw);
 			}
 			bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
