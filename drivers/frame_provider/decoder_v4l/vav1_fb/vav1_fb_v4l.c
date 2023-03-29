@@ -2405,9 +2405,9 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.cdf_buf        = {.buf_size = 0x80000,}, // for context store/load 1024x256 x16 = 512K bytes 16*0x8000
 		.gmc_buf        = {.buf_size = 0x800,}, // for gmc_parameter store/load 128 x 16 = 2K bytes 0x800
 		.scalelut       = {.buf_size = 0x0,}, //0x8000, // support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
-		.dblk_para      = {.buf_size = 0x1a00,}, /*0x1980*/ // DBLK -> Max 256(4096/16) LCU, each para 1024bytes(total:0x40000), data 1024bytes(total:0x40000)
-		.dblk_data      = {.buf_size = 0x52800,},
-		.cdef_data      = {.buf_size = 0x24a00,},
+		.dblk_para      = {.buf_size = 0x1a00,}, /*0x1980*/ // DBLK -> Max 256(4096/16) LCU, each para 64bytes(total:0x4000)
+		.dblk_data      = {.buf_size = 0x5d800,}, //addr_offset_lft(64) * 4096 + (ctu_numb_y + 1) * 2048
+		.cdef_data      = {.buf_size = 0x27600,}, //1 << addr_offset_lft(17) + (ctu_numb_y + 1) * 512
 		.ups_data       = {.buf_size = 0x6f000,},
 		.fgs_table      = {.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS,}, // 512x128bits
 #ifdef AOM_AV1_MMU

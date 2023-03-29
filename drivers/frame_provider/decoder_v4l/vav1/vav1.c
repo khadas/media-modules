@@ -2273,14 +2273,17 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 			.buf_size = 0x0, //0x8000,
 		},
 		.dblk_para = {
-			// DBLK -> Max 256(4096/16) LCU, each para 1024bytes(total:0x40000), data 1024bytes(total:0x40000)
+			// DBLK -> Max 256(4096/16) LCU, each para 64bytes(total:0x4000)
+			//(ctu_numb_x + ctu_numb_y + 2) * 64
 			.buf_size = 0x1a00, /*0x1980*/
 		},
 		.dblk_data = {
-			.buf_size = 0x52800,
+			//addr_offset_lft(64) * 4096 + (ctu_numb_y + 1) * 2048
+			.buf_size = 0x5d800,
 		},
 		.cdef_data = {
-			.buf_size = 0x24a00,
+			//1 << addr_offset_lft(17) + (ctu_numb_y + 1) * 512
+			.buf_size = 0x27600,
 		},
 		.ups_data = {
 			.buf_size = 0x6f000,
