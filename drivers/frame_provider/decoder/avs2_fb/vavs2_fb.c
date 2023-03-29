@@ -6610,6 +6610,16 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			avs2_print(dec, 0,
 				"PROC_STATE_HEAD_AGAIN error, start_code 0x%x!!!\r\n",
 				start_code);
+			if (dec->m_ins_flag) {
+				dec->dec_result = DEC_RESULT_DONE;
+#ifdef NEW_FB_CODE
+				if (dec->front_back_mode == 1)
+					amhevc_stop_f();
+				else
+#endif
+					amhevc_stop();
+				vdec_schedule_work(&dec->work);
+			}
 			goto irq_handled_exit;
 		} else {
 			avs2_print(dec, AVS2_DBG_BUFMGR,
@@ -6617,6 +6627,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				start_code);
 			dec->process_state = PROC_STATE_HEAD_DONE;
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS2_ACTION_DONE);
+			if (dec->m_ins_flag)
+				start_process_time(dec);
 			goto irq_handled_exit;
 		}
 	} else if (dec->process_state ==
@@ -6632,6 +6644,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 				"PROC_STATE_DECODE_AGAIN, start_code 0x%x!!!\r\n",
 				start_code);
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS2_ACTION_DONE);
+			if (dec->m_ins_flag)
+				start_process_time(dec);
 			goto irq_handled_exit;
 		}
 	}
@@ -6861,6 +6875,8 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			dec->start_decoding_flag |= 0x1;
 		dec->process_state = PROC_STATE_HEAD_DONE;
 		WRITE_VREG(HEVC_DEC_STATUS_REG, AVS2_ACTION_DONE);
+		if (dec->m_ins_flag)
+			start_process_time(dec);
 	} else if (start_code == I_PICTURE_START_CODE ||
 		start_code == PB_PICTURE_START_CODE) {
 		ret = 0;
@@ -8257,6 +8273,20 @@ static bool is_stbuf_stagnant_full(struct AVS2Decoder_s *dec)
 	return false;
 }
 
+void wait_hevc_search_done(struct AVS2Decoder_s *dec)
+{
+	int count = 0;
+	WRITE_VREG(HEVC_SHIFT_STATUS, 0);
+	while (READ_VREG(HEVC_STREAM_CONTROL) & 0x2) {
+		usleep_range(100, 101);
+		count++;
+		if (count > 100) {
+			avs2_print(dec, 0, "%s timeout\n", __func__);
+			break;
+		}
+	}
+}
+
 static void avs2_work(struct work_struct *work)
 {
 	struct AVS2Decoder_s *dec = container_of(work,
@@ -8419,6 +8449,7 @@ static void avs2_work(struct work_struct *work)
 			__func__, dec->dec_status, dec->dec_status_back);
 	}
 #endif
+	wait_hevc_search_done(dec);
 
 	if (dec->dec_result == DEC_RESULT_DONE)
 		ATRACE_COUNTER(dec->trace.decode_time_name, DECODER_WORKER_END);
