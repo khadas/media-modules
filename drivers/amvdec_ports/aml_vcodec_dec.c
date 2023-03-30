@@ -1944,7 +1944,7 @@ static int vidioc_vdec_expbuf(struct file *file, void *priv,
 
 static bool is_turn_around(struct aml_es_ref_elem *elem)
 {
-	return (elem->au_addr + elem->au_size) >
+	return (elem->au_addr + elem->au_size) >=
 		(elem->buf_start + elem->buf_size);
 }
 
