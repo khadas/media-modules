@@ -3518,8 +3518,9 @@ void aml_v4l_ctx_release(struct kref *kref)
 	if (ctx->stream_mode) {
 		ctx->set_ext_buf_flg = false;
 		ptsserver_ins_release(ctx->ptsserver_id);
-		aml_es_mgr_release(ctx);
 	}
+
+	aml_es_mgr_release(ctx);
 
 	kfree(ctx);
 }
