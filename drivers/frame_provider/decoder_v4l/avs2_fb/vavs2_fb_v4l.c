@@ -5343,7 +5343,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	aml_buf = (struct aml_buf *)
 		dec->m_BUF[index].v4l_ref_buf_addr;
 
-	pic = &dec->avs2_dec.frm_pool[vf->index & 0xff];
+	pic = &dec->avs2_dec.frm_pool[index];
 	vf->type		|= VIDTYPE_V4L_EOS;
 	vf->timestamp		= ULONG_MAX;
 	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;

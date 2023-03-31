@@ -14705,7 +14705,7 @@ static void reset(struct vdec_s *vdec)
 	atomic_set(&hevc->vf_put_count, 0);
 	hevc->eos = false;
 	hevc->resolution_change = false;
-	hevc->reset_flag = 1;
+	hevc->reset_flag = 0;
 	for (i = 0; i < BUF_FBC_NUM_MAX; i++) {
 		if (hevc->afbc_buf_table[i].used)
 			hevc->afbc_buf_table[i].used = 0;
