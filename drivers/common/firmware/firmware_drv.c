@@ -26,6 +26,7 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 
 #include <linux/amlogic/media/utils/vformat.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
@@ -60,9 +61,6 @@ static inline int tee_load_video_fw(u32 index, u32 vdec)
 #else
 #include <linux/amlogic/tee.h>
 #endif
-
-
-
 
 /* major.minor */
 #define PACK_VERS "v0.4"
@@ -106,6 +104,29 @@ struct package_head_s package_head;
 static u32 debug;
 static u32 detail;
 static bool new_package = false;
+
+extern unsigned long long g_fw_mask;
+void fw_get_format_from_dtb(void)
+{
+	struct device_node *pnode = NULL;
+	u32 ret;
+
+	pnode = of_find_node_by_name(NULL, CODEC_DOS_DEV_ID_NODE_NAME);
+	if (!pnode) {
+		pnode = of_find_node_by_name(NULL, DECODE_CPU_VER_ID_NODE_NAME);
+		if (!pnode) {
+			pr_err("not find node\n");
+			return;
+		}
+	}
+	ret = of_property_read_u64(pnode, "format", &g_fw_mask);
+	if (ret) {
+		pr_info("read format in dts failed, ret = %d\n", ret);
+		return;
+	}
+
+	return;
+}
 
 int get_firmware_data(unsigned int format, char *buf)
 {
@@ -502,6 +523,8 @@ static int fw_info_fill(void)
 
 	__putname(path);
 
+	fw_get_format_from_dtb();
+
 	if (debug)
 		fw_files_info_walk();
 
@@ -535,6 +558,12 @@ static int fw_data_filter(struct firmware_s *fw,
 	/* the encode fw need to ignoring filtering rules. */
 	if (fw_info->format == FIRMWARE_MAX)
 		return 0;
+
+	if (!fw_check_need_load(fw->head.format)) {
+		kfree(fw_info);
+		kfree(fw);
+		return 1;
+	}
 
 	list_for_each_entry_safe(info, tmp, &mgr->fw_head, node) {
 		if (info->format != fw_info->format)

@@ -26,6 +26,9 @@
 /* majoy chip id define */
 #define MAJOY_ID_MASK (0x000000ff)
 
+#define DECODE_CPU_VER_ID_NODE_NAME "cpu_ver_name"
+#define CODEC_DOS_DEV_ID_NODE_NAME  "vcodec_dos_dev"
+
 enum AM_MESON_CPU_MAJOR_ID {
 	AM_MESON_CPU_MAJOR_ID_M6	= 0x16,
 	AM_MESON_CPU_MAJOR_ID_M6TV	= 0x17,

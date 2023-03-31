@@ -97,6 +97,7 @@
 struct format_name_s {
 	unsigned int format;
 	const char *name;
+	unsigned long long format_mask;
 };
 
 struct cpu_type_s {
@@ -109,5 +110,6 @@ unsigned int get_fw_format(const char *name);
 int fw_get_cpu(const char *name);
 int get_decoder_firmware_version(void);
 int get_decoder_firmware_submit_count(void);
+int fw_check_need_load(const char *name);
 
 #endif
