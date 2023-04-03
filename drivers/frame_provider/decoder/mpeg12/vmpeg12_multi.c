@@ -122,6 +122,9 @@
 #define MPEG2_ERROR_FRAME_DISPLAY 0
 #define MPEG2_ERROR_FRAME_DROP 1
 
+#define MAX_SIZE_2K (1920 * 1088)
+
+
 static u32 buf_size = 32 * 1024 * 1024;
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x4000;
@@ -2170,6 +2173,27 @@ static void copy_user_data_to_pic(struct vdec_mpeg12_hw_s *hw, struct pic_info_t
 	memset(hw->parse_user_data_buf, 0, CCBUF_SIZE);
 }
 
+static int is_oversize(int w, int h)
+{
+	int max = MAX_SIZE_2K;
+
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (w > max / h) {
+		return true;
+	} else if (w > h) {
+		if (w > 1920 || h > 1088)
+			return true;
+	} else if (w < h) {
+		if (w > 1088 || h > 1920)
+			return true;
+	}
+
+	return false;
+}
+
+
 static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 {
 	u32 reg, index, info, seqinfo, offset, pts, frame_size=0, tmp;
@@ -2194,15 +2218,17 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 	reg = READ_VREG(AV_SCRATCH_G);
 	if (reg == 1) {
+		int frame_width = READ_VREG(MREG_PIC_WIDTH);
+		int frame_height = READ_VREG(MREG_PIC_HEIGHT);
+
 		if (hw->kpi_first_i_comming == 0) {
 			hw->kpi_first_i_comming = 1;
 			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 				"[vdec_kpi][%s] First I frame coming.\n",
 				__func__);
 		}
+
 		if (hw->is_used_v4l) {
-			int frame_width = READ_VREG(MREG_PIC_WIDTH);
-			int frame_height = READ_VREG(MREG_PIC_HEIGHT);
 			if (!v4l_res_change(hw, frame_width, frame_height)) {
 				struct aml_vcodec_ctx *ctx =
 					(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -2225,8 +2251,16 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->dec_result = DEC_RESULT_AGAIN;
 				vdec_schedule_work(&hw->work);
 			}
-		} else
+		} else {
+			if (!hw->first_i_frame_ready && is_oversize(frame_width, frame_height)) {
+				debug_print(DECODE_ID(hw), 0,
+					"is_oversize w:%d h:%d\n", frame_width, frame_height);
+				hw->dec_result = DEC_RESULT_DONE;
+				vdec_schedule_work(&hw->work);
+				return IRQ_HANDLED;
+			}
 			WRITE_VREG(AV_SCRATCH_G, 0);
+		}
 		return IRQ_HANDLED;
 	}
 

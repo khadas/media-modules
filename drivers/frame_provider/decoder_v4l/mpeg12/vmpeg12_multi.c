@@ -120,6 +120,8 @@
 
 #define INVALID_IDX 		(-1)  /* Invalid buffer index.*/
 
+#define MAX_SIZE_2K (1920 * 1088)
+
 static int pre_decode_buf_level = 0x800;
 static int start_decode_buf_level = 0x4000;
 static u32 dec_control;
@@ -1957,6 +1959,26 @@ void cal_chunk_offset_and_size(struct vdec_mpeg12_hw_s *hw)
 	}
 }
 
+static int is_oversize(int w, int h)
+{
+	int max = MAX_SIZE_2K;
+
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (w > max / h) {
+		return true;
+	} else if (w > h) {
+		if (w > 1920 || h > 1088)
+			return true;
+	} else if (w < h) {
+		if (w > 1088 || h > 1920)
+			return true;
+	}
+
+	return false;
+}
+
 static void mpeg2_buf_ref_process_for_exception(struct vdec_mpeg12_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
@@ -2032,7 +2054,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		}
 
 		if (input_frame_based(vdec)) {
-			if ((frame_width < 64) || (frame_height < 64)) {
+			if (is_oversize(frame_width, frame_height)) {
 				pr_info("is_oversize w:%d h:%d\n", frame_width, frame_height);
 				mpeg2_buf_ref_process_for_exception(hw);
 				if (vdec_frame_based(vdec)) {
