@@ -2054,7 +2054,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		mpeg2_buf_ref_process_for_exception(hw);
 
 		if (vdec_frame_based(vdec)) {
-			vdec_v4l_post_error_frame_event(ctx);
+			if (hw->dec_result != DEC_RESULT_UNFINISH)
+				vdec_v4l_post_error_frame_event(ctx);
 			userdata_pushed_drop(hw);
 			hw->dec_result = DEC_RESULT_DONE;
 			vdec_schedule_work(&hw->work);
@@ -3783,7 +3784,8 @@ void (*callback)(struct vdec_s *, void *, int),
 		return;
 	}
 
-	hw->dec_result = DEC_RESULT_NONE;
+	if (hw->dec_result != DEC_RESULT_UNFINISH)
+		hw->dec_result = DEC_RESULT_NONE;
 	hw->stat |= STAT_MC_LOAD;
 	vdec_enable_input(vdec);
 	hw->last_vld_level = 0;
