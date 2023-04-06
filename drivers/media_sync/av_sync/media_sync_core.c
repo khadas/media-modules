@@ -2126,7 +2126,7 @@ long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adjust_pts) {
 	return 0;
 }
 
-long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode) {
+long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s32 mode) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -2145,7 +2145,7 @@ long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s64 mode) {
 	return 0;
 }
 
-long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode) {
+long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s32* mode) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -2164,7 +2164,7 @@ long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s64* mode) {
 	return 0;
 }
 
-long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable) {
+long mediasync_ins_set_fccenable(s32 sSyncInsId, s32 enable) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
@@ -2183,7 +2183,7 @@ long mediasync_ins_set_fccenable(s32 sSyncInsId, s64 enable) {
 	return 0;
 }
 
-long mediasync_ins_get_fccenable(s32 sSyncInsId, s64* enable) {
+long mediasync_ins_get_fccenable(s32 sSyncInsId, s32* enable) {
 	mediasync_ins* pInstance = NULL;
 	s32 index = get_index_from_sync_id(sSyncInsId);
 	if (index < 0 || index >= MAX_INSTANCE_NUM)

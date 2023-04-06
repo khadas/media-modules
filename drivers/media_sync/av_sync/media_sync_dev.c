@@ -117,8 +117,8 @@ static long mediasync_ioctl_inner(struct file *file, unsigned int cmd, ulong arg
 	int HasVideo = -1;
 	s32 StartThreshold = 0;
 	s32 PtsAdjust = 0;
-	s64 VideoWorkMode = 0;
-	s64 FccEnable = 0;
+	s32 VideoWorkMode = 0;
+	s32 FccEnable = 0;
 	int mute_flag  = 0;
 	int PauseResumeFlag  = 0;
 	int AvRefFlag = 0;
