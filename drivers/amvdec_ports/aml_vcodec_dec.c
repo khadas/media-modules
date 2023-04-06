@@ -75,6 +75,8 @@
 #define AML_V4L2_SET_DURATION (V4L2_CID_USER_AMLOGIC_BASE + 2)
 #define AML_V4L2_GET_FILMGRAIN_INFO (V4L2_CID_USER_AMLOGIC_BASE + 3)
 #define AML_V4L2_SET_INPUT_BUFFER_NUM_CACHE (V4L2_CID_USER_AMLOGIC_BASE + 4)
+#define AML_V4L2_GET_DECODER_INFO (V4L2_CID_USER_AMLOGIC_BASE + 5)
+
 /*V4L2_CID_USER_AMLOGIC_BASE + 5 occupied*/
 #define AML_V4L2_GET_BITDEPTH (V4L2_CID_USER_AMLOGIC_BASE + 6)
 #define AML_V4L2_DEC_PARMS_CONFIG (V4L2_CID_USER_AMLOGIC_BASE + 7)
@@ -380,6 +382,9 @@ void aml_vdec_dispatch_event(struct aml_vcodec_ctx *ctx, u32 changes)
 	case V4L2_EVENT_SEND_EOS:
 		event.type = V4L2_EVENT_EOS;
 		break;
+	case V4L2_EVENT_SEND_ERROR:
+		event.type = V4L2_EVENT_PRIVATE_EXT_SEND_ERROR;
+		break;
 	case V4L2_EVENT_REPORT_ERROR_FRAME:
 		event.type = V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME;
 		memcpy(event.u.data, &ctx->current_timestamp, sizeof(u64));
@@ -586,6 +591,28 @@ static u32 v4l_buf_size_decision(struct aml_vcodec_ctx *ctx)
 	vdec_if_set_param(ctx, SET_PARAM_PIC_INFO, picinfo);
 
 	return total_size;
+}
+
+void aml_buf_configure_update(struct aml_vcodec_ctx *ctx)
+{
+	struct aml_buf_config config = {0};
+	struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
+	u32 dw = VDEC_DW_NO_AFBC;
+
+	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		return;
+
+	}
+
+	config.enable_extbuf	= true;
+	config.enable_fbc	= (dw != VDEC_DW_NO_AFBC) ? true : false;
+	config.enable_secure	= ctx->is_drm_mode;
+	config.memory_mode	= que->memory;
+	config.planes		= V4L2_TYPE_IS_MULTIPLANAR(que->type) ? 2 : 1;
+	config.luma_length	= ctx->picinfo.y_len_sz;
+	config.chroma_length	= ctx->picinfo.c_len_sz;
+	aml_buf_configure(&ctx->bm, &config);
 }
 
 void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
@@ -1822,6 +1849,10 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 		}
 #endif
 	}
+	if (V4L2_TYPE_IS_OUTPUT(q->type)) {
+		memset(&ctx->decoder_status_info, 0,
+			sizeof(ctx->decoder_status_info));
+	}
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, type: %d\n", __func__, q->type);
 
@@ -2372,6 +2403,8 @@ static int vidioc_vdec_subscribe_evt(struct v4l2_fh *fh,
 		return v4l2_src_change_event_subscribe(fh, sub);
 	case V4L2_EVENT_PRIVATE_EXT_REPORT_ERROR_FRAME:
 		return v4l2_event_subscribe(fh, sub, 10, NULL);
+	case V4L2_EVENT_PRIVATE_EXT_SEND_ERROR:
+		return v4l2_event_subscribe(fh, sub, 5, NULL);
 	default:
 		return v4l2_ctrl_subscribe_event(fh, sub);
 	}
@@ -4160,6 +4193,11 @@ static int aml_vdec_g_v_ctrl(struct v4l2_ctrl *ctrl)
 	case AML_V4L2_GET_FILMGRAIN_INFO:
 		ctrl->val = ctx->film_grain_present;
 		break;
+	case AML_V4L2_GET_DECODER_INFO:
+		memcpy(ctrl->p_new.p, &ctx->decoder_status_info,
+			sizeof(struct aml_decoder_status_info));
+		ctx->decoder_status_info.error_type = 0;
+		break;
 	case AML_V4L2_GET_BITDEPTH:
 		ctrl->val = ctx->picinfo.bitdepth;
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_BUFMGR,
@@ -4348,6 +4386,19 @@ static const struct v4l2_ctrl_config ctrl_get_inst_id = {
 	.def	= 0,
 };
 
+static const struct v4l2_ctrl_config ctrl_gt_decoder_info = {
+	.name		= "decoder information",
+	.id		= AML_V4L2_GET_DECODER_INFO,
+	.ops		= &aml_vcodec_dec_ctrl_ops,
+	.type		= V4L2_CTRL_COMPOUND_TYPES,
+	.flags		= V4L2_CTRL_FLAG_VOLATILE,
+	.min		= 0,
+	.max		= sizeof(struct aml_decoder_status_info),
+	.step		= 1,
+	.elem_size	= 1,
+	.dims		= { sizeof(struct aml_decoder_status_info) },
+};
+
 int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 {
 	int ret;
@@ -4411,6 +4462,12 @@ int aml_vcodec_dec_ctrls_setup(struct aml_vcodec_ctx *ctx)
 	}
 
 	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_filmgrain_info, NULL);
+	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
+		ret = ctx->ctrl_hdl.error;
+		goto err;
+	}
+
+	ctrl = v4l2_ctrl_new_custom(&ctx->ctrl_hdl, &ctrl_gt_decoder_info, NULL);
 	if ((ctrl == NULL) || (ctx->ctrl_hdl.error)) {
 		ret = ctx->ctrl_hdl.error;
 		goto err;
@@ -4567,6 +4624,11 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 			if (check_dec_cfginfo(&in->cfg))
 				return -EINVAL;
 			dec->cfg = in->cfg;
+		}
+		if (!vdec_if_set_param(ctx, SET_PARAM_CFG_INFO, &dec->cfg) &&
+				!vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->picinfo)) {
+				update_ctx_dimension(ctx, dst_vq->type);
+				aml_buf_configure_update(ctx);
 		}
 		if (in->parms_status & V4L2_CONFIG_PARM_DECODE_PSINFO)
 			dec->ps = in->ps;

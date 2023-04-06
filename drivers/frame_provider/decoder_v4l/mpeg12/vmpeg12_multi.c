@@ -1668,6 +1668,9 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			((PICINFO_TYPE_MASK & pic->buffer_info) !=
 			 PICINFO_TYPE_I))) {
 			hw->drop_frame_count++;
+			v4l2_ctx->decoder_status_info.decoder_error_count++;
+			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
+
 			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) {
 				hw->gvs.i_lost_frames++;
 			} else if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
@@ -1984,6 +1987,8 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->v4l_params_parsed = true;
 				hw->report_field = (hw->force_prog_only || frame_prog) ? V4L2_FIELD_NONE : V4L2_FIELD_INTERLACED;
 				vdec_v4l_set_ps_infos(ctx, &ps);
+				ctx->decoder_status_info.frame_height = ps.visible_height;
+				ctx->decoder_status_info.frame_width = ps.visible_width;
 				if (vdec_frame_based(vdec)) {
 					cal_chunk_offset_and_size(hw);
 				}
@@ -2442,6 +2447,7 @@ static void vmpeg12_work_implement(struct vdec_mpeg12_hw_s *hw,
 	if (hw->dec_result == DEC_RESULT_DONE) {
 		if (vdec->input.swap_valid)
 			hw->dec_again_cnt = 0;
+		ctx->decoder_status_info.decoder_count++;
 		if (hw->timeout) {
 			mpeg2_buf_ref_process_for_exception(hw);
 			if (vdec_frame_based(vdec))
@@ -2796,6 +2802,7 @@ static int vmmpeg12_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 static void vmpeg12_workspace_init(struct vdec_mpeg12_hw_s *hw)
 {
 	int ret;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
 			DECODE_BUFFER_NUM_MAX,
@@ -2815,6 +2822,7 @@ static void vmpeg12_workspace_init(struct vdec_mpeg12_hw_s *hw)
 					  hw->cc_buf_size, &hw->ccbuf_phyAddress,
 					  "MPEG2_AUX_BUF");
 		if (hw->ccbuf_phyAddress_virt == NULL) {
+			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 			pr_err("%s: failed to alloc cc buffer\n", __func__);
 			return;
 		}
@@ -2950,6 +2958,7 @@ static void start_process_time_set(struct vdec_mpeg12_hw_s *hw)
 static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (hw->process_busy) {
 		pr_debug("%s, process busy\n", __func__);
@@ -2970,6 +2979,7 @@ static void timeout_process(struct vdec_mpeg12_hw_s *hw)
 	debug_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 		"%s decoder timeout, status=%d, level=%d\n",
 		__func__, vdec->status, READ_VREG(VLD_MEM_VIFIFO_LEVEL));
+	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 	hw->dec_result = DEC_RESULT_DONE;
 	if ((hw->refs[1] != -1) && (hw->refs[0] != -1))
 		hw->first_i_frame_ready = 0;
@@ -3241,6 +3251,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 	int size;
 	u32 fw_size = 16*0x1000;
 	struct firmware_s *fw;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	vmpeg12_local_init(hw);
 
@@ -3270,6 +3281,7 @@ static s32 vmpeg12_init(struct vdec_mpeg12_hw_s *hw)
 		if (!hw->user_data_buffer) {
 			pr_info("%s: Can not allocate user_data_buffer\n",
 				   __func__);
+			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 			return -1;
 		}
 	}
@@ -3755,6 +3767,7 @@ void (*callback)(struct vdec_s *, void *, int),
 			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
 				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 			vdec_schedule_work(&hw->work);
 			return;
 		}
