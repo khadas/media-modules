@@ -12094,6 +12094,10 @@ static int check_dirty_data(struct vdec_s *vdec)
 			STBUF_WRITE(&vdec->vbuf, set_rp, rp_set);
 			vdec->discard_start_data_flag = 1;
 			vdec->input.stream_cookie += skip_size;
+#ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
+			if (vdec->master || vdec->slave)
+				hevc->shift_byte_count_lo += skip_size;
+#endif
 			hevc->dirty_shift_flag = 1;
 		}
 		return 1;
