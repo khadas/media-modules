@@ -101,6 +101,10 @@ static struct device *amvenc_avc_dev;
 #define CLASS_NAME "amvenc_avc"
 #define DEVICE_NAME "amvenc_avc"
 
+#define ENC_ALIGN_64(x) (((x + 63) >> 6) << 6)
+#define ENC_ALIGN_32(x) (((x + 31) >> 5) << 5)
+#define ENC_ALIGN_16(x) (((x + 15) >> 4) <<4)
+
 static struct encode_manager_s encode_manager;
 
 #define MULTI_SLICE_MC
@@ -1500,6 +1504,32 @@ static s32 dump_raw_input(struct encode_wq_s *wq, struct encode_request_s *reque
 	return 0;
 }
 
+
+static void get_pitches(struct encode_wq_s *wq,struct encode_request_s *request,u32 *pitch_w,u32 *pitch_h)
+{
+	u32 w_pitch_tmp = 0;
+	u32 h_pitch_tmp = 0;
+
+	if (FMT_NV21 == request->fmt || FMT_NV12 == request->fmt) {
+		if (request->framesize == ENC_ALIGN_64(wq->pic.encoder_width) * ENC_ALIGN_64(wq->pic.encoder_height) * 3 / 2) {
+			w_pitch_tmp = ENC_ALIGN_64(wq->pic.encoder_width);
+			h_pitch_tmp = ENC_ALIGN_64(wq->pic.encoder_height);
+		}
+		else if (request->framesize == ENC_ALIGN_64(wq->pic.encoder_width) * ENC_ALIGN_16(wq->pic.encoder_height) * 3 / 2) {
+			w_pitch_tmp = ENC_ALIGN_64(wq->pic.encoder_width);
+			h_pitch_tmp = ENC_ALIGN_16(wq->pic.encoder_height);
+		}
+		else{
+			w_pitch_tmp = ENC_ALIGN_32(wq->pic.encoder_width);
+			h_pitch_tmp = ENC_ALIGN_16(wq->pic.encoder_height);
+		}
+	}
+	*pitch_w = w_pitch_tmp;
+	*pitch_h = h_pitch_tmp;
+	enc_pr(LOG_INFO,"pitch:%d,h_pitch:%d,width:%d,height:%d",w_pitch_tmp,h_pitch_tmp,wq->pic.encoder_width,wq->pic.encoder_height);
+}
+
+
 static s32 set_input_format(struct encode_wq_s *wq,
 			    struct encode_request_s *request)
 {
@@ -1512,7 +1542,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 	u32 input_u = 0;
 	u32 input_v = 0;
 	u8 ifmt_extra = 0;
-	u32 pitch = 0;
+	u32 pitch = ((wq->pic.encoder_width + 31) >> 5) << 5;
+	u32 h_pitch = ((wq->pic.encoder_height + 15) >> 4) << 4;
 
 	if ((request->fmt == FMT_RGB565) || (request->fmt >= MAX_FRAME_FMT))
 		return -1;
@@ -1554,8 +1585,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				input_y = (unsigned long)request->dma_cfg[0].paddr;
 				if (request->fmt == FMT_NV21
 					|| request->fmt == FMT_NV12) {
-					pitch = ((wq->pic.encoder_width + 31) >> 5) << 5;
-					input_u = input_y + pitch * picsize_y;
+					get_pitches(wq,request,&pitch,&h_pitch);
+					input_u = input_y + pitch * h_pitch;
 					input_v = input_u;
 				}
 				if (request->fmt == FMT_YUV420) {
@@ -1664,17 +1695,17 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			input = ENC_CANVAS_OFFSET + 6;
 		} else if ((request->fmt == FMT_NV21)
 			|| (request->fmt == FMT_NV12)) {
-			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
+			canvas_w = pitch;//((wq->pic.encoder_width + 31) >> 5) << 5;
 			iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 			if (request->type == DMA_BUFF) {
 				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
 					input_y,
-					canvas_w, picsize_y,
+					canvas_w, h_pitch,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
 					input_u,
-					canvas_w, picsize_y / 2,
+					canvas_w, h_pitch / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
@@ -3158,8 +3189,8 @@ static s32 convert_request(struct encode_wq_s *wq, u32 *cmd_info)
 		wq->request.src_h = cmd_info[14];
 		wq->request.scale_enable = cmd_info[15];
 
-		enc_pr(LOG_INFO, "hwenc: wq->pic.encoder_width %d, ",
-		      wq->pic.encoder_width);
+		enc_pr(LOG_INFO, "hwenc: wq->pic.encoder_width %d, framesize:%d",
+		      wq->pic.encoder_width,wq->request.framesize);
 		enc_pr(LOG_INFO, "wq->pic.encoder_height:%d, request fmt=%d\n",
 		      wq->pic.encoder_height, wq->request.fmt);
 
