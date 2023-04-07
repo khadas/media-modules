@@ -30,6 +30,7 @@
 #include <linux/amlogic/major.h>
 #include "media_sync_core.h"
 #include "media_sync_dev.h"
+#include "media_sync_vfm.h"
 
 #define MEDIASYNC_DEVICE_NAME   "mediasync"
 static struct device *mediasync_dev;
@@ -1554,6 +1555,7 @@ static int __init mediasync_module_init(void)
 		goto err1;
 	}
 	mediasync_init();
+	mediasync_vf_init();
 	return 0;
 
 err1:
@@ -1566,6 +1568,7 @@ err2:
 
 static void __exit mediasync_module_exit(void)
 {
+	mediasync_vf_release();
 	device_destroy(&mediasync_class, MKDEV(MEDIASYNC_MAJOR, 0));
 	unregister_chrdev(MEDIASYNC_MAJOR, "mediasync");
 	class_unregister(&mediasync_class);

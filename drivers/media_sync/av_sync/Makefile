@@ -3,6 +3,7 @@ obj-m	+=	 ${MODULE_NAME}.o
 
 ${MODULE_NAME}-objs	+=	media_sync_dev.o
 ${MODULE_NAME}-objs	+=	media_sync_core.o
+${MODULE_NAME}-objs	+=	media_sync_vfm.o
 
 PR_FMT = $(subst amlogic-,,$(MODULE_NAME))
 PR_FMT_DEFINE="-Dpr_fmt(fmt)=\"[$(PR_FMT)]:\" fmt"
