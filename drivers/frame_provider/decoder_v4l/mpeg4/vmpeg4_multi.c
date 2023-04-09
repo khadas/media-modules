@@ -752,8 +752,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			 && (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
-			v4l2_ctx->decoder_status_info.decoder_error_count++;
-			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
 			if (pic->pic_type == I_PICTURE) {
 				hw->i_lost_frames++;
 			} else if (pic->pic_type == P_PICTURE) {
@@ -846,8 +844,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 		if (((hw->first_i_frame_ready == 0) || pb_skip)
 			&& (pic->pic_type != I_PICTURE)) {
 			hw->drop_frame_count++;
-			v4l2_ctx->decoder_status_info.decoder_error_count++;
-			vdec_v4l_post_error_event(v4l2_ctx, DECODER_WARNING_DATA_ERROR);
 			if (pic->pic_type == I_PICTURE) {
 				hw->i_lost_frames++;
 			} else if (pic->pic_type == P_PICTURE) {
@@ -1181,8 +1177,6 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->v4l_params_parsed = true;
 				hw->report_field = interlace ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
 				vdec_v4l_set_ps_infos(ctx, &ps);
-				ctx->decoder_status_info.frame_height = ps.visible_height;
-				ctx->decoder_status_info.frame_width = ps.visible_width;
 				reset_process_time(hw);
 				hw->dec_result = DEC_RESULT_AGAIN;
 				vdec_schedule_work(&hw->work);
@@ -1739,7 +1733,6 @@ static void vmpeg4_work(struct work_struct *work)
 	} else if (hw->dec_result == DEC_RESULT_DONE) {
 		if (!hw->ctx_valid)
 			hw->ctx_valid = 1;
-		ctx->decoder_status_info.decoder_count++;
 		if (hw->timeout) {
 			mpeg4_buf_ref_process_for_exception(hw);
 			if (vdec_frame_based(vdec))
@@ -2125,8 +2118,6 @@ static void start_process_time(struct vdec_mpeg4_hw_s *hw)
 
 static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 {
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
-
 	if (hw->process_busy) {
 		pr_debug("%s, process_busy\n", __func__);
 		return;
@@ -2159,7 +2150,6 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 	hw->timeout_cnt++;
 	/* timeout: data droped, frame_num inaccurate*/
 	hw->frame_num++;
-	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 	reset_process_time(hw);
 	hw->first_i_frame_ready = 0;
 	hw->dec_result = DEC_RESULT_DONE;
@@ -2333,7 +2323,6 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 {
 	int i;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	hw->vmpeg4_ratio = hw->vmpeg4_amstream_dec_info.ratio;
 
@@ -2413,9 +2402,6 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 			CODEC_MM_FLAGS_CMA_CLEAR |
 			CODEC_MM_FLAGS_FOR_VDECODER,
 			BMMU_ALLOC_FLAGS_WAIT);
-	if (hw->mm_blk_handle) {
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
-	}
 
 	INIT_WORK(&hw->work, vmpeg4_work);
 
@@ -2427,7 +2413,6 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 	int trickmode_fffb = 0;
 	int size = -1, fw_size = 0x1000 * 16;
 	struct firmware_s *fw = NULL;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))
@@ -2446,7 +2431,6 @@ static s32 vmmpeg4_init(struct vdec_mpeg4_hw_s *hw)
 				hw->vmpeg4_amstream_dec_info.format);
 	pr_info("mmpeg4 get fw %s, size %x\n", fw->name, size);
 	if (size < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		pr_err("get firmware failed.");
 		vfree(fw);
 		return -1;
@@ -2785,7 +2769,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		if (ret < 0) {
 			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
 				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
 			return;

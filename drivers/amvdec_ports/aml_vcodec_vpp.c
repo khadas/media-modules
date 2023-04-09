@@ -681,7 +681,7 @@ retry:
 
 		if (dynamic_bypass_vpp_flag != ctx->vpp_cfg.dynamic_bypass_vpp) {
 			dynamic_bypass_vpp_flag = ctx->vpp_cfg.dynamic_bypass_vpp;
-			di_s_bypass_ch(vpp->di_handle, dynamic_bypass_vpp_flag);
+			//di_s_bypass_ch(vpp->di_handle, dynamic_bypass_vpp_flag);
 			v4l_dbg(ctx, V4L_DEBUG_VPP_DETAIL, "dynamic bypass vpp:%s\n",
 				dynamic_bypass_vpp_flag ? "enable" : "disable");
 		}

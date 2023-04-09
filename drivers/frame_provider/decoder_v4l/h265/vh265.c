@@ -2371,22 +2371,12 @@ static int get_pic_poc(struct hevc_state_s *hevc,
 	return INVALID_POC;
 }
 
-static int get_double_write_mode(struct hevc_state_s *hevc)
-{
-	u32 dw = 0x1; /*1:1*/
-	unsigned int out;
-
-	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
-	dw = out;
-	return dw;
-}
-
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static int get_valid_double_write_mode(struct hevc_state_s *hevc)
 {
 	return (hevc->m_ins_flag &&
 		((double_write_mode & 0x80000000) == 0)) ?
-		get_double_write_mode(hevc) :
+		hevc->double_write_mode :
 		(double_write_mode & 0x7fffffff);
 }
 
@@ -2398,6 +2388,16 @@ static int get_dynamic_buf_num_margin(struct hevc_state_s *hevc)
 		(dynamic_buf_num_margin & 0x7fffffff);
 }
 #endif
+
+static int get_double_write_mode(struct hevc_state_s *hevc)
+{
+	u32 dw = 0x1; /*1:1*/
+	unsigned int out;
+
+	vdec_v4l_get_dw_mode(hevc->v4l2_ctx, &out);
+	dw = out;
+	return dw;
+}
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static unsigned char get_idx(struct hevc_state_s *hevc)
@@ -2634,8 +2634,6 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 #define HEVC_SAO_CTRL11                            0x362f
 static int init_detrefill_buf(struct hevc_state_s *hevc)
 {
-	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
-
 	if (hevc->detbuf_adr_virt)
 		return 0;
 
@@ -2646,7 +2644,6 @@ static int init_detrefill_buf(struct hevc_state_s *hevc)
 
 	if (hevc->detbuf_adr_virt == NULL) {
 		pr_err("%s: failed to alloc ETREFILL_BUF\n", __func__);
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 		return -1;
 	}
 	return 0;
@@ -5711,7 +5708,6 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 			hevc_print(hevc, 0,
 				"can't alloc need mmu1,idx %d ret =%d\n",
 				new_pic->decode_idx, ret);
-			vdec_v4l_post_error_event(v4l, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 			return NULL;
 		}
 	}
@@ -5861,7 +5857,6 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 					H265_DEBUG_DISPLAY_CUR_FRAME)
 				|| (get_dbg_flag(hevc) &
 					H265_DEBUG_NO_DISPLAY)) {
-				struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 				pic_display->output_ready = 0;
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR) {
 					hevc_print(hevc, H265_DEBUG_BUFMGR,
@@ -5886,10 +5881,6 @@ static void flush_output(struct hevc_state_s *hevc, struct PIC_s *pic)
 				} else if (pic_display->slice_type == B_SLICE) {
 					hevc->gvs->b_lost_frames++;
 				}
-
-				ctx->decoder_status_info.decoder_error_count++;
-				vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
-
 				/* error frame count also need increase */
 				hevc->gvs->error_frame_count++;
 				if (pic_display->slice_type == I_SLICE) {
@@ -6144,7 +6135,7 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 				}
 			}
 			if (hevc->mmu_enable
-				&& ((get_double_write_mode(hevc) & 0x10) == 0)) {
+				&& ((hevc->double_write_mode & 0x10) == 0)) {
 				if (!hevc->m_ins_flag) {
 					hevc->used_4k_num =
 					READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
@@ -6177,7 +6168,6 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 						H265_DEBUG_DISPLAY_CUR_FRAME)
 					|| (get_dbg_flag(hevc) &
 						H265_DEBUG_NO_DISPLAY)) {
-					struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 					pic_display->output_ready = 0;
 					if (get_dbg_flag(hevc) &
 						H265_DEBUG_BUFMGR) {
@@ -6203,10 +6193,6 @@ static inline void hevc_pre_pic(struct hevc_state_s *hevc,
 					} else if (pic_display->slice_type == B_SLICE) {
 						hevc->gvs->b_lost_frames++;
 					}
-
-					ctx->decoder_status_info.decoder_error_count++;
-					vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
-
 					/* error frame count also need increase */
 					hevc->gvs->error_frame_count++;
 					if (pic_display->slice_type == I_SLICE) {
@@ -6606,7 +6592,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	int lcu_y_num_div;
 	int Col_ref;
 	int dbg_skip_flag = 0;
-	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
@@ -6671,7 +6656,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				H265_NO_CHANG_DEBUG_FLAG_IN_CODE) == 0))
 				debug |= (H265_DEBUG_DIS_LOC_ERROR_PROC |
 				H265_DEBUG_DIS_SYS_ERROR_PROC);
-			vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 			return 3;
 		}
 
@@ -6704,7 +6688,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				debug |= (H265_DEBUG_DIS_LOC_ERROR_PROC |
 				H265_DEBUG_DIS_SYS_ERROR_PROC);
 			hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
 			return 4;
 		}
 
@@ -6727,7 +6710,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				"Error, lcu_size = 0 (%d,%d)\n",
 				   rpm_param->p.log2_min_coding_block_size_minus3,
 				   rpm_param->p.log2_diff_max_min_coding_block_size);
-			vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 			return 3;
 		}
 		hevc->lcu_size_log2 = log2i(hevc->lcu_size);
@@ -7347,7 +7329,7 @@ static void release_pic_mmu_buf(struct hevc_state_s *hevc,
 	pic->scatter_alloc);
 
 	if (hevc->mmu_enable
-		&& !(get_double_write_mode(hevc) & 0x10)
+		&& !(hevc->double_write_mode & 0x10)
 		&& pic->scatter_alloc) {
 		struct aml_buf *aml_buf =
 				index_to_afbc_aml_buf(hevc, pic->BUF_index);
@@ -9949,13 +9931,30 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	return 0;
 }
 
+static int vh265_get_cfg_info(struct hevc_state_s *hevc,
+			     union param_u *rpm_param,
+			     struct aml_vdec_cfg_infos *cfg)
+{
+	/* force h265 interlace video to double write 1*/
+	if (hevc->interlace_flag) {
+		cfg->double_write_mode = 1;
+		hevc->double_write_mode = 1;
+		hevc_print(hevc, 0,
+			"hevc interlace force dw 1\n");
+	}
+	cfg->init_width = rpm_param->p.pic_width_in_luma_samples;
+	cfg->init_height = rpm_param->p.pic_height_in_luma_samples
+		<< hevc->interlace_flag;
+
+	return 0;
+}
+
 static void get_comp_buf_info(struct hevc_state_s *hevc,
 		struct vdec_comp_buf_info *info)
 {
 	u16 bit_depth = hevc->param.p.bit_depth;
 	int w = hevc->param.p.pic_width_in_luma_samples;
 	int h = hevc->param.p.pic_height_in_luma_samples;
-	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 
 	info->max_size = hevc_max_mmu_buf_size(
 			hevc->max_pic_w,
@@ -9963,9 +9962,6 @@ static void get_comp_buf_info(struct hevc_state_s *hevc,
 	info->header_size = hevc_get_header_size(w,h);
 	info->frame_buffer_size = hevc_mmu_page_num(
 			hevc, w, h,	bit_depth != 0x00);
-	if (info->frame_buffer_size < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
-	}
 
 	pr_info("hevc get comp info: %d %d %d\n",
 			info->max_size, info->header_size,
@@ -10691,7 +10687,7 @@ pic_done:
 						}
 					}
 					if (hevc->mmu_enable
-							&& ((get_double_write_mode(hevc) & 0x10) == 0)) {
+							&& ((hevc->double_write_mode & 0x10) == 0)) {
 						if (!hevc->m_ins_flag) {
 							hevc->used_4k_num =
 							READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
@@ -11189,7 +11185,7 @@ force_output:
 			if (!v4l_res_change(hevc, &hevc->param)) {
 				if (ctx->param_sets_from_ucode && !hevc->v4l_params_parsed) {
 					struct aml_vdec_ps_infos ps;
-
+					struct aml_vdec_cfg_infos cfg;
 					int log = hevc->param.p.log2_min_coding_block_size_minus3;
 					int log_s = hevc->param.p.log2_diff_max_min_coding_block_size;
 
@@ -11199,6 +11195,10 @@ force_output:
 
 					pr_debug("set ucode parse\n");
 					hevc_interlace_check(hevc, &hevc->param);
+					if (hevc->interlace_flag) {
+						vh265_get_cfg_info(hevc, &hevc->param, &cfg);
+						vdec_v4l_set_cfg_infos(ctx, &cfg);
+					}
 					if (get_valid_double_write_mode(hevc) != 16) {
 						struct vdec_comp_buf_info info;
 
@@ -11208,8 +11208,6 @@ force_output:
 					vh265_get_ps_info(hevc, &hevc->param, &ps);
 					/*notice the v4l2 codec.*/
 					vdec_v4l_set_ps_infos(ctx, &ps);
-					ctx->decoder_status_info.frame_height = ps.visible_height;
-					ctx->decoder_status_info.frame_width = ps.visible_width;
 					hevc->v4l_params_parsed = true;
 					hevc->dec_result = DEC_RESULT_AGAIN;
 					amhevc_stop();
@@ -11434,7 +11432,6 @@ force_output:
 			debug |= (H265_DEBUG_DIS_LOC_ERROR_PROC |
 				H265_DEBUG_DIS_SYS_ERROR_PROC);
 #endif
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		vh265_buf_ref_process_for_exception(hevc);
 		if (vdec_frame_based(hw_to_vdec(hevc)))
@@ -11960,7 +11957,6 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	int i;
 	int ret = -1;
 	struct vdec_s *vdec = hw_to_vdec(hevc);
-	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 
 #ifdef DEBUG_PTS
 	hevc->pts_missed = 0;
@@ -11973,7 +11969,6 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	if (is_oversize(hevc->frame_width, hevc->frame_height)) {
 		pr_info("over size : %u x %u.\n", hevc->frame_width, hevc->frame_height);
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		return ret;
 	}
 
@@ -12031,17 +12026,12 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	else
 		ret = 0;
 
-	if (ret < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
-	}
-
 	return ret;
 }
 #ifdef MULTI_INSTANCE_SUPPORT
 static s32 vh265_init(struct vdec_s *vdec)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
-	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 #else
 static s32 vh265_init(struct hevc_state_s *hevc)
 {
@@ -12110,7 +12100,6 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -1;
 	}
 
@@ -12185,7 +12174,6 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		vfree(fw);
 		pr_err("H265: the %s fw loading failed, err: %x\n",
 			tee_enabled() ? "TEE" : "local", ret);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -EBUSY;
 	}
 
@@ -12328,7 +12316,6 @@ static void restart_process_time(struct hevc_state_s *hevc)
 
 static void timeout_process(struct hevc_state_s *hevc)
 {
-	struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
 	/*
 	 * In this very timeout point,the vh265_work arrives,
 	 * or in some cases the system become slow,  then come
@@ -12349,7 +12336,6 @@ static void timeout_process(struct hevc_state_s *hevc)
 	hevc_print(hevc, 0, "%s decoder timeout\n", __func__);
 	check_pic_decoded_error(hevc,
 				hevc->pic_decoded_lcu_idx);
-	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 	/*The current decoded frame is marked
 		error when the decode timeout*/
 	if (hevc->cur_pic != NULL)
@@ -12981,10 +12967,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_WORKER_END);
 		return;
 	} else if (hevc->dec_result == DEC_RESULT_DONE) {
-		int i;
-		struct aml_vcodec_ctx * ctx = hevc->v4l2_ctx;
-
-		ctx->decoder_status_info.decoder_count++;
+			int i;
 		decode_frame_count[hevc->index]++;
 #ifdef DETREFILL_ENABLE
 	if (hevc->is_swap &&
@@ -12995,7 +12978,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		}
 	}
 #endif
-		if (hevc->mmu_enable && ((get_double_write_mode(hevc) & 0x10) == 0)) {
+		if (hevc->mmu_enable && ((hevc->double_write_mode & 0x10) == 0)) {
 			hevc->used_4k_num = READ_VREG(HEVC_SAO_MMU_STATUS) >> 16;
 			if (hevc->used_4k_num >= 0 &&
 				hevc->cur_pic &&
@@ -13565,7 +13548,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hevc_print(hevc, 0, "H265: the %s fw loading failed, err: %x\n",
 				tee_enabled() ? "TEE" : "local", loadr);
 			hevc->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&hevc->work);
 			return;
 		}
@@ -14167,7 +14149,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 
 	if (init_mmu_buffers(hevc, 1) < 0) {
 		hevc_print(hevc, 0, "\n 265 mmu init failed!\n");
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		mutex_unlock(&vh265_mutex);
 		if (hevc)
 			vfree((void *)hevc);
@@ -14181,7 +14162,6 @@ static int ammvdec_h265_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		uninit_mmu_buffers(hevc);
 		/* devm_kfree(&pdev->dev, (void *)hevc); */
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		if (hevc)
 			vfree((void *)hevc);
 		pdata->dec_status = NULL;

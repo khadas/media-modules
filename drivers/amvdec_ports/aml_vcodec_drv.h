@@ -618,14 +618,6 @@ struct canvas_cache {
 	struct mutex		lock;
 };
 
-struct aml_decoder_status_info {
-	u32 error_type;
-	u32 frame_width;
-	u32 frame_height;
-	u32 decoder_count;
-	u32 decoder_error_count;
-};
-
 struct cma_sys_size_info {
 	int max_total_size;
 	int cma_part;
@@ -810,7 +802,6 @@ struct aml_vcodec_ctx {
 	bool			film_grain_present;
 	void			*bmmu_box_dw;
 	void			*mmu_box_dw;
-	struct aml_decoder_status_info	decoder_status_info;
 
 	void (*cal_compress_buff_info)(ulong, struct aml_vcodec_ctx *ctx);
 	struct mutex			compressed_buf_info_lock;

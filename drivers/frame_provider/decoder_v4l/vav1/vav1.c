@@ -1021,8 +1021,6 @@ static void start_process_time(struct AV1HW_s *hw)
 
 static void timeout_process(struct AV1HW_s *hw)
 {
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
-
 	reset_process_time(hw);
 	if (hw->process_busy) {
 		av1_print(hw,
@@ -1036,7 +1034,6 @@ static void timeout_process(struct AV1HW_s *hw)
 	hw->timeout = true;
 
 	av1_print(hw, 0, "%s decoder timeout\n", __func__);
-	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 
 	hw->dec_result = DEC_RESULT_DONE;
 	vdec_schedule_work(&hw->work);
@@ -1223,7 +1220,6 @@ static int av1_mmu_page_num(struct AV1HW_s *hw,
 {
 	int picture_size;
 	int cur_mmu_4k_number, max_frame_num;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	picture_size = compute_losless_comp_body_size(w, h, is_bit_depth_10);
 	cur_mmu_4k_number = ((picture_size + (PAGE_SIZE - 1)) >> PAGE_SHIFT);
@@ -1234,7 +1230,6 @@ static int av1_mmu_page_num(struct AV1HW_s *hw,
 		max_frame_num = MAX_FRAME_4K_NUM;
 
 	if (cur_mmu_4k_number > max_frame_num) {
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		pr_err("over max !! cur_mmu_4k_number 0x%x width %d height %d\n",
 			cur_mmu_4k_number, w, h);
 		return -1;
@@ -1265,7 +1260,6 @@ int av1_alloc_mmu(
 	bool is_bit_depth_10 = (bit_depth == AOM_BITS_10);
 	int cur_mmu_4k_number;
 	struct aml_buf *aml_buf;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (get_double_write_mode(hw) & 0x10)
 		return 0;
@@ -1273,7 +1267,6 @@ int av1_alloc_mmu(
 	if (bit_depth >= AOM_BITS_12) {
 		hw->fatal_error = DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		pr_err("fatal_error, un support bit depth 12!\n\n");
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
 		return -1;
 	}
 
@@ -1380,7 +1373,6 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 	int i, int size)
 {
 	int ret = 0;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (hw->m_mv_BUF[i].start_adr &&
 		size > hw->m_mv_BUF[i].size) {
@@ -1395,7 +1387,6 @@ static int alloc_mv_buf(struct AV1HW_s *hw,
 		&hw->m_mv_BUF[i].start_adr) < 0) {
 		hw->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 	} else {
 		if (!vdec_secure(hw_to_vdec(hw)))
 			vdec_mm_dma_flush(hw->m_mv_BUF[i].start_adr, size);
@@ -7159,7 +7150,6 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 			params->p.frame_height,
 			params->p.dec_frame_width
 		);
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		ret = -1;
 	}
 #endif
@@ -7315,11 +7305,9 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				cur_pic_config->y_crop_height,
 				hw->aom_param.p.bit_depth,
 				hw->frame_mmu_map_addr);
-			if (ret < 0) {
+			if (ret < 0)
 				pr_err("can't alloc need mmu1,idx %d ret =%d\n",
 					cm->cur_frame->buf.index, ret);
-				vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-			}
 #ifdef AOM_AV1_MMU_DW
 			if (get_double_write_mode(hw) & 0x20) {
 				ret = av1_alloc_mmu_dw(hw,
@@ -7330,11 +7318,9 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 				hw->dw_frame_mmu_map_addr);
 				if (ret >= 0)
 					cm->cur_fb_idx_mmu_dw = cm->cur_fb_idx_mmu;
-				else {
+				else
 					pr_err("can't alloc need dw mmu1,idx %d ret =%d\n",
 					cm->cur_fb_idx_mmu, ret);
-					vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-				}
 			}
 #endif
 #ifdef DEBUG_CRC_ERROR
@@ -8034,7 +8020,6 @@ static int work_space_size_update(struct AV1HW_s *hw)
 {
 	int workbuf_size, cma_alloc_cnt, ret;
 	struct BuffInfo_s *p_buf_info = &hw->work_space_buf_store;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	/* only for 8k workspace update */
 	if (!IS_8K_SIZE(hw->max_pic_w, hw->max_pic_h))
@@ -8055,7 +8040,6 @@ static int work_space_size_update(struct AV1HW_s *hw)
 				DRIVER_NAME, &hw->cma_alloc_addr);
 			if(ret < 0) {
 				hw->fatal_error |= DECODER_FATAL_ERROR_NO_MEM;
-				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 				pr_err("8k workspace recalloc failed\n");
 				return ret;
 			}
@@ -8276,7 +8260,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			"fg_data0 0x%x fg_data1 0x%x fg_valid %d\n",
 			fg_reg0, fg_reg1, hw->fgs_valid);
 
-		ctx->decoder_status_info.decoder_count++;
 		decode_frame_count[hw->index] = hw->frame_count;
 		if (hw->m_ins_flag) {
 #ifdef USE_DEC_PIC_END
@@ -8457,7 +8440,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 	} else if (dec_status == AOM_DECODE_OVER_SIZE) {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "av1  decode oversize !!\n");
 
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		hw->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		hw->process_busy = 0;
 		if (hw->m_ins_flag)
@@ -8473,7 +8455,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 
 	if (obu_type == OBU_SEQUENCE_HEADER) {
 		int next_lcu_size;
-		int mmu_ret = 0;
 
 		av1_bufmgr_process(hw->pbi, &hw->aom_param, 0, obu_type);
 
@@ -8492,10 +8473,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			hw->pbi->frame_width = hw->init_pic_w;
 			hw->pbi->frame_height = hw->init_pic_h;
 
-			mmu_ret = vav1_mmu_map_alloc(hw);
-			if (mmu_ret < 0) {
-				vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-			}
+			vav1_mmu_map_alloc(hw);
 
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
 				(get_double_write_mode(hw) != 0x10)) {
@@ -8609,8 +8587,6 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vav1_get_ps_info(hw, &ps);
 			/*notice the v4l2 codec.*/
 			vdec_v4l_set_ps_infos(ctx, &ps);
-			ctx->decoder_status_info.frame_height = ps.visible_height;
-			ctx->decoder_status_info.frame_width = ps.visible_width;
 			hw->v4l_params_parsed = true;
 			work_space_size_update(hw);
 			hw->postproc_done = 0;
@@ -9113,7 +9089,6 @@ static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
 	int i;
 	int ret;
 	int width, height;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	hw->gvs = vzalloc(sizeof(struct vdec_info));
 	if (NULL == hw->gvs) {
@@ -9164,10 +9139,6 @@ static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
 
 	ret = av1_local_init(hw, reset_flag);
 
-	if (ret < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-	}
-
 	if (force_pts_unstable) {
 		if (!hw->pts_unstable) {
 			hw->pts_unstable =
@@ -9184,7 +9155,6 @@ static int vav1_local_init(struct AV1HW_s *hw, bool reset_flag)
 static s32 vav1_init(struct vdec_s *vdec)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)vdec->private;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 #else
 static s32 vav1_init(struct AV1HW_s *hw)
 {
@@ -9242,7 +9212,6 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		pr_err("AV1: the %s fw loading failed, err: %x\n",
 			tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
@@ -9332,7 +9301,6 @@ static int amvdec_av1_mmu_init(struct AV1HW_s *hw)
 	int tvp_flag = vdec_secure(hw_to_vdec(hw)) ?
 		CODEC_MM_FLAGS_TVP : 0;
 	int buf_size = 48;
-	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if ((hw->max_pic_w * hw->max_pic_h > 1280*736) &&
 		(hw->max_pic_w * hw->max_pic_h <= 1920*1088)) {
@@ -9358,7 +9326,6 @@ static int amvdec_av1_mmu_init(struct AV1HW_s *hw)
 		__func__,
 		MAX_BMMU_BUFFER_NUM);
 	if (!hw->bmmu_box) {
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		pr_err("av1 alloc bmmu box failed!!\n");
 		return -1;
 	}
@@ -10181,7 +10148,6 @@ static void run_front(struct vdec_s *vdec)
 			av1_print(hw, PRINT_FLAG_ERROR,
 				"AV1: the %s fw loading failed, err: %x\n",
 				tee_enabled() ? "TEE" : "local", ret);
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
 			return;
@@ -10803,7 +10769,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	if (is_oversize(hw->max_pic_w, hw->max_pic_h)) {
 		pr_err("over size: %dx%d, probe failed\n",
 			hw->max_pic_w, hw->max_pic_h);
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		return -1;
 	}
 	if (force_bufspec) {
@@ -10884,7 +10849,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 			hw->cma_alloc_count * PAGE_SIZE, DRIVER_NAME,
 			&hw->cma_alloc_addr);
 	if (ret < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		uninit_mmu_buffers(hw);
 		/* devm_kfree(&pdev->dev, (void *)hw); */
 		vfree((void *)hw);

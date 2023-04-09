@@ -1355,7 +1355,6 @@ static int setup_frame_size(
 	int width, height;
 	struct BufferPool_s * const pool = cm->buffer_pool;
 	struct PIC_BUFFER_CONFIG_s *ybf;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int ret = 0;
 	int i;
 
@@ -1366,7 +1365,6 @@ static int setup_frame_size(
 		pbi->error_frame_height = height;
 		vp9_print(pbi, 0, "%s, Error: Invalid frame size, width %d, height %d\n",
 			__func__, width, height);
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		return -1;
 	}
 	pbi->error_frame_width = 0;
@@ -1445,7 +1443,6 @@ static int setup_frame_size_with_refs(
 	int has_valid_ref_frame = 0;
 	struct PIC_BUFFER_CONFIG_s *ybf;
 	struct BufferPool_s * const pool = cm->buffer_pool;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int ret = 0;
 
 	for (i = 0; i < REFS_PER_FRAME; ++i) {
@@ -1470,7 +1467,6 @@ static int setup_frame_size_with_refs(
 		pbi->error_frame_height = height;
 		vp9_print(pbi, 0, "%s, Error: Invalid frame size, width: %d height: %d\n",
 			__func__, width, height);
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		return -1;
 	}
 	pbi->error_frame_width = 0;
@@ -1603,8 +1599,6 @@ static void start_process_time(struct VP9Decoder_s *pbi)
 
 static void timeout_process(struct VP9Decoder_s *pbi)
 {
-	struct aml_vcodec_ctx * ctx = pbi->v4l2_ctx;
-
 	pbi->timeout_num++;
 	if (pbi->process_busy) {
 		vp9_print(pbi,
@@ -1613,8 +1607,6 @@ static void timeout_process(struct VP9Decoder_s *pbi)
 	}
 	amhevc_stop();
 	vp9_print(pbi, 0, "%s decoder timeout\n", __func__);
-
-	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 
 	pbi->timeout = true;
 	pbi->dec_result = DEC_RESULT_DONE;
@@ -1712,7 +1704,6 @@ int vp9_alloc_mmu(
 	bool is_bit_depth_10 = (bit_depth == VPX_BITS_10);
 	int cur_mmu_4k_number;
 	struct aml_buf *aml_buf;
-	struct aml_vcodec_ctx * ctx = pbi->v4l2_ctx;
 
 	if (get_double_write_mode(pbi) == 0x10)
 		return 0;
@@ -1720,7 +1711,6 @@ int vp9_alloc_mmu(
 	if (bit_depth >= VPX_BITS_12) {
 		pbi->fatal_error = DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		pr_err("fatal_error, un support bit depth 12!\n\n");
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
 		return -1;
 	}
 
@@ -1747,9 +1737,6 @@ int vp9_alloc_mmu(
 			__func__, aml_buf->fbc->index, aml_buf->fbc->haddr, aml_buf->planes[0].addr);
 
 	ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
-	if (ret < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-	}
 	return ret;
 }
 
@@ -1779,7 +1766,6 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 	int i, int size)
 {
 	int ret = 0;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
 	if (pbi->m_mv_BUF[i].start_adr &&
 		size > pbi->m_mv_BUF[i].size) {
@@ -1794,7 +1780,6 @@ static int alloc_mv_buf(struct VP9Decoder_s *pbi,
 		&pbi->m_mv_BUF[i].start_adr) < 0) {
 		pbi->m_mv_BUF[i].start_adr = 0;
 		ret = -1;
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 	} else {
 		if (!vdec_secure(hw_to_vdec(pbi)))
 			vdec_mm_dma_flush(pbi->m_mv_BUF[i].start_adr, size);
@@ -2541,7 +2526,6 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	struct BufferPool_s *pool = cm->buffer_pool;
 	struct RefCntBuffer_s *frame_bufs = cm->buffer_pool->frame_bufs;
 	struct PIC_BUFFER_CONFIG_s *pic = NULL;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	int i;
 	int ret;
 
@@ -2602,7 +2586,6 @@ int vp9_bufmgr_process(struct VP9Decoder_s *pbi, union param_u *params)
 	cm->profile = params->p.profile;
 	if (cm->profile >= MAX_PROFILES) {
 		pr_err("Error: Unsupported profile %d\r\n", cm->profile);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
 		return -1;
 	}
 	cm->show_existing_frame = params->p.show_existing_frame;
@@ -7812,7 +7795,6 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		pr_err("fatal err, bit_depth %d, unsupport dw 0x10\n",
 			pbi->vp9_param.p.bit_depth);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
 		return -1;
 	}
 
@@ -8761,12 +8743,10 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 #endif
 		return IRQ_HANDLED;
 	} else if (dec_status == HEVC_DECODE_OVER_SIZE) {
-		struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 		pr_info("vp9  decode oversize !!\n");
 		debug |= (VP9_DEBUG_DIS_LOC_ERROR_PROC |
 			VP9_DEBUG_DIS_SYS_ERROR_PROC);
 		pbi->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		if (vdec_frame_based(hw_to_vdec(pbi)))
 			vdec_v4l_post_error_frame_event(ctx);
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -8924,9 +8904,6 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 
 			pbi->last_width = pbi->frame_width;
 			pbi->last_height = pbi->frame_height;
-
-			ctx->decoder_status_info.frame_height = ps.visible_height;
-			ctx->decoder_status_info.frame_width = ps.visible_width;
 
 			pbi->v4l_params_parsed	= true;
 			pbi->postproc_done = 0;
@@ -9412,7 +9389,6 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 	int i;
 	int ret;
 	int width, height;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 	if (alloc_lf_buf(pbi) < 0)
 		return -1;
 
@@ -9462,9 +9438,6 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 
 
 	ret = vp9_local_init(pbi);
-	if (ret < 0) {
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
-	}
 
 	if (!pbi->pts_unstable) {
 		pbi->pts_unstable =
@@ -9480,7 +9453,6 @@ static int vvp9_local_init(struct VP9Decoder_s *pbi)
 static s32 vvp9_init(struct vdec_s *vdec)
 {
 	struct VP9Decoder_s *pbi = (struct VP9Decoder_s *)vdec->private;
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 #else
 static s32 vvp9_init(struct VP9Decoder_s *pbi)
 {
@@ -9535,7 +9507,6 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 		vfree(fw);
 		pr_err("VP9: the %s fw loading failed, err: %x\n",
 			tee_enabled() ? "TEE" : "local", ret);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -EBUSY;
 	}
 
@@ -9624,7 +9595,6 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 	int tvp_flag = vdec_secure(hw_to_vdec(pbi)) ?
 		CODEC_MM_FLAGS_TVP : 0;
 	int buf_size = vp9_max_mmu_buf_size(pbi->max_pic_w, pbi->max_pic_h);
-	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 
 	pbi->need_cache_size = buf_size * SZ_1M;
 	pbi->sc_start_time = get_jiffies_64();
@@ -9640,7 +9610,6 @@ static int amvdec_vp9_mmu_init(struct VP9Decoder_s *pbi)
 			BMMU_ALLOC_FLAGS_WAIT);
 	if (!pbi->bmmu_box) {
 		pr_err("vp9 alloc bmmu box failed!!\n");
-		vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 		return -1;
 	}
 	return 0;
@@ -9957,7 +9926,6 @@ static void vp9_work(struct work_struct *work)
 		}
 		return;
 	} else if (pbi->dec_result == DEC_RESULT_DONE) {
-		struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(pbi->v4l2_ctx);
 #ifdef SUPPORT_FB_DECODING
 		if (pbi->used_stage_buf_num > 0) {
 #ifndef FB_DECODING_TEST_SCHEDULE
@@ -9982,7 +9950,6 @@ static void vp9_work(struct work_struct *work)
 		pbi->frame_count++;
 		pbi->process_state = PROC_STATE_INIT;
 		decode_frame_count[pbi->index] = pbi->frame_count;
-		ctx->decoder_status_info.decoder_count++;
 
 		if (pbi->mmu_enable)
 			pbi->used_4k_num =
@@ -10512,7 +10479,6 @@ static void run_front(struct vdec_s *vdec)
 				"VP9: the %s fw loading failed, err: %x\n",
 				tee_enabled() ? "TEE" : "local", ret);
 			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
-			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&pbi->work);
 			return;
 		}
@@ -11252,7 +11218,6 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	if (is_oversize(pbi->max_pic_w, pbi->max_pic_h)) {
 		pr_err("over size: %dx%d, probe failed\n",
 			pbi->max_pic_w, pbi->max_pic_h);
-		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_UNSUPPORT);
 		return -1;
 	}
 
