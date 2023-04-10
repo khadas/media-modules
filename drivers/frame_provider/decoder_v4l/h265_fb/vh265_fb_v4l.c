@@ -10442,6 +10442,9 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 			"%s dma addr 0x%lx\n",
 			__func__, pic->cma_alloc_addr);
 
+		if (aml_buf == NULL)
+			return;
+
 		if (pic->pic_struct == 3 || pic->pic_struct == 4)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 
