@@ -1541,9 +1541,9 @@ static void vavs_restore_regs(struct vdec_avs_hw_s *hw)
 	debug_print(hw, PRINT_FLAG_DEC_DETAIL,
 		"%s ANC0_CANVAS_ADDR = 0x%x, ANC1_CANVAS_ADDR = 0x%x, ANC2_CANVAS_ADDR = 0x%x\n",
 		__func__, READ_VREG(ANC0_CANVAS_ADDR), READ_VREG(ANC1_CANVAS_ADDR), READ_VREG(ANC2_CANVAS_ADDR));
+	WRITE_VREG(MCRCC_CTL1, 0xff1);
 
     WRITE_VREG(SLICE_VER_POS_PIC_TYPE, hw->slice_ver_pos_pic_type);
-
     WRITE_VREG(VC1_CONTROL_REG, hw->vc1_control_reg);
     WRITE_VREG(AVS_CO_MB_WR_ADDR, hw->avs_co_mb_wr_addr);
     WRITE_VREG(SLICE_START_BYTE_01, hw->slice_start_byte_01);
@@ -1716,9 +1716,7 @@ static int vavs_prot_init(struct vdec_avs_hw_s *hw)
 #endif
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 16);
 
-#ifdef PIC_DC_NEED_CLEAR
 	CLEAR_VREG_MASK(MDEC_PIC_DC_CTRL, 1 << 31);
-#endif
 	if (hw->m_ins_flag && start_decoding_delay > 0)
 		msleep(start_decoding_delay);
 
