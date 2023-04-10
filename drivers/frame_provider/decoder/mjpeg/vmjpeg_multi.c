@@ -563,6 +563,8 @@ static void vmjpeg_canvas_init(struct vdec_mjpeg_hw_s *hw)
 				decbuf_size, i);
 			return;
 		}
+		if (!vdec_secure(vdec))
+			codec_mm_memset(buf_start, 0, decbuf_size);
 
 		hw->buffer_spec[i].buf_adr = buf_start;
 		addr = hw->buffer_spec[i].buf_adr;
