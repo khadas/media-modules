@@ -5441,9 +5441,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->mb_width = mb_width;
 		hw->mb_height = mb_height;
 		hw->mb_total = mb_total;
-		if (hw->mmu_enable)
-			hevc_mcr_sao_global_hw_init(hw,
-				(hw->mb_width << 4), (hw->mb_height << 4));
 
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"mb height/widht/total: %x/%x/%x level_idc %x max_ref_num %x\n",
@@ -5510,7 +5507,6 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 				}
 				spin_unlock_irqrestore(&hw->bufspec_lock, flags);
 			}
-			hevc_mcr_config_canv2axitbl(hw, 0);
 		}
 		mutex_unlock(&vmh264_mutex);
 		if (dpb_is_debug(DECODE_ID(hw),

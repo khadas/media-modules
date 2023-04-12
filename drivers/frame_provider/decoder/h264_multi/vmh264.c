@@ -986,7 +986,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw);
 static void dump_bufspec(struct vdec_h264_hw_s *hw,
 	const char *caller);
 static void h264_reconfig(struct vdec_h264_hw_s *hw);
-static void h264_reset_bufmgr(struct vdec_s *vdec);
+static void h264_reset_bufmgr(struct vdec_s *vdec, bool reset_flags);
 static void vh264_local_init(struct vdec_h264_hw_s *hw, bool is_reset);
 static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw);
 static int vh264_stop(struct vdec_h264_hw_s *hw);
@@ -5599,7 +5599,7 @@ static void vh264_config_canvs_for_mmu(struct vdec_h264_hw_s *hw)
 }
 
 static int vh264_set_params(struct vdec_h264_hw_s *hw,
-	u32 param1, u32 param2, u32 param3, u32 param4, bool buffer_reset_flag)
+	u32 param1, u32 param2, u32 param3, u32 param4, bool buffer_reset_flag, bool reset_flags)
 {
 	int i, j;
 	int mb_width, mb_total;
@@ -5794,7 +5794,7 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		hw->mb_width = mb_width;
 		hw->mb_height = mb_height;
 		hw->mb_total = mb_total;
-		if (hw->mmu_enable)
+		if (!reset_flags && hw->mmu_enable)
 			hevc_mcr_sao_global_hw_init(hw,
 				(hw->mb_width << 4), (hw->mb_height << 4));
 
@@ -5890,7 +5890,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 				spin_unlock_irqrestore(&hw->bufspec_lock,
 					flags);
 			}
-			hevc_mcr_config_canv2axitbl(hw, 0);
+			if (!reset_flags)
+				hevc_mcr_config_canv2axitbl(hw, 0);
 		}
 		mutex_unlock(&vmh264_mutex);
 		if (dpb_is_debug(DECODE_ID(hw),
@@ -9863,7 +9864,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						amhevc_stop();
 				} else {
 					if (vh264_set_params(hw, param1,
-					param2, param3, param4, false) < 0) {
+					param2, param3, param4, false, false) < 0) {
 						hw->init_flag = 0;
 						dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
 							hw->init_flag);
@@ -9879,7 +9880,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			}
 		} else {
 			if (vh264_set_params(hw, param1,
-				param2, param3, param4, false) < 0) {
+				param2, param3, param4, false, false) < 0) {
 				hw->init_flag = 0;
 				dpb_print(DECODE_ID(hw), 0, "set parameters error, init_flag: %u\n",
 					hw->init_flag);
@@ -10470,7 +10471,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		if (p_H264_Dpb->buf_alloc_fail)
 		    hw->reset_bufmgr_flag = 1;
 
-		h264_reset_bufmgr(vdec);
+		h264_reset_bufmgr(vdec, false);
 		//flag must clear after reset for v4l buf_spec_init use
 		hw->reset_bufmgr_flag = 0;
 	}
@@ -10744,7 +10745,7 @@ static void reset(struct vdec_s *vdec)
 	hw->decode_pic_count = 0;
 
 	reset_process_time(hw);
-	h264_reset_bufmgr(vdec);
+	h264_reset_bufmgr(vdec, true);
 	clear_refer_bufs(hw);
 
 	dpb_print(DECODE_ID(hw), 0, "%s\n", __func__);
@@ -10857,7 +10858,7 @@ static void h264_clear_dpb(struct vdec_h264_hw_s *hw)
 }
 #endif
 
-static void h264_reset_bufmgr(struct vdec_s *vdec)
+static void h264_reset_bufmgr(struct vdec_s *vdec, bool reset_flags)
 {
 	ulong timeout;
 	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)vdec->private;
@@ -10939,7 +10940,7 @@ static void h264_reset_bufmgr(struct vdec_s *vdec)
 		hw->cfg_param1,
 		hw->cfg_param2,
 		hw->cfg_param3,
-		hw->cfg_param4, true) < 0)
+		hw->cfg_param4, true, reset_flags) < 0)
 		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 	else
 		hw->stat &= (~DECODER_FATAL_ERROR_SIZE_OVERFLOW);
