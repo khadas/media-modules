@@ -60,6 +60,10 @@
 #define CHECK_INTERVAL        (HZ/100)
 
 #define DRIVER_NAME "ammvdec_mpeg12_v4l"
+
+/*AV_SCRATCH_1
+	bit [0-9]: temporal_reference(poc)
+*/
 #define MREG_REF0        AV_SCRATCH_2
 #define MREG_REF1        AV_SCRATCH_3
 /* protocol registers */
@@ -222,6 +226,7 @@ struct pic_info_t {
 	u32 frame_size; // For frame base mode
 	u64 timestamp;
 	u64 last_timestamp;
+	u32 poc;
 };
 
 struct vdec_mpeg12_hw_s {
@@ -1811,15 +1816,49 @@ static int update_reference(struct vdec_mpeg12_hw_s *hw,
 	return index;
 }
 
-static bool is_ref_error(struct vdec_mpeg12_hw_s *hw)
+static void check_ref_error(struct vdec_mpeg12_hw_s *hw, int index)
 {
-	if (hw->refs[0] == -1 || hw->refs[1] == -1)
-		return 0;
+	struct pic_info_t *pic = NULL;
 
-	if ((hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) ||
-		(hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR))
-		return 1;
-	return 0;
+	pic = &hw->pics[index];
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) != PICINFO_TYPE_I) {
+		if (hw->pics[hw->refs[0]].buffer_info & PICINFO_ERROR) {
+			pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: L0 ref error, set index %d error_mark\n", index);
+			return ;
+		}
+	}
+
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+		if (hw->pics[hw->refs[1]].buffer_info & PICINFO_ERROR) {
+			pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: L1 ref error, set index %d error_mark\n", index);
+		}
+	}
+}
+
+static bool check_ref_poc(struct vdec_mpeg12_hw_s *hw, int index)
+{
+	struct pic_info_t *pic = NULL;
+
+	pic = &hw->pics[index];
+	if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B) {
+		if ((hw->pics[hw->refs[0]].poc < pic->poc) &&
+			(hw->pics[hw->refs[1]].poc > pic->poc))
+			return 0;
+		if ((hw->pics[hw->refs[1]].poc > pic->poc) &&
+			((hw->pics[hw->refs[1]].buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I))
+			return 0;
+	} else if ((pic->buffer_info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P) {
+		if (hw->pics[hw->refs[0]].poc < pic->poc) {
+			return 0;
+		}
+	} else {
+		return 0;
+	}
+	return 1;
 }
 
 static int vmpeg2_get_ps_info(struct vdec_mpeg12_hw_s *hw, int width, int height,
@@ -2159,6 +2198,7 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		new_pic->buffer_info = info;
 		new_pic->offset = offset;
 		new_pic->index = index;
+		new_pic->poc = READ_VREG(AV_SCRATCH_1) & 0x3ff;
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
 			if (hw->chunk) {
@@ -2204,10 +2244,27 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		if (hw->force_prog_only)
 			hw->frame_prog = PICINFO_PROG;
 
-		if (is_ref_error(hw)) {
-			if ((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_B)
-				new_pic->buffer_info |= PICINFO_ERROR;
+		if (debug_enable & PRINT_FLAG_BUFFER_DETAIL) {
+			if ((hw->refs[0] >= 0) && (hw->refs[0] < hw->buf_num)) {
+				debug_print(DECODE_ID(hw), 0,
+					"L0 ref pic: index %d, buffer_info 0x%x, poc %d\n",
+					hw->refs[0], hw->pics[hw->refs[0]].buffer_info, hw->pics[hw->refs[0]].poc);
+			}
+			if ((hw->refs[1] >= 0) && (hw->refs[1] < hw->buf_num)) {
+				debug_print(DECODE_ID(hw), 0,
+					"L1 ref pic: index %d, buffer_info 0x%x, poc %d\n",
+					hw->refs[1], hw->pics[hw->refs[1]].buffer_info, hw->pics[hw->refs[1]].poc);
+			}
 		}
+
+		check_ref_error(hw, index);
+
+		if (check_ref_poc(hw, index)) {
+			new_pic->buffer_info |= PICINFO_ERROR;
+			debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
+				"mmpeg12: ref poc error,set index %d pic error\n", index);
+		}
+
 
 		if (((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_I) ||
 			((info & PICINFO_TYPE_MASK) == PICINFO_TYPE_P)) {
@@ -2835,11 +2892,12 @@ static void vmpeg2_dump_state(struct vdec_s *vdec)
 	debug_print(DECODE_ID(hw), 0,
 		"====== %s\n", __func__);
 	debug_print(DECODE_ID(hw), 0,
-		"width/height (%d/%d),i_first %d, buf_num %d\n",
+		"width/height (%d/%d),i_first %d, buf_num %d, error_frame_skip_level %d\n",
 		hw->frame_width,
 		hw->frame_height,
 		hw->first_i_frame_ready,
-		hw->buf_num
+		hw->buf_num,
+		hw->error_frame_skip_level
 		);
 	debug_print(DECODE_ID(hw), 0,
 		"is_framebase(%d), eos %d, state 0x%x, dec_result 0x%x dec_frm %d put_frm %d run %d not_run_ready %d,input_empty %d\n",
