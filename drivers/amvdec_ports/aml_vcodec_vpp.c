@@ -42,7 +42,12 @@ extern int dump_vpp_input;
 extern int vpp_bypass_frames;
 extern char dump_path[32];
 
-static void di_release_keep_buf_wrap(void *arg)
+struct di_buffer_wrap {
+	struct vframe_s vf_cp;
+	struct di_buffer *buf;
+};
+
+static void di_release_keep_buf_wrap1(void *arg)
 {
 	struct di_buffer *buf = (struct di_buffer *)arg;
 
@@ -53,7 +58,41 @@ static void di_release_keep_buf_wrap(void *arg)
 
 	di_release_keep_buf(buf);
 
-	ATRACE_COUNTER("VPP_PIC_lc_buf_release", buf->mng.index);
+	ATRACE_COUNTER("VC_OUT_VPP_LC-1.lc_release", buf->mng.index);
+}
+
+static void di_release_keep_buf_wrap2(void *arg)
+{
+	struct di_buffer_wrap *buf_wrap = (struct di_buffer_wrap *)arg;
+	struct di_buffer *buf = NULL;
+	struct vframe_s *vf_cp = NULL;
+	s32 cur_di_ins_id = -1, last_di_ins_id = -1;
+
+	if (buf_wrap) {
+		buf = buf_wrap->buf;
+		vf_cp = &buf_wrap->vf_cp;
+		if (buf && buf->vf)
+			cur_di_ins_id = buf->vf->di_instance_id;
+		last_di_ins_id = vf_cp->di_instance_id;
+	}
+
+	v4l_dbg(0, V4L_DEBUG_VPP_BUFMGR,
+		"%s release di local buffer %px, vf:%px, cur_id: %d vf_cp:%px, vf-ext:%px, vf_cp-ext:%px, last_id: %d comm:%s, pid:%d,buf->flag=%d\n",
+		__func__ , buf, buf->vf, cur_di_ins_id, vf_cp, buf->vf ? buf->vf->vf_ext : NULL, vf_cp->vf_ext, last_di_ins_id,
+		current->comm, current->pid, buf->flag);
+
+	/* just release di bufffer when same id or interlace video or post write mode */
+	if ((cur_di_ins_id == last_di_ins_id && cur_di_ins_id > 0) ||
+		(buf->flag & DI_FLAG_I) ||
+	    !(vf_cp->di_flag & DI_FLAG_DI_PVPPLINK))
+		di_release_keep_buf(buf);
+	else
+		v4l_dbg(0, V4L_DEBUG_VPP_BUFMGR,"%s release warning\n",__func__);
+
+	if (buf_wrap)
+		vfree(buf_wrap);
+
+	ATRACE_COUNTER("VC_OUT_VPP_LC-2.lc_release", buf->mng.index);
 }
 
 static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
@@ -62,6 +101,7 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 	struct dma_buf *dma = NULL;
 	struct aml_v4l2_buf *aml_vb = NULL;
 	struct uvm_hook_mod_info u_info;
+	struct di_buffer_wrap *buf_wrap = NULL;
 	int ret;
 
 	aml_vb = vpp_buf->aml_vb;
@@ -87,14 +127,27 @@ static int attach_DI_buffer(struct aml_v4l2_vpp_buf *vpp_buf)
 			"attach_DI_buffer exist hook, dbuf:%px\n", dma);
 		return -EINVAL;
 	}
-	u_info.type = VF_PROCESS_DI;
-	u_info.arg = (void *)vpp_buf->di_local_buf;
-	u_info.free = di_release_keep_buf_wrap;
+	buf_wrap = vzalloc(sizeof(struct di_buffer_wrap));
+	if (buf_wrap) {
+		buf_wrap->buf = vpp_buf->di_local_buf;
+		u_info.type = VF_PROCESS_DI;
+		u_info.arg = (void *)buf_wrap;
+		u_info.free = di_release_keep_buf_wrap2;
 
-	ret = uvm_attach_hook_mod(dma, &u_info);
-	if (ret < 0) {
-		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_ERROR,
-			"fail to set dmabuf DI hook\n");
+		ret = uvm_attach_hook_mod(dma, &u_info);
+		if (ret < 0) {
+			v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_ERROR,
+				"fail to set dmabuf DI hook\n");
+			vfree(buf_wrap);
+		} else if (vpp_buf->di_buf.vf->vf_ext) {
+			v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
+				"%s swap di_buf %px.vf->vf_ext:%px to buf_wrap->vf_cp:%px\n",
+				__func__, vpp_buf->di_buf.vf, vpp_buf->di_buf.vf->vf_ext, &buf_wrap->vf_cp);
+			memcpy(&buf_wrap->vf_cp,
+				vpp_buf->di_buf.vf->vf_ext,
+				sizeof(struct vframe_s));
+			vpp_buf->di_buf.vf->vf_ext = &buf_wrap->vf_cp;
+		}
 	}
 
 	vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_12, vpp_buf->di_local_buf->mng.index);
@@ -183,11 +236,12 @@ static enum DI_ERRORTYPE
 	struct aml_buf *aml_buf = NULL;
 	bool bypass = false;
 	bool eos = false;
+	struct vframe_s *tmp;
 
 	if (!vpp || !vpp->ctx) {
 		pr_err("fatal %s %d vpp:%p\n",
 			__func__, __LINE__, vpp);
-		di_release_keep_buf_wrap(buf);
+		di_release_keep_buf_wrap1(buf);
 		return DI_ERR_UNDEFINED;
 	}
 
@@ -195,7 +249,7 @@ static enum DI_ERRORTYPE
 		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"vpp discard submit frame %s %d vpp:%p\n",
 			__func__, __LINE__, vpp);
-		di_release_keep_buf_wrap(buf);
+		di_release_keep_buf_wrap1(buf);
 		return DI_ERR_UNDEFINED;
 	}
 
@@ -203,7 +257,7 @@ static enum DI_ERRORTYPE
 		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"vpp doesn't get output %s %d vpp:%p\n",
 			__func__, __LINE__, vpp);
-		di_release_keep_buf_wrap(buf);
+		di_release_keep_buf_wrap1(buf);
 		return DI_ERR_UNDEFINED;
 	}
 
@@ -239,15 +293,20 @@ static enum DI_ERRORTYPE
 		memcpy((struct aml_v4l2_vpp_buf *)(aml_buf->vpp_buf), vpp_buf,
 			sizeof(struct aml_v4l2_vpp_buf));
 
+	tmp = (struct vframe_s *)(buf->vf ? buf->vf->vf_ext : NULL);
 	v4l_dbg(vpp->ctx, V4L_DEBUG_VPP_BUFMGR,
-		"vpp_output local done: idx:%d, vf:%px, ext vf:%px, idx:%d, flag(vf:%x di:%x) %s %s, ts:%lld, "
+		"vpp_output local done: idx:%d, vf:%px, afbc:0x%lx ext vf:%px, idx:%d, flag(vf:%x di:%x) (buf->vf:%px vf_ext:%px, afbc:0x%lx) %s %s, ts:%lld, "
 		"in:%d, out:%d, vf:%d, in done:%d, out done:%d\n",
 		aml_buf->index,
 		vpp_buf->di_buf.vf,
+		vpp_buf->di_buf.vf->compHeadAddr,
 		vpp_buf->di_buf.vf->vf_ext,
 		vpp_buf->di_buf.vf->index,
 		vpp_buf->di_buf.vf->flag,
 		buf->flag,
+		buf->vf,
+		buf->vf ? buf->vf->vf_ext : NULL,
+		tmp ? tmp->compHeadAddr : 0,
 		vpp->is_prog ? "P" : "I",
 		eos ? "eos" : "",
 		vpp_buf->di_buf.vf->timestamp,
@@ -429,7 +488,7 @@ static enum DI_ERRORTYPE
 		v4l_dbg(vpp->ctx, V4L_DEBUG_CODEC_EXINFO,
 			"vpp doesn't get output %s %d vpp:%p\n",
 			__func__, __LINE__, vpp);
-		di_release_keep_buf_wrap(buf);
+		di_release_keep_buf_wrap1(buf);
 		return DI_ERR_UNDEFINED;
 	}
 
@@ -801,12 +860,13 @@ retry:
 		}
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR,
-			"vpp_handle start: idx:(%d, %d), dec vf:%px/%d, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "
+			"vpp_handle start: idx:(%d, %d), dec vf:%px/%d afbc:0x%lx, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "
 			"in:%d, out:%d, vf:%d, in done:%d, out done:%d",
 			in_buf->aml_vb->aml_buf->index,
 			out_buf->aml_vb->aml_buf->index,
 			in_buf->di_buf.vf,
 			in_buf->di_buf.vf->index,
+			in_buf->di_buf.vf->compHeadAddr,
 			out_buf->di_buf.vf, VPP_BUF_GET_IDX(out_buf),
 			in_buf->di_buf.vf->canvas0_config[0].phy_addr,
 			in_buf->di_buf.vf->canvas0_config[1].phy_addr,
