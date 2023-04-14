@@ -94,6 +94,7 @@ struct task_chain_s {
 	struct list_head	list_item;
 	struct list_head	node;
 	struct kref		ref;
+	struct vframe_s		*vf_tmp;
 	spinlock_t		slock;
 	int			id;
 	void			*ctx;

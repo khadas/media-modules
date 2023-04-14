@@ -1727,21 +1727,21 @@ static void mcrcc_get_hitrate_dual(int pic_num)
 
 	if ( raw_mcr_cnt != 0 ) {
 		hitrate = (hit_mcr_0_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE0] CANV0_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] CANV0_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 		hitrate = (hit_mcr_1_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE0] CANV1_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] CANV1_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 		hitrate = (byp_mcr_cnt_nchcanv*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE0] NONCACH_CANV_BYP_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] NONCACH_CANV_BYP_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 		hitrate = (byp_mcr_cnt_nchoutwin*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE0] CACHE_OUTWIN_BYP_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] CACHE_OUTWIN_BYP_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 	}
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt)*100;
-			printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : %d.%d\%\n", pic_num, hitrate/100, hitrate%100);
+			printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : %d.%d%%\n", pic_num, hitrate/100, hitrate%100);
 		hitrate = ((byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv)*100/raw_mcr_cnt)*100;
-			printk("[P%d MCRCC CORE0] MCRCC_BYP_RATE : %%d.%d\%\n", pic_num, hitrate/100, hitrate%100);
+			printk("[P%d MCRCC CORE0] MCRCC_BYP_RATE : %d.%d%%\n", pic_num, hitrate/100, hitrate%100);
 	} else
 	{
 			printk("[P%d MCRCC CORE0] MCRCC_HIT_RATE : na\n", pic_num);
@@ -1781,21 +1781,21 @@ static void mcrcc_get_hitrate_dual(int pic_num)
 
 	if ( raw_mcr_cnt != 0 ) {
 		hitrate = (hit_mcr_0_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE1] CANV0_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] CANV0_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 		hitrate = (hit_mcr_1_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE1] CANV1_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] CANV1_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 		hitrate = (byp_mcr_cnt_nchcanv*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE1] NONCACH_CANV_BYP_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] NONCACH_CANV_BYP_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 		hitrate = (byp_mcr_cnt_nchoutwin*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE1] CACHE_OUTWIN_BYP_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] CACHE_OUTWIN_BYP_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 	}
 
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt)*100;
-			printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : %d.%d\%\n", pic_num, hitrate/100, hitrate%100);
+			printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : %d.%d%%\n", pic_num, hitrate/100, hitrate%100);
 		hitrate = ((byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv)*100/raw_mcr_cnt)*100;
-			printk("[P%d MCRCC CORE1] MCRCC_BYP_RATE : %d.%d\%\n", pic_num, hitrate/100, hitrate%100);
+			printk("[P%d MCRCC CORE1] MCRCC_BYP_RATE : %d.%d%%\n", pic_num, hitrate/100, hitrate%100);
 	} else
 	{
 			printk("[P%d MCRCC CORE1] MCRCC_HIT_RATE : na\n", pic_num);
@@ -1827,7 +1827,7 @@ static void decomp_get_hitrate_dual(int pic_num)
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = ((hit_mcr_cnt*100)/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 	} else
 	{
 			printk("[MCRCC CORE0] DECOMP_HCACHE_HIT_RATE : na\n");
@@ -1842,11 +1842,11 @@ static void decomp_get_hitrate_dual(int pic_num)
 
 	if (raw_mcr_cnt != 0) {
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt);
 		hitrate = (mcrcc_hit_rate_0 + (mcrcc_bypass_rate_0 * hitrate))*100;
-			printk("[MCRCC CORE0] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE0] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 
 	} else {
 			printk("[MCRCC CORE0] DECOMP_DCACHE_HIT_RATE : na\n");
@@ -1864,7 +1864,7 @@ static void decomp_get_hitrate_dual(int pic_num)
 	if ( raw_mcr_cnt != 0 )
 	{
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 	} else
 	{
 			printk("[MCRCC CORE1] DECOMP_HCACHE_HIT_RATE : na\n");
@@ -1879,11 +1879,11 @@ static void decomp_get_hitrate_dual(int pic_num)
 
 	if (raw_mcr_cnt != 0) {
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt)*100;
-			printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 
 		hitrate = (hit_mcr_cnt*100/raw_mcr_cnt);
 		hitrate = (mcrcc_hit_rate_1 + (mcrcc_bypass_rate_1 * hitrate))*100;
-			printk("[MCRCC CORE1] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d.%d\%\n", hitrate/100, hitrate%100);
+			printk("[MCRCC CORE1] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %d.%d%%\n", hitrate/100, hitrate%100);
 
 	} else {
 			printk("[MCRCC CORE1] DECOMP_DCACHE_HIT_RATE : na\n");
@@ -1916,7 +1916,7 @@ static void decomp_get_comprate_dual(int pic_num)
 	if ( raw_ucomp_cnt != 0 )
 	{
 		comprate = ((fast_comp_cnt + slow_comp_cnt)*100/raw_ucomp_cnt)*100;
-			printk("[MCRCC CORE0] DECOMP_COMP_RATIO : %d.%d\%\n", comprate/100, comprate%100);
+			printk("[MCRCC CORE0] DECOMP_COMP_RATIO : %d.%d%%\n", comprate/100, comprate%100);
 	} else
 	{
 			printk("[MCRCC CORE0] DECOMP_COMP_RATIO : na\n");
@@ -1936,7 +1936,7 @@ static void decomp_get_comprate_dual(int pic_num)
 
 	if ( raw_ucomp_cnt != 0 ) {
 		comprate = ((fast_comp_cnt + slow_comp_cnt)*100/raw_ucomp_cnt)*100;
-			printk("[MCRCC CORE1] DECOMP_COMP_RATIO : %d.%d\%\n", comprate/100, comprate%100);
+			printk("[MCRCC CORE1] DECOMP_COMP_RATIO : %d.%d%%\n", comprate/100, comprate%100);
 	} else {
 			printk("[MCRCC CORE1] DECOMP_COMP_RATIO : na\n");
 	}
@@ -3043,7 +3043,7 @@ void BackEnd_StartDecoding(struct AV1HW_s *hw)
 		}
 
 	if (front_back_debug)
-		pr_info("%s, alloc mmu time %ld\n", __func__, div64_u64(local_clock() - hw->back_start_time, 1000));
+		pr_info("%s, alloc mmu time %lld\n", __func__, div64_u64(local_clock() - hw->back_start_time, 1000));
 
 	hw->back_start_time = local_clock();
 	copy_loopbufs_ptr(&pbi->bk, &pbi->next_bk[pbi->fb_rd_pos]);

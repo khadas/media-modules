@@ -5729,7 +5729,7 @@ void print_hevc_b_data_path_monitor(int frame_count)
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		pr_info(" %.2f", path_wait_ratio);
+		pr_info(" %.2d", path_wait_ratio);
 
 	// dblk --> ow
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -6088,8 +6088,8 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 		//WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR2, FRAME_MMU_MAP_ADDR_DW);
 			WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, pbi->frame_mmu_dw_map_phy_addr);
 			WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2_DBE1, pbi->frame_mmu_dw_map_phy_addr_1); //new dual
-			printk("WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, 0x%x\n", pbi->frame_mmu_dw_map_phy_addr);
-			printk("WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2_DBE1, 0x%x\n", pbi->frame_mmu_dw_map_phy_addr_1);
+			printk("WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2, 0x%llx\n", (u64)pbi->frame_mmu_dw_map_phy_addr);
+			printk("WRITE_VREG(HEVC_SAO_MMU_DMA_CTRL2_DBE1, 0x%llx\n", (u64)pbi->frame_mmu_dw_map_phy_addr_1);
 		}
 	}
 	}
@@ -6268,7 +6268,7 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 			mmu_4k_number,
 			pbi->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages");
+		pr_err("%s: failed to alloc fb_mmu0 pages", __func__);
 		return;
 	}
 
@@ -6278,7 +6278,7 @@ static void init_fb_bufstate(struct VP9Decoder_s *pbi)
 			mmu_4k_number,
 			pbi->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages");
+		pr_err("%s: failed to alloc fb_mmu1 pages", __func__);
 		return;
 	}
 

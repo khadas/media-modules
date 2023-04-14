@@ -7292,10 +7292,10 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 		else
 			WRITE_HREG(DEBUG_REG1, 0);
 	} else if (debug_tag != 0) {
-		pr_info("dbg%x: %x lcu %x stream crc %x, shiftbytes 0x%x decbytes 0x%x\n",
+		pr_info("dbg%x lcu %x stream crc %x, shiftbytes 0x%x decbytes 0x%x\n",
 			READ_HREG(DEBUG_REG2), READ_VREG(HEVC_PARSER_LCU_START),
 			READ_VREG(HEVC_STREAM_CRC), READ_VREG(HEVC_SHIFT_BYTE_COUNT),
-			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes);
+			(u32)(READ_VREG(HEVC_SHIFT_BYTE_COUNT) - dec->start_shift_bytes));
 
 		if (((udebug_pause_pos & 0xffff)
 			== (debug_tag & 0xffff)) &&

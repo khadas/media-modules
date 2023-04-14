@@ -575,7 +575,7 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 			hevc->mmu_box_fb,
 			0, mmu_4k_number, hevc->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages");
+		pr_err("%s: failed to alloc fb_mmu0 pages", __func__);
 		return -1;
 	}
 
@@ -583,7 +583,7 @@ static int init_mmu_fb_bufstate(struct hevc_state_s* hevc, int mmu_4k_number)
 			hevc->mmu_box_fb,
 			1, mmu_4k_number, hevc->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages");
+		pr_err("%s: failed to alloc fb_mmu1 pages", __func__);
 		return -1;
 	}
 

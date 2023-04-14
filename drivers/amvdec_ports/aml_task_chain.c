@@ -158,12 +158,13 @@ static void task_buffer_submit(struct task_chain_s *task,
 		(struct aml_buf *)task->obj;
 	struct task_item_s *item = NULL;
 	struct task_item_s *item2 = NULL;
-	struct vframe_s vf;
+
+	memset(task->vf_tmp, 0, sizeof(struct vframe_s));
 
 	item = task_item_get(task, type);
 	if (item) {
-		item->ops->get_vframe(item->caller, &vf);
-		memcpy(&aml_buf->vframe, &vf, sizeof(struct vframe_s));
+		item->ops->get_vframe(item->caller, task->vf_tmp);
+		memcpy(&aml_buf->vframe, task->vf_tmp, sizeof(struct vframe_s));
 		task_item_vframe_push(item, &aml_buf->vframe);
 		item->is_active = false;
 
@@ -175,7 +176,7 @@ static void task_buffer_submit(struct task_chain_s *task,
 
 			v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 				"TSK(%px):%d, vf idx:0x%x, phy:%lx, submit %d => %d.\n",
-				task, task->id, vf.index, aml_buf->planes[0].addr,
+				task, task->id, task->vf_tmp->index, aml_buf->planes[0].addr,
 				type, task->map[0][type]);
 
 			task->direction = TASK_DIR_SUBMIT;
@@ -289,6 +290,7 @@ static void task_chain_destroy(struct kref *kref)
 
 	task->cur_type = TASK_TYPE_MAX;
 	memset(task->map, 0, sizeof(task->map));
+	kfree(task->vf_tmp);
 
 	v4l_dbg(task->ctx, V4L_DEBUG_TASK_CHAIN,
 		"TSK(%px):%d task chain destroyed.\n", task, task->id);
@@ -409,6 +411,14 @@ int task_chain_init(struct task_chain_s **task_out,
 	task->obj	= obj;
 	task->ctx	= v4l_ctx;
 	task->cur_type	= TASK_TYPE_MAX;
+
+	task->vf_tmp = kzalloc(sizeof(struct vframe_s), GFP_KERNEL);
+	if (!task->vf_tmp) {
+		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
+			"%s alloc failed!\n", __func__);
+		kfree(task);
+		return -ENOMEM;
+	}
 	kref_init(&task->ref);
 	spin_lock_init(&task->slock);
 	INIT_LIST_HEAD(&task->list_item);

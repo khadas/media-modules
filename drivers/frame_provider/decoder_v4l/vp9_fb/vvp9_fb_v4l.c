@@ -5221,7 +5221,7 @@ void print_hevc_b_data_path_monitor(int frame_count)
 		path_wait_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
 	if (path_transfer_count == 0) path_wait_ratio = 0;
 	else path_wait_ratio = path_wait_count * 100 / path_transfer_count;
-		pr_info(" %.2f", path_wait_ratio);
+		pr_info(" %.2d", path_wait_ratio);
 
 	// dblk --> ow
 		path_transfer_count = READ_VREG(HEVC_PATH_MONITOR_DATA);
@@ -5719,14 +5719,14 @@ static int init_mmu_fb_bufstate(struct VP9Decoder_s *pbi, int mmu_4k_number)
 	ret = decoder_mmu_box_alloc_idx(pbi->mmu_box_fb,
 		0, mmu_4k_number, pbi->fb_buf_mmu0_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu0 pages");
+		pr_err("%s: failed to alloc fb_mmu0 pages", __func__);
 		return -1;
 	}
 
 	ret = decoder_mmu_box_alloc_idx(pbi->mmu_box_fb,
 		1, mmu_4k_number, pbi->fb_buf_mmu1_addr);
 	if (ret != 0) {
-		pr_err("%s: failed to alloc fb_mmu1 pages");
+		pr_err("%s: failed to alloc fb_mmu1 pages", __func__);
 		return -1;
 	}
 

@@ -1750,7 +1750,7 @@ static int get_mv_buf(struct AV1HW_s *hw,
 			(hw->m_mv_BUF[ret].start_adr + 0xffff) &
 			(~0xffff);
 		if (debug & AV1_DEBUG_BUFMGR)
-			pr_info("%s => %d (%d) size 0x%x\n", __func__, ret,
+			pr_info("%s => %d (%ld) size 0x%x\n", __func__, ret,
 				pic_config->mpred_mv_wr_start_addr, hw->m_mv_BUF[ret].size);
 	} else {
 		pr_info("%s: Error, mv buf is not enough\n", __func__);
@@ -3221,9 +3221,9 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 			pr_info("comp_body_size %x comp_buf_size %x ",
 				pic->comp_body_size,
 				pic->buf_size);
-			pr_info("mpred_mv_wr_start_adr %d\n",
+			pr_info("mpred_mv_wr_start_adr %ld\n",
 				pic->mpred_mv_wr_start_addr);
-			pr_info("dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
+			pr_info("dw_y_adr %ld, pic_config->dw_u_v_adr =%ld\n",
 				pic->dw_y_adr,
 				pic->dw_u_v_adr);
 		}
@@ -3457,7 +3457,7 @@ static void d_dump(struct AV1HW_s *hw, unsigned int phyadr, int size,
 
 static void mv_buffer_fill_zero(struct AV1HW_s *hw, struct PIC_BUFFER_CONFIG_s *pic_config)
 {
-	pr_info("fill dummy data pic index %d colocate addresses %x size %x\n",
+	pr_info("fill dummy data pic index %d colocate addresses %lx size %x\n",
 		pic_config->index, pic_config->mpred_mv_wr_start_addr,
 		hw->m_mv_BUF[pic_config->mv_buf_index].size);
 	d_fill_zero(hw, pic_config->mpred_mv_wr_start_addr,
@@ -9803,7 +9803,7 @@ static void vav1_work_back_implement(struct AV1HW_s *hw,
 
 	if (hw->vdec_back_cb) {
 		if (front_back_debug) {
-			pr_info("%s out, cb.  run2irq %ld, irq2work %ld\n", __func__,
+			pr_info("%s out, cb.  run2irq %lld, irq2work %lld\n", __func__,
 				div64_u64(hw->back_irq_time - hw->back_start_time, 1000),
 				div64_u64(local_clock() - hw->back_irq_time, 1000));
 		}
@@ -10539,7 +10539,7 @@ static void av1_work(struct work_struct *work)
 					| CORE_MASK_HEVC);
 
 	if (front_back_debug)
-		pr_info("%s out, cb. run2irq %ld, irq2work %ld\n", __func__,
+		pr_info("%s out, cb. run2irq %lld, irq2work %lld\n", __func__,
 				div64_u64(hw->front_irq_time - hw->front_start_time, 1000),
 				div64_u64(local_clock() - hw->front_irq_time, 1000));
 
@@ -11363,7 +11363,7 @@ static struct file* file_open(int mode, const char *str, ...)
 		va_end(args);
 		return fp;
 	}
-	printk("open %s success, file->f_pos %d\n", file, fp->f_pos);
+	printk("open %s success, file->f_pos %lld\n", file, fp->f_pos);
 	va_end(args);
 
 	return fp;
@@ -11390,7 +11390,7 @@ static void file_close(struct file **fpp)
 	if (*fpp != NULL) {
 		struct file * fp = *fpp;
 		media_close(fp, current->files);
-		printk("%s, file size 0x%x\n", __func__, fp->f_pos);
+		printk("%s, file size 0x%llx\n", __func__, fp->f_pos);
 		fp->f_pos = 0;
 	} else {
 		printk("file_close null file\n");
@@ -11483,7 +11483,7 @@ void pic_compress_header_dump(struct AV1HW_s *hw, PIC_BUFFER_CONFIG *cur_pic, u3
 		aml_buf = index_to_afbc_aml_buf(hw, pic->index);
 		header_size = aml_buf->fbc->hsize;
 		if (pic == cur_pic) {
-			printk("%s, cur_pic id %d(%d), index %d, file_pos 0x%x\n",
+			printk("%s, cur_pic id %d(%d), index %d, file_pos 0x%llx\n",
 				__func__, i, hw->used_buf_num, cur_pic->index, fp->f_pos);
 			virt = codec_mm_vmap(aml_buf->fbc->haddr, header_size);
 			if (virt) {

@@ -619,15 +619,22 @@ void av1_restore_pbi_fb(AV1Decoder *pbi, AV1Decoder_fb *pbi_fb, u32 res_ch_flag)
 void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *cm, u32 res_ch_flag)
 {
 	u32 save_w, save_h;
-	struct AV1Decoder_fb pbi_fb;
+	struct AV1Decoder_fb *pbi_fb = NULL;
 
 	if (!pbi || !pool || !cm)
 		return;
 
+	pbi_fb = vzalloc(sizeof(struct AV1Decoder_fb));
+	if (!pbi_fb) {
+		av1_print2(PRINT_FLAG_ERROR, "%s alloc fail!\n", __func__);
+		return;
+	}
+
+	memset(pbi_fb, 0, sizeof(struct AV1Decoder_fb));
 	reset_frame_buffers(pbi);
-	av1_store_pbi_fb(pbi, &pbi_fb, res_ch_flag);
+	av1_store_pbi_fb(pbi, pbi_fb, res_ch_flag);
 	memset(pbi, 0, sizeof(*pbi));
-	av1_restore_pbi_fb(pbi, &pbi_fb, res_ch_flag);
+	av1_restore_pbi_fb(pbi, pbi_fb, res_ch_flag);
 	/*save w,h for resolution change after seek */
 	save_w = cm->width;
 	save_h = cm->height;
@@ -645,6 +652,7 @@ void av1_bufmgr_ctx_reset(AV1Decoder *pbi, BufferPool *const pool, AV1_COMMON *c
 	pbi->num_output_frames		= 0;
 	pbi->common			= cm;
 	pbi->common->buffer_pool	= pool;
+	vfree(pbi_fb);
 }
 
 int release_fb_cb(void *cb_priv, aom_codec_frame_buffer_t *fb) {
@@ -3097,7 +3105,7 @@ int get_buffer_index(AV1Decoder *pbi, RefCntBuffer *buffer)
 void dump_buffer(RefCntBuffer *buf)
 {
 	int i;
-	pr_info("ref_count %d, vf_ref %d, order_hint %d, w/h(%d,%d) showable_frame %d frame_type %d canvas(%d,%d) w/h(%d,%d) mi_c/r(%d,%d) header 0x%x ref_deltas(",
+	pr_info("ref_count %d, vf_ref %d, order_hint %d, w/h(%d,%d) showable_frame %d frame_type %d canvas(%ld,%ld) w/h(%d,%d) mi_c/r(%d,%d) header 0x%x ref_deltas(",
 	buf->ref_count, buf->buf.vf_ref, buf->order_hint, buf->width, buf->height, buf->showable_frame, buf->frame_type,
 	buf->buf.mc_canvas_y, buf->buf.mc_canvas_u_v,
 	buf->buf.y_crop_width, buf->buf.y_crop_height,
@@ -3145,7 +3153,7 @@ void dump_ref_spec_bufs(AV1Decoder *pbi)
 	for (i = 0; i < INTER_REFS_PER_FRAME; ++i) {
 	PIC_BUFFER_CONFIG *pic_config = av1_get_ref_frame_spec_buf(cm, LAST_FRAME + i);
 	if (pic_config == NULL) continue;
-	pr_info("%d: index %d order_hint %d header 0x%x dw_header 0x%x canvas(%d,%d) mv_wr_start 0x%x lcu_total %d\n",
+	pr_info("%d: index %d order_hint %d header 0x%x dw_header 0x%x canvas(%ld,%ld) mv_wr_start 0x%lx lcu_total %d\n",
 	i, pic_config->index,
 	pic_config->order_hint,
 	pic_config->header_adr,
