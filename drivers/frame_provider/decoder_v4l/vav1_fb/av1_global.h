@@ -1387,6 +1387,8 @@ typedef struct PIC_BUFFER_CONFIG_s {
 	int ctx_buf_idx;
 	int v4l_buf_index;
 	int repeat_count;
+	u32 hdr10p_data_size;
+	char *hdr10p_data_buf;
 	struct PIC_BUFFER_CONFIG_s *repeat_pic;
 #ifdef NEW_FB_CODE
 	unsigned char back_done_mark;

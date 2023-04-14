@@ -1918,6 +1918,7 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 
 		v4l->aux_infos.bind_sei_buffer(v4l, &free_pic->aux_data_buf,
 			&free_pic->aux_data_size, &free_pic->ctx_buf_idx);
+		v4l->aux_infos.bind_hdr10p_buffer(v4l, &free_pic->hdr10p_data_buf);
 	}
 
 	if (debug & AV1_DEBUG_BUFMGR) {
@@ -5872,7 +5873,7 @@ static void set_canvas(struct AV1HW_s *hw,
 
 void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
-	int i,j;
+	int i, j, count;
 	char *p_sei;
 	struct vframe_master_display_colour_s *vf_dp = &hw->vf_dp;
 
@@ -5906,6 +5907,36 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 						data = data | (0x30<<8);
 						hw->video_signal_type = data;
 						vf->discard_dv_data = true;
+						if ((size > 0) && (size <= HDR10P_BUF_SIZE)) {
+							if (pic->hdr10p_data_buf != NULL) {
+								memcpy(pic->hdr10p_data_buf, p, size);
+								pic->hdr10p_data_size = size;
+								count = 0;
+								for (i = pic->hdr10p_data_size-1; i >= 0; i--) {
+									count++;
+									if (pic->hdr10p_data_buf[i] == 0x80)
+										break;
+								}
+								pic->hdr10p_data_size -= count;
+								if (debug & AV1_DEBUG_SEI_DETAIL) {
+									av1_print(hw, 0,
+										"hdr10p data: (size %d)\n", pic->hdr10p_data_size);
+									for (i = 0; i < pic->hdr10p_data_size; i++) {
+										av1_print_cont(hw, 0,
+											"%02x ", pic->hdr10p_data_buf[i]);
+										if (((i + 1) & 0xf) == 0)
+											av1_print_cont(hw, 0, "\n");
+									}
+									av1_print_cont(hw, 0, "\n");
+								}
+							} else {
+								av1_print(hw, 0, "bind_hdr10p_buffer fail\n");
+							}
+						} else {
+							av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+								"hdr10p data size(%d)\n", size);
+							pic->hdr10p_data_size = 0;
+						}
 					}
 					break;
 				case OBU_METADATA_TYPE_HDR_CLL:
@@ -5998,6 +6029,10 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_B
 			"%s present_flag: %d\n", __func__,
 			hdr.color_parms.content_light_level.present_flag);
 	}
+	vf->hdr10p_data_size = pic->hdr10p_data_size;
+	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
+	if (vf->hdr10p_data_buf)
+		set_meta_data_to_vf(vf, UVM_META_DATA_HDR10P_DATA, hw->v4l2_ctx);
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
@@ -6116,6 +6151,11 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct aml_buf *aml_buf;
+
+	if (vf->meta_data_buf) {
+		vf->meta_data_buf = NULL;
+		vf->meta_data_size = 0;
+	}
 
 	if (debug & AOM_DEBUG_VFRAME) {
 		av1_print(hw, AOM_DEBUG_VFRAME, "%s index 0x%x type 0x%x w/h %d/%d, pts %d, %lld, ts: %llu\n",
@@ -12263,7 +12303,7 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	if (hw->v4l2_ctx != NULL) {
 		struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
-		ctx->aux_infos.alloc_buffer(ctx, SEI_TYPE | DV_TYPE);
+		ctx->aux_infos.alloc_buffer(ctx, SEI_TYPE | DV_TYPE | HDR10P_TYPE);
 	}
 
 	hw->aux_data_size = AUX_BUF_ALIGN(prefix_aux_buf_size) +
