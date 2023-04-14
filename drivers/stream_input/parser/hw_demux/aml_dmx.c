@@ -46,6 +46,7 @@
 #include "c_stb_define.h"
 #include "c_stb_regs_define.h"
 #include "aml_dvb.h"
+#include "linux/dvb/aml_dmx_ext.h"
 #include "aml_dvb_reg.h"
 #include <linux/sched/signal.h>
 

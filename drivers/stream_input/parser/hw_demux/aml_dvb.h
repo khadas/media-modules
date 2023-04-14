@@ -46,13 +46,14 @@
 #include <demux.h>
 #include <dvb_demux.h>
 #include <dmxdev.h>
-#include <dvb_filter.h>
+//#include <dvb_filter.h>
 #include <dvb_net.h>
 #include <dvb_ringbuffer.h>
 
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 
+#include "linux/dvb/aml_ca_ext.h"
 #include "aml_demod_gt.h"
 
 #define TS_IN_COUNT       4
