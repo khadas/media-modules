@@ -8795,18 +8795,19 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 	}
 
 	if (kfifo_peek(&hevc->pending_q, &vf)) {
+		if (kfifo_get(&hevc->pending_q, &vf) == 0) {
+			hevc_print(hevc, 0,
+				"fatal error, no available buffer slot.");
+				return -1;
+		}
+		if (vf == NULL)
+			return -1;
+
 		if (pair_pic == NULL || pair_pic->vf_ref <= 0) {
 			/*
 			 *if pair_pic is recycled (pair_pic->vf_ref <= 0),
 			 *do not use it
 			 */
-			if (kfifo_get(&hevc->pending_q, &vf) == 0) {
-				hevc_print(hevc, 0,
-					"fatal error, no available buffer slot.");
-				return -1;
-			}
-			if (vf == NULL)
-				return -1;
 			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 				hevc_print(hevc, 0,
 					"%s warning(2), vf=>newframe_q: (index 0x%x)\n",
@@ -8815,60 +8816,46 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 				return -1;
 		} else if ((!pair_frame_top_flag) &&
 			(((vf->index >> 8) & 0xff) == 0xff)) {
-			if (kfifo_get(&hevc->pending_q, &vf) == 0) {
+			if ((pair_pic->double_write_mode == 3) &&
+			(!(IS_8K_SIZE(vf->width, vf->height)))) {
+				vf->type |= VIDTYPE_COMPRESS;
+				if (hevc->mmu_enable)
+					vf->type |= VIDTYPE_SCATTER;
+			}
+			vf->index &= 0xff;
+			vf->index |= (pair_pic->index << 8);
+			pair_pic->vf_ref++;
+			hevc->pre_bot_pic = NULL;
+			vdec_vframe_ready(hw_to_vdec(hevc), vf);
+			kfifo_put(&hevc->display_q,
+			(const struct vframe_s *)vf);
+			ATRACE_COUNTER(hevc->trace.pts_name, vf->pts);
+			hevc->vf_pre_count++;
+			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 				hevc_print(hevc, 0,
-					"fatal error, no available buffer slot.");
-				return -1;
-			}
-			if (vf) {
-				if ((pair_pic->double_write_mode == 3) &&
-				(!(IS_8K_SIZE(vf->width, vf->height)))) {
-					vf->type |= VIDTYPE_COMPRESS;
-					if (hevc->mmu_enable)
-						vf->type |= VIDTYPE_SCATTER;
-				}
-				vf->index &= 0xff;
-				vf->index |= (pair_pic->index << 8);
-				pair_pic->vf_ref++;
-				hevc->pre_bot_pic = NULL;
-				vdec_vframe_ready(hw_to_vdec(hevc), vf);
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				ATRACE_COUNTER(hevc->trace.pts_name, vf->pts);
-				hevc->vf_pre_count++;
-				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
-					hevc_print(hevc, 0,
-						"%s vf => display_q: (index 0x%x)\n",
-						__func__, vf->index);
-			}
+					"%s vf => display_q: (index 0x%x)\n",
+					__func__, vf->index);
 		} else if (pair_frame_top_flag &&
 			((vf->index & 0xff) == 0xff)) {
-			if (kfifo_get(&hevc->pending_q, &vf) == 0) {
+			if ((pair_pic->double_write_mode == 3) &&
+			(!(IS_8K_SIZE(vf->width, vf->height)))) {
+				vf->type |= VIDTYPE_COMPRESS;
+				if (hevc->mmu_enable)
+					vf->type |= VIDTYPE_SCATTER;
+			}
+			vf->index &= 0xff00;
+			vf->index |= pair_pic->index;
+			pair_pic->vf_ref++;
+			hevc->pre_top_pic = NULL;
+			vdec_vframe_ready(hw_to_vdec(hevc), vf);
+			kfifo_put(&hevc->display_q,
+			(const struct vframe_s *)vf);
+			ATRACE_COUNTER(hevc->trace.pts_name, vf->pts);
+			hevc->vf_pre_count++;
+			if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 				hevc_print(hevc, 0,
-					"fatal error, no available buffer slot.");
-				return -1;
-			}
-			if (vf) {
-				if ((pair_pic->double_write_mode == 3) &&
-				(!(IS_8K_SIZE(vf->width, vf->height)))) {
-					vf->type |= VIDTYPE_COMPRESS;
-					if (hevc->mmu_enable)
-						vf->type |= VIDTYPE_SCATTER;
-				}
-				vf->index &= 0xff00;
-				vf->index |= pair_pic->index;
-				pair_pic->vf_ref++;
-				hevc->pre_top_pic = NULL;
-				vdec_vframe_ready(hw_to_vdec(hevc), vf);
-				kfifo_put(&hevc->display_q,
-				(const struct vframe_s *)vf);
-				ATRACE_COUNTER(hevc->trace.pts_name, vf->pts);
-				hevc->vf_pre_count++;
-				if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
-					hevc_print(hevc, 0,
-						"%s vf => display_q: (index 0x%x)\n",
-						__func__, vf->index);
-			}
+					"%s vf => display_q: (index 0x%x)\n",
+					__func__, vf->index);
 		} else {
 			if (recycle_pending_vframe(hevc, vf))
 				return -1;
