@@ -46,7 +46,9 @@
 #include "c_stb_define.h"
 #include "c_stb_regs_define.h"
 #include "aml_dvb.h"
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 4, 210)
 #include "linux/dvb/aml_dmx_ext.h"
+#endif
 #include "aml_dvb_reg.h"
 #include <linux/sched/signal.h>
 

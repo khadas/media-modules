@@ -46,14 +46,19 @@
 #include <demux.h>
 #include <dvb_demux.h>
 #include <dmxdev.h>
-//#include <dvb_filter.h>
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 210)
+#include <dvb_filter.h>
+#endif
 #include <dvb_net.h>
 #include <dvb_ringbuffer.h>
 
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 4, 210)
 #include "linux/dvb/aml_ca_ext.h"
+#endif
+
 #include "aml_demod_gt.h"
 
 #define TS_IN_COUNT       4
