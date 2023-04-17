@@ -729,9 +729,13 @@ static void decode_poc(struct VideoParameters *p_Vid, struct Slice *pSlice)
 		/* 3rd */
 		p_Vid->ExpectedDeltaPerPicOrderCntCycle = 0;
 
+		/* spec stipulate num_ref_frames_in_pic_order_cnt_cycle
+		 * count range [0,255]
+		 * ucode can get offset_for_ref_frame size 128
+		 */
 		if (active_sps->num_ref_frames_in_pic_order_cnt_cycle)
-			for (i = 0; i < (int) active_sps->
-				num_ref_frames_in_pic_order_cnt_cycle; i++) {
+			for (i = 0; (i < (int) active_sps->
+				num_ref_frames_in_pic_order_cnt_cycle) && (i < 128); i++) {
 				p_Vid->ExpectedDeltaPerPicOrderCntCycle +=
 					active_sps->offset_for_ref_frame[i];
 				dpb_print(p_H264_Dpb->decoder_index,
