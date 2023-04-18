@@ -431,7 +431,8 @@ void set_clock_gate(struct gate_switch_node *nodes, int num)
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		hevc_mux_str = "clk_hevc_mux";
 	else
 		hevc_mux_str = "clk_hevcf_mux";
@@ -755,10 +756,12 @@ static int vdec_clock_set(int clk)
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1 &&
 		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1 &&
 		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5 &&
-		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D)
+		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D &&
+		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)
 		clk = 800;
 
-	if (is_cpu_s4_s805x2())
+	if (is_cpu_s4_s805x2() ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		clk = 500;
 
 	if (set_frq_enable && vdec_frq) {
@@ -863,7 +866,8 @@ static int hevc_clock_set(int clk)
 		else
 			clk = 667;
 
-		if (is_cpu_s4_s805x2())
+		if (is_cpu_s4_s805x2() ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 			clk = 500;
 	}
 
@@ -1071,8 +1075,10 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_S4D,\
 	AM_MESON_CPU_MAJOR_ID_T5W,\
 	AM_MESON_CPU_MAJOR_ID_S5,\
+	AM_MESON_CPU_MAJOR_ID_GXLX3,\
 	AM_MESON_CPU_MAJOR_ID_T5M,\
 	AM_MESON_CPU_MAJOR_ID_T3X,\
+	AM_MESON_CPU_MAJOR_ID_TXHD2,\
 	0}
 #include "clk.h"
 

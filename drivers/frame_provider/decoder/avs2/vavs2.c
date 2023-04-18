@@ -7267,7 +7267,8 @@ static int ammvdec_avs2_probe(struct platform_device *pdev)
 	static struct vframe_operations_s vf_tmp_ops;
 
 	pr_info("%s\n", __func__);
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		pr_info("%s, chip id %d is not support avs2\n",
 			__func__, get_cpu_major_id());
 		return -1;
@@ -7652,7 +7653,8 @@ static int __init amvdec_avs2_driver_init_module(void)
 	}
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_G12A) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)) {
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		amvdec_avs2_profile.name = "avs2_unsupport";
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
 		if (vdec_is_support_4k())

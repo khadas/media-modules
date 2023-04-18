@@ -1051,7 +1051,8 @@ static int is_oversize(int w, int h)
 {
 	int max = MAX_SIZE_4K;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		max = MAX_SIZE_2K;
 
 	if (w < 0 || h < 0)
@@ -3374,7 +3375,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->canvas0Addr = vf->canvas1Addr =
 			spec2canvas(&hw->buffer_spec[buffer_index]);
 #ifdef VDEC_DW
-			if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+			if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) ||
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 				if (IS_VDEC_DW(hw))
 					vf->canvas0Addr = vf->canvas1Addr =
 						vdec_dw_spec2canvas(&hw->buffer_spec[buffer_index]);
@@ -4269,7 +4271,8 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 	print_pic_info(DECODE_ID(hw), "cur", pic, pSlice->slice_type);
 
 #ifdef VDEC_DW
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		if (IS_VDEC_DW(hw) && pic->mb_aff_frame_flag)
 			WRITE_VREG(MDEC_DOUBLEW_CFG0,
 				(READ_VREG(MDEC_DOUBLEW_CFG0) & (~(1 << 30))));
@@ -4283,7 +4286,8 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		WRITE_VREG(DBKR_CANVAS_ADDR, canvas_adr);
 		WRITE_VREG(DBKW_CANVAS_ADDR, canvas_adr);
 #ifdef VDEC_DW
-		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 			WRITE_VREG(MDEC_DOUBLEW_CFG1,
 				(hw->buffer_spec[canvas_pos].vdec_dw_y_canvas_index |
 				(hw->buffer_spec[canvas_pos].vdec_dw_u_canvas_index << 8)));
@@ -8686,7 +8690,8 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 #endif
 
 #ifdef VDEC_DW
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_T7) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		if (IS_VDEC_DW(hw)) {
 			u32 data = ((1   << 30) |(1   <<  0) |(1   <<  8));
 
@@ -11996,7 +12001,9 @@ static int __init ammvdec_h264_driver_init_module(void)
 			ammvdec_h264_profile.profile = "4k, frame_dv, fence, v4l, multi_frame_dv";
 		}
 	} else {
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D || is_cpu_s4_s805x2()) {
+		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+			is_cpu_s4_s805x2() ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 			ammvdec_h264_profile.profile =
 						"dwrite, compressed, frame_dv, v4l, multi_frame_dv";
 		} else {

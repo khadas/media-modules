@@ -122,7 +122,8 @@ static int vcodec_feature_dolbyVison(u8 *buf, int size, int vformat)
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4)) {
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S4) &&
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 				pbuf += snprintf(pbuf, size, "        \"DolbyVision\" : true,\n");
 				pbuf += snprintf(pbuf, size, "        \"multi_frame_dv\" : true,\n");
 			}
@@ -241,10 +242,10 @@ static int vcodec_feature_MaxResolution(u8 *buf, int size, int vformat)
 		case VFORMAT_AV1:
 		case VFORMAT_AVS3:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"8k\",\n");
-			else if (vdec_is_support_4k() &&
-					(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+			else if (vdec_is_support_4k())
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"4k60\",\n");
 			else
 				pbuf += snprintf(pbuf, size, "        \"MaximumResolution\" : \"1080p60\",\n");
@@ -282,7 +283,8 @@ static int vcodec_feature_clock(u8 *buf, int size, int vformat)
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12B) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
 				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\",\n");
 			else
 				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\",\n");
@@ -297,7 +299,8 @@ static int vcodec_feature_clock(u8 *buf, int size, int vformat)
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TL1) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_GXLX2) &&
 				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
 				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"800MHZ\",\n");
 			else
 				pbuf += snprintf(pbuf, size, "        \"ClockFrequency\" : \"667MHZ\",\n");
@@ -321,7 +324,8 @@ static int vcodec_feature_support_format(int vformat)
 				return 0;
 		case VFORMAT_AVS2:
 			if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D))
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
 				return 1;
 			else
 				return 0;
@@ -329,7 +333,8 @@ static int vcodec_feature_support_format(int vformat)
 			if (((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) &&
 					is_cpu_tm2_revb()) ||
 				((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) &&
-				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)))
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
+				(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)))
 				return 1;
 			else
 				return 0;

@@ -162,7 +162,8 @@ static void pm_vdec_clock_on(int id)
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
 			amports_switch_gate("clk_hevcf_mux", 1);
 		else
 			amports_switch_gate("clk_hevc_mux", 1);

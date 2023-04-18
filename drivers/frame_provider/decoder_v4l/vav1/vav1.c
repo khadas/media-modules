@@ -10382,7 +10382,8 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_TM2) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) ||
-		((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) && !is_meson_rev_b())) {
+		((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TM2) && !is_meson_rev_b()) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		pr_err("av1 unsupported on cpu %d, is_tm2_revb %d\n",
 			get_cpu_major_id(), is_cpu_tm2_revb());
 		return -EINVAL;
@@ -10952,7 +10953,8 @@ static int __init amvdec_av1_driver_init_module(void)
 		amvdec_av1_profile.profile =
 				"10bit, dwrite, compressed, no_head, uvm, multi_frame_dv";
 	} else if (((get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2) || is_cpu_tm2_revb())
-		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)) {
+		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5)
+		&& (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		amvdec_av1_profile.profile =
 				"8k, 10bit, dwrite, compressed, no_head, frame_dv, uvm, multi_frame_dv";
 	} else {

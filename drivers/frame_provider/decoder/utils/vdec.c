@@ -952,6 +952,7 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 			break;
 		case AM_MESON_CPU_MAJOR_ID_T5:
 		case AM_MESON_CPU_MAJOR_ID_T5D:
+		case AM_MESON_CPU_MAJOR_ID_TXHD2:
 			sts_reg_addr = T5_DMC_CHAN_STS;
 			break;
 		case AM_MESON_CPU_MAJOR_ID_SC2:
@@ -1280,9 +1281,24 @@ int vdec_is_support_4k(void)
 {
 	return ((!is_meson_gxl_package_805X()) &&
 			(!is_cpu_s4_s805x2()) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D));
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2));
 }
 EXPORT_SYMBOL(vdec_is_support_4k);
+
+int hevc_is_support_4k(enum vformat_e format)
+{
+	if (format == VFORMAT_HEVC) {
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)
+			return true;
+	}
+
+	return ((!is_meson_gxl_package_805X()) &&
+			(!is_cpu_s4_s805x2()) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2));
+}
+EXPORT_SYMBOL(hevc_is_support_4k);
 
 /*
  * clk_config:
@@ -4934,6 +4950,7 @@ void hevc_reset_core(struct vdec_s *vdec)
 	case AM_MESON_CPU_MAJOR_ID_T5:
 	case AM_MESON_CPU_MAJOR_ID_T5D:
 	case AM_MESON_CPU_MAJOR_ID_T5W:
+	case AM_MESON_CPU_MAJOR_ID_TXHD2:
 		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),
 				READ_RESET_REG(RESET7_REGISTER_LEVEL) & (~((1<<13))));
 		WRITE_RESET_REG((RESET7_REGISTER_LEVEL),

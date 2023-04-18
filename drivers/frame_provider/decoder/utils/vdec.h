@@ -737,6 +737,9 @@ extern int vdec_set_dv_metawithel(struct vdec_s *vdec, int isdvmetawithel);
 extern void vdec_set_no_powerdown(int flag);
 
 extern int vdec_is_support_4k(void);
+
+extern int hevc_is_support_4k(enum vformat_e format);
+
 extern void vdec_set_flag(struct vdec_s *vdec, u32 flag);
 
 extern void vdec_set_eos(struct vdec_s *vdec, bool eos);

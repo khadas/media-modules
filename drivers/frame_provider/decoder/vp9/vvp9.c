@@ -1357,7 +1357,8 @@ static int is_oversize(int w, int h)
 	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)?
 		MAX_SIZE_8K : MAX_SIZE_4K;
 
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D)
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		max = MAX_SIZE_2K;
 
 	if (w <= 0 || h <= 0)
@@ -5962,7 +5963,8 @@ static int config_pic_size(struct VP9Decoder_s *pbi, unsigned short bit_depth)
 		else
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (1 << 3));
 	}
-	if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1)
+	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, (losless_comp_body_size >> 5));
 	/*WRITE_VREG(HEVCD_MPP_DECOMP_CTL3,(0xff<<20) | (0xff<<10) | 0xff);*/
 	WRITE_VREG(HEVC_CM_BODY_LENGTH, losless_comp_body_size);
@@ -6221,7 +6223,11 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 #else
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~(3 << 14));
-	data32 |= (2 << 14);	/* line align with 64*/
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) {
+		data32 |= (1 << 14);
+	} else {
+		data32 |= (2 << 14); /* line align with 64*/
+	}
 
 	data32 &= (~0x3000);
 	/* [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32 */
@@ -6239,7 +6245,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 |= 0x2; /*disable double write*/
 	else if (get_double_write_mode(pbi) & 0x10)
 		data32 |= 0x1; /*disable cm*/
-	 if  (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) { /* >= G12A dw write control */
+	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) { /* >= G12A dw write control */
 		unsigned int data;
 		data = READ_VREG(HEVC_DBLK_CFGB);
 		data &= (~0x300); /*[8]:first write enable (compress)  [9]:double write enable (uncompress)*/
@@ -6286,7 +6292,8 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 &= ~(0xff << 16);
 		WRITE_VREG(HEVC_SAO_CTRL5, data32);
 	} else {
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
+		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
 			WRITE_VREG(HEVC_SAO_CTRL26, 0);
 
 		data32 = READ_VREG(HEVC_SAO_CTRL5);
@@ -6319,7 +6326,11 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 			data32 &= ~(1 << 12); /* NV12 */
 	}
 	data32 &= (~(3 << 8));
-	data32 |= (2 << 8);		/* line align with 64 for dw only */
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) {
+		data32 |= (1 << 8);
+	} else {
+		data32 |= (2 << 8); /* line align with 64 for dw only */
+	}
 	/*
 	* [3:0]   little_endian
 	* [5:4]   address_format 00:linear 01:32x32 10:64x32
@@ -6401,7 +6412,8 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 	/* cfg_d_addr */
 	WRITE_VREG(HEVC_DBLK_CFG5, buf_spec->dblk_data.buf_start);
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		 /*
 	     * data32 = (READ_VREG(P_HEVC_DBLK_CFG3)>>8) & 0xff; // xio left offset, default is 0x40
 	     * data32 = data32 * 2;
@@ -6419,7 +6431,8 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 	if (pbi->mmu_enable) {
 		/*bit[4] : paged_mem_mode*/
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (0x1 << 4));
-		if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1)
+		if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 			WRITE_VREG(HEVCD_MPP_DECOMP_CTL2, 0);
 	} else {
 		/*if(cur_pic_config->bit_depth == VPX_BITS_10)
@@ -6492,7 +6505,8 @@ static void vp9_config_work_space_hw(struct VP9Decoder_s *pbi, u32 mask)
 	WRITE_VREG(HEVC_MPRED_CTRL3, 0x24122412);
 
 #ifdef CO_MV_COMPRESS
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 	    data32 = READ_VREG(HEVC_MPRED_CTRL4);
 	    data32 |=  (1 << 1);
 	    WRITE_VREG(HEVC_MPRED_CTRL4, data32);
@@ -6688,7 +6702,8 @@ void vp9_loop_filter_init(struct VP9Decoder_s *pbi)
 	}
 
 	/*video format is VP9*/
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		data32 = (0x3 << 14) | // (dw fifo thres r and b)
 		(0x3 << 12) | // (dw fifo thres r or b)
 		(0x3 << 10) | // (dw fifo thres not r/b)
@@ -7060,7 +7075,8 @@ static void  config_mcrcc_axi_hw(struct VP9Decoder_s *pbi)
 		return;
 	}
 
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		mcrcc_get_hitrate(pbi->m_ins_flag);
 		decomp_get_hitrate();
 		decomp_get_comp_rate();
@@ -7381,8 +7397,9 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 		sizeof(struct BuffInfo_s));
 		pr_info("force buffer spec %d\n", force_bufspec & 0xf);
 	} else {
-		if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
-			if (vdec_is_support_4k()) {
+		if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
+			if (hevc_is_support_4k(VFORMAT_VP9)) {
 				if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
 					memcpy(cur_buf_info, &amvvp9_workbuff_spec[2],	/* 8k */
 					sizeof(struct BuffInfo_s));
@@ -7393,7 +7410,7 @@ static int vp9_local_init(struct VP9Decoder_s *pbi)
 				memcpy(cur_buf_info, &amvvp9_workbuff_spec[0],/* 1080p */
 				sizeof(struct BuffInfo_s));
 		} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
-			if (vdec_is_support_4k()) {
+			if (hevc_is_support_4k(VFORMAT_VP9)) {
 				memcpy(cur_buf_info, &amvvp9_workbuff_spec[5],	/* 8k */
 				sizeof(struct BuffInfo_s));
 			} else
@@ -7594,7 +7611,10 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 					pic_config->double_write_mode & 0xf);
 
 		/* sao ctrl1 reg alignline with 64, align with 64 */
-		canvas_w = ALIGN(canvas_w, 64);
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)
+			canvas_w = ALIGN(canvas_w, 32);
+		else
+			canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
 
 		if (vdec->parallel_dec == 1) {
@@ -10723,7 +10743,7 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 	pbi->init_flag = 0;
 	pbi->first_sc_checked= 0;
 
-	if (!vdec_is_support_4k()) {
+	if (!hevc_is_support_4k(VFORMAT_VP9)) {
 		pbi->max_pic_w = 1920;
 		pbi->max_pic_h = 1088;
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -10767,7 +10787,8 @@ static int amvdec_vp9_probe(struct platform_device *pdev)
 	pbi->double_write_mode = double_write_mode;
 	pbi->mmu_enable = 1;
 #ifdef VP9_10B_MMU_DW
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		pbi->dw_mmu_enable =
 			(get_double_write_mode(pbi) & 0x20) ? 1 : 0;
 	} else {
@@ -12088,7 +12109,7 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 	pbi->platform_dev = pdev;
 	pbi->video_signal_type = 0;
 	pbi->m_ins_flag = 1;
-	if (!vdec_is_support_4k()) {
+	if (!hevc_is_support_4k(VFORMAT_VP9)) {
 		pbi->max_pic_w = 1920;
 		pbi->max_pic_h = 1088;
 	} else if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) {
@@ -12314,7 +12335,8 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 		pbi->mmu_enable = 1;
 
 #ifdef VP9_10B_MMU_DW
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) {
+	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T5D) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		pbi->dw_mmu_enable =
 			(get_double_write_mode(pbi) & 0x20) ? 1 : 0;
 	} else {
@@ -12532,8 +12554,9 @@ static int __init amvdec_vp9_driver_init_module(void)
 
 	struct BuffInfo_s *p_buf_info;
 
-	if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) {
-		if (vdec_is_support_4k()) {
+	if ((get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_TM2 && !is_cpu_tm2_revb()) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)) {
+		if (hevc_is_support_4k(VFORMAT_VP9)) {
 			if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1)
 				p_buf_info = &amvvp9_workbuff_spec[2];
 			else
@@ -12541,7 +12564,7 @@ static int __init amvdec_vp9_driver_init_module(void)
 		} else
 			p_buf_info = &amvvp9_workbuff_spec[0];
 	} else { //get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_TM2 || is_cpu_tm2_revb()
-		if (vdec_is_support_4k())
+		if (hevc_is_support_4k(VFORMAT_VP9))
 			p_buf_info = &amvvp9_workbuff_spec[5];
 		else
 			p_buf_info = &amvvp9_workbuff_spec[4];
@@ -12581,11 +12604,12 @@ static int __init amvdec_vp9_driver_init_module(void)
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5) {
 		amvdec_vp9_profile.name = "vp9_unsupport";
 	} else if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D)) {
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
 		amvdec_vp9_profile.profile =
 			"8k, 10bit, dwrite, compressed, fence, v4l-uvm";
 	} else {
-		if (vdec_is_support_4k())
+		if (hevc_is_support_4k(VFORMAT_VP9))
 			amvdec_vp9_profile.profile =
 				"4k, 10bit, dwrite, compressed, fence, v4l-uvm";
 		else
