@@ -114,7 +114,7 @@ extern void vers_resume_hw(u32 on);
 
 static int vc9000e_vce_probe(struct platform_device *pf_dev);
 
-static void __exit hantroenc_cleanup(struct platform_device *pf_dev)
+static void hantroenc_cleanup(struct platform_device *pf_dev)
 {
     if (vcmd_supported == 0)
         hantroenc_normal_cleanup();
@@ -264,7 +264,7 @@ static struct platform_driver mbd_vce_driver = {.probe = vc9000e_vce_probe,
                                                     .pm = &meson_versenc_pm_ops,
                                                 }};
 
-static int __init hantroenc_init(struct platform_device *pf_dev)
+static int hantroenc_init(struct platform_device *pf_dev)
 {
     pr_info("vc8000_vcmd_driver: hantroenc_init\n");
     vcmd_supported = 1;
@@ -342,5 +342,5 @@ module_param(vcmd_supported, uint, 0);
 /* module description */
 /*MODULE_LICENSE("Proprietary");*/
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Verisilicon");
+MODULE_AUTHOR("Amlogic Inc.");
 MODULE_DESCRIPTION("VC8000 Vcmd driver");

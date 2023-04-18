@@ -239,7 +239,7 @@ static long memalloc_compat_ioctl(struct file *filp,
 
 static dma_addr_t paddr = 0;
 static void *vaddr = NULL;
-static void __exit memalloc_cleanup(struct platform_device *pf_dev)
+static void memalloc_cleanup(struct platform_device *pf_dev)
 {
     if (hlina_chunks)
         vfree(hlina_chunks);
@@ -264,7 +264,7 @@ static struct file_operations memalloc_fops = {.owner = THIS_MODULE,
 #endif
 };
 
-static int __init memalloc_init(struct platform_device *pf_dev)
+static int memalloc_init(struct platform_device *pf_dev)
 {
     int result;
     int ret = 0;
@@ -470,5 +470,5 @@ module_exit(enc_memallc_exit);
 
 /* module description */
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Verisilicon");
+MODULE_AUTHOR("Amlogic Inc.");
 MODULE_DESCRIPTION("Linear RAM allocation");
