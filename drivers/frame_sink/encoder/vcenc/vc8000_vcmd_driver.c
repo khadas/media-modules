@@ -3833,7 +3833,7 @@ void vers_resume_hw(u32 on)
 
 }
 
-int __init hantroenc_vcmd_init(struct platform_device *pf_dev)
+int hantroenc_vcmd_init(struct platform_device *pf_dev)
 {
 	int i, k;
 	int result;
@@ -4017,7 +4017,7 @@ err1:
 	return result;
 }
 
-void __exit hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
+void hantroenc_vcmd_cleanup(struct platform_device *pf_dev)
 {
 	int i = 0;
 	u32 result;

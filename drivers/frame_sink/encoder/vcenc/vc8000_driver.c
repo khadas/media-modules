@@ -105,10 +105,10 @@ struct meson_versenc_data {
 
 static u32 vcmd_supported;
 
-int __init hantroenc_normal_init(void);
-int __init hantroenc_vcmd_init(struct platform_device *pf_dev);
-void __exit hantroenc_normal_cleanup(void);
-void __exit hantroenc_vcmd_cleanup(struct platform_device *pf_dev);
+int hantroenc_normal_init(void);
+int hantroenc_vcmd_init(struct platform_device *pf_dev);
+void hantroenc_normal_cleanup(void);
+void hantroenc_vcmd_cleanup(struct platform_device *pf_dev);
 
 extern void vers_resume_hw(u32 on);
 

@@ -1075,7 +1075,7 @@ out:
 }
 #endif
 
-int __init hantroenc_normal_init(void)
+int hantroenc_normal_init(void)
 {
     int result = 0;
     int i, j;
@@ -1222,7 +1222,7 @@ err1:
     return result;
 }
 
-void __exit hantroenc_normal_cleanup(void)
+void hantroenc_normal_cleanup(void)
 {
     int i = 0, j = 0;
 
