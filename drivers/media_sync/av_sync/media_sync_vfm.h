@@ -42,9 +42,14 @@ static LIST_HEAD(mediasync_vf_devlist);
 typedef struct mediasync_video_frame {
 	struct list_head mediasync_vf_devlist;
 	s32 sSyncInsId;
-	int inst;
+	ulong sync_policy_instance;
+	int dev_id;
 	bool running;
-	int frmeStatus;
+	int frameStatus;
+	u32 outCount;
+	s64 getCountSysTimeUs;
+	s64 lastVpts;
+	s64 getSysTimeUs;
 	wait_queue_head_t wq;
 	struct semaphore sem;
 	struct task_struct *thread;
@@ -56,6 +61,7 @@ typedef struct mediasync_video_frame {
 }mediasync_vf_dev;
 
 
+int mediasync_vf_set_mediasync_id(int dev_id,s32 SyncInsId);
 int mediasync_vf_release(void);
 int mediasync_vf_init(void);
 

@@ -29,6 +29,8 @@
 #include <linux/times.h>
 #include <linux/time.h>
 #include <linux/time64.h>
+#include <asm/current.h>
+
 #include "media_sync_core.h"
 #define KERNEL_ATRACE_TAG KERNEL_ATRACE_TAG_MEDIA_SYNC
 #include <trace/events/meson_atrace.h>
@@ -48,19 +50,15 @@ static u32 media_sync_user_debug_level = 0;
 
 static u32 media_sync_debug_level = 0;
 
-#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_debug_level) {pr_info("[media_sync:%d][%d_%d_%d] " fmt,__LINE__, inst->mSyncId,inst->mSyncIndex,inst->mUId,##args);}
+static u32 media_sync_calculate_cache_enable = 0;
+
+
+#define mediasync_pr_info(dbg_level,inst,fmt,args...) if (dbg_level <= media_sync_debug_level) {pr_info("[MS_Core:%d][%d_%d_%d] " fmt,__LINE__, inst->mSyncId,inst->mSyncIndex,inst->mUId,##args);}
 #define mediasync_pr_error(fmt,args...) {pr_info("[%s:%d] err " fmt,__func__,__LINE__,##args);}
 #define valid_pts(pts) ((pts) > 0)
-#define PTS_TYPE_AUDIO 0
-#define PTS_TYPE_VIDEO 1
-#define DEFAULT_TRIGGER_DISCONTINUE_THRESHOLD 630000//(7000 * 90)
-#define DEFAULT_FRAME_SEGMENT_THRESHOLD 45000//(500 * 90)
-#define ABSSUB(a, b) (((a) >= (b)) ? ((a) - (b)) : ((b) - (a)))
+#define PTS_TYPE_VIDEO 0
+#define PTS_TYPE_AUDIO 1
 
-typedef struct Media_Sync_Manage {
-	mediasync_ins* pInstance;
-	struct mutex m_lock;
-} MediaSyncManager;
 
 static MediaSyncManager vMediaSyncInsList[MAX_INSTANCE_NUM];
 static u32 g_inst_uid = 1;
@@ -88,7 +86,7 @@ static u64 get_llabs(s64 value){
 		return llvalue;
 	}
 }
-
+#if 0
 static long get_index_from_sync_id(s32 sSyncInsId)
 {
 	long index = -1;
@@ -104,24 +102,25 @@ static long get_index_from_sync_id(s32 sSyncInsId)
 	}
 	if (index == -1) {
 		for (temp = MAX_DYNAMIC_INSTANCE_NUM; temp < MAX_INSTANCE_NUM; temp++) {
-			if (vMediaSyncInsList[temp].pInstance != NULL) {
-				if (sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncId) {
-					index = temp;
-					break;
+				if (vMediaSyncInsList[temp].pInstance != NULL) {
+					if (sSyncInsId == vMediaSyncInsList[temp].pInstance->mSyncId) {
+							index = temp;
+							break;
+					}
 				}
-			}
 		}
 	}
 
 	return index;
 }
-
+#endif
 static MediaSyncManager* get_media_sync_manager(s32 sSyncInsId,const char* from,int line) {
 	MediaSyncManager* ret = NULL;
 	if (sSyncInsId >= 0) {
 		s32 index;
 		for (index = 0; index < MAX_INSTANCE_NUM; index++) {
-			if (vMediaSyncInsList[index].pInstance != NULL && sSyncInsId == vMediaSyncInsList[index].pInstance->mSyncId) {
+			if (vMediaSyncInsList[index].pInstance != NULL &&
+				sSyncInsId == vMediaSyncInsList[index].pInstance->mSyncId) {
 				ret = &vMediaSyncInsList[index];
 				break;
 			}
@@ -205,36 +204,31 @@ error_alloc_pages:
 	return -ENOMEM;
 }
 
-static u64 get_stc_time_us(s32 sSyncInsId)
+static u64 get_stc_time_us(mediasync_ins* pInstance)
 {
-    /*mediasync_ins* pInstance = NULL;
-	u64 stc;
-	unsigned int base;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	pInstance = vMediaSyncInsList[index];
-	demux_get_stc(pInstance->mDemuxId, 0, &stc, &base);*/
-	mediasync_ins* pInstance = NULL;
 	int ret = -1;
 	u64 stc;
 	u64 timeus;
 	u64 pcr;
 	s64 pcr_diff;
 	s64 time_diff;
-	s32 index = get_index_from_sync_id(sSyncInsId);
+
 	struct timespec64 ts_monotonic;
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+
+	if (pInstance == NULL) {
 		return -1;
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance->mSyncMode != MEDIA_SYNC_PCRMASTER)
+	}
+
+	if (pInstance->mSyncMode != MEDIA_SYNC_PCRMASTER) {
 		return 0;
+	}
+
 	ktime_get_ts64(&ts_monotonic);
 	timeus = ts_monotonic.tv_sec * 1000000LL + div_u64(ts_monotonic.tv_nsec , 1000);
-	if (pInstance->mDemuxId < 0)
+	if (pInstance->mDemuxId < 0) {
 		return timeus;
-
+	}
 
 	ret = demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 
@@ -674,10 +668,10 @@ static long mediasync_ins_set_queue_video_info_l(mediasync_ins* pInstance, media
 	return 0;
 }
 
-static long mediasync_ins_delete(s32 sSyncInsId) {
+static long mediasync_ins_delete(MediaSyncManager* pSyncManage) {
 	mediasync_ins* pInstance = NULL;
 	long ret = -1;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	//MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
 	if (pSyncManage == NULL) {
 		return -1;
 	}
@@ -685,8 +679,10 @@ static long mediasync_ins_delete(s32 sSyncInsId) {
 	pInstance = pSyncManage->pInstance;
 	if (pInstance != NULL) {
 		mediasync_pr_info(0,pInstance,"");
-		free_frame_list(&pInstance->frame_table[0]);
-		free_frame_list(&pInstance->frame_table[1]);
+		if (media_sync_calculate_cache_enable) {
+			free_frame_list(&pInstance->frame_table[0]);
+			free_frame_list(&pInstance->frame_table[1]);
+		}
 		kfree(pInstance);
 		pSyncManage->pInstance = NULL;
 		ret = 0;
@@ -757,7 +753,7 @@ static long mediasync_ins_init_syncinfo(mediasync_ins* pInstance) {
 	pInstance->mAudioFormat.datawidth = -1;
 	pInstance->mAudioFormat.format = -1;
 	pInstance->mAudioFormat.samplerate = -1;
-
+	pInstance->mCacheFrames = 0;
 	return 0;
 }
 
@@ -778,10 +774,12 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 		pInstance->mUpdateTimeThreshold = MIN_UPDATETIME_THRESHOLD_US;
 		pInstance->mStcParmUpdateCount = 0;
 		pInstance->isVideoFrameAdvance = 0;
-		pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
-		clear_frame_list(pInstance, pTable);
-		pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
-		clear_frame_list(pInstance, pTable);
+		if (media_sync_calculate_cache_enable) {
+			pTable = &pInstance->frame_table[PTS_TYPE_AUDIO];
+			clear_frame_list(pInstance, pTable);
+			pTable = &pInstance->frame_table[PTS_TYPE_VIDEO];
+			clear_frame_list(pInstance, pTable);
+		}
 		mediasync_pr_info(0,pInstance,"");
 	}
 }
@@ -791,7 +789,7 @@ long mediasync_init(void) {
 	int index = 0;
 	for (index = 0; index < MAX_INSTANCE_NUM; index++) {
 		vMediaSyncInsList[index].pInstance = NULL;
-		mutex_init(&(vMediaSyncInsList[index].m_lock));
+		spin_lock_init(&(vMediaSyncInsList[index].m_lock));
 	}
 	return 0;
 }
@@ -800,16 +798,18 @@ long mediasync_init(void) {
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
 			s32 *sSyncInsId,
-			mediasync_ins **pIns){
+			MediaSyncManager **pSyncManage){
 	s32 index = 0;
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+
 	pInstance = kmalloc(sizeof(mediasync_ins), GFP_KERNEL|__GFP_ZERO);
 	if (pInstance == NULL) {
 		return -1;
 	}
 
 	for (index = 0; index < MAX_DYNAMIC_INSTANCE_NUM; index++) {
-		mutex_lock(&(vMediaSyncInsList[index].m_lock));
+		spin_lock_irqsave(&(vMediaSyncInsList[index].m_lock),flags);
 		if (vMediaSyncInsList[index].pInstance == NULL) {
 			vMediaSyncInsList[index].pInstance = pInstance;
 			pInstance->mSyncIndex = pInstance->mSyncId = index;
@@ -836,19 +836,22 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mAudioCacheUpdateCount = 0;
 			pInstance->mVideoCacheUpdateCount = 0;
 			pInstance->isVideoFrameAdvance = 0;
+			pInstance->mVideoTrickMode = 0;
 			snprintf(pInstance->atrace_video,
 				sizeof(pInstance->atrace_video), "msync_v_%d", *sSyncInsId);
 			snprintf(pInstance->atrace_audio,
 				sizeof(pInstance->atrace_audio), "msync_a_%d", *sSyncInsId);
 			snprintf(pInstance->atrace_pcrscr,
 				sizeof(pInstance->atrace_pcrscr), "msync_s_%d", *sSyncInsId);
-			pInstance->frame_table[PTS_TYPE_AUDIO].rec_num = AUDIO_FRAME_LIST_SIZE;
-			pInstance->frame_table[PTS_TYPE_VIDEO].rec_num = VIDEO_FRAME_LIST_SIZE;
-			pInstance->frame_table[PTS_TYPE_AUDIO].mTableType = PTS_TYPE_AUDIO;
-			pInstance->frame_table[PTS_TYPE_VIDEO].mTableType = PTS_TYPE_VIDEO;
-			alloc_frame_list(&pInstance->frame_table[PTS_TYPE_AUDIO]);
-			alloc_frame_list(&pInstance->frame_table[PTS_TYPE_VIDEO]);
 
+			if (media_sync_calculate_cache_enable) {
+				pInstance->frame_table[PTS_TYPE_AUDIO].rec_num = AUDIO_FRAME_LIST_SIZE;
+				pInstance->frame_table[PTS_TYPE_VIDEO].rec_num = VIDEO_FRAME_LIST_SIZE;
+				pInstance->frame_table[PTS_TYPE_AUDIO].mTableType = PTS_TYPE_AUDIO;
+				pInstance->frame_table[PTS_TYPE_VIDEO].mTableType = PTS_TYPE_VIDEO;
+				alloc_frame_list(&pInstance->frame_table[PTS_TYPE_AUDIO]);
+				alloc_frame_list(&pInstance->frame_table[PTS_TYPE_VIDEO]);
+			}
 			for (pInstance->mRcordSlopeCount = 0;
 					pInstance->mRcordSlopeCount < RECORD_SLOPE_NUM;
 					pInstance->mRcordSlopeCount++) {
@@ -857,10 +860,10 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mRcordSlopeCount = 0;
 
 			mediasync_ins_reset_l(pInstance);
-			mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+			spin_unlock_irqrestore(&(vMediaSyncInsList[index].m_lock),flags);
 			break;
 		}
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(vMediaSyncInsList[index].m_lock),flags);
 	}
 
 	if (index == MAX_DYNAMIC_INSTANCE_NUM) {
@@ -868,50 +871,55 @@ long mediasync_ins_alloc(s32 sDemuxId,
 		return -1;
 	}
 
-	*pIns = pInstance;
+	*pSyncManage = &vMediaSyncInsList[index];
 
 	return 0;
 }
 
 long mediasync_ins_binder(s32 sSyncInsId,
-			mediasync_ins **pIns) {
+			MediaSyncManager **pSyncManage) {
 	mediasync_ins* pInstance = NULL;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
-	if (pSyncManage == NULL) {
+	unsigned long flags = 0;
+	MediaSyncManager* SyncManage = NULL;
+
+	SyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (SyncManage == NULL) {
 		return -1;
 	}
-	mutex_lock(&(pSyncManage->m_lock));
-	pInstance = pSyncManage->pInstance;
+	spin_lock_irqsave(&(SyncManage->m_lock),flags);
+	pInstance = SyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(pSyncManage->m_lock));
+		spin_unlock_irqrestore(&(SyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mRef++;
-	*pIns = pInstance;
+	*pSyncManage = SyncManage;
 	mediasync_pr_info(0,pInstance,"mRef:%d,mAVRef:%d",pInstance->mRef,pInstance->mAVRef);
-	mutex_unlock(&(pSyncManage->m_lock));
+	spin_unlock_irqrestore(&(SyncManage->m_lock),flags);
 
 	return 0;
 }
 
 long mediasync_static_ins_binder(s32 sSyncInsId,
-			mediasync_ins **pIns) {
+			MediaSyncManager **pSyncManage) {
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 	s32 temp_ins;
 	long ret = -1;
+	MediaSyncManager* SyncManage = NULL;
 	if (sSyncInsId < MAX_DYNAMIC_INSTANCE_NUM && sSyncInsId >= 0) {
-		return mediasync_ins_binder(sSyncInsId, pIns);
+		ret = mediasync_ins_binder(sSyncInsId, &SyncManage);
 	} else {
-		MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
-		if (pSyncManage == NULL) {
+		SyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+		if (SyncManage == NULL) {
 			pInstance = kzalloc(sizeof(mediasync_ins), GFP_KERNEL);
 			if (pInstance == NULL) {
 				return -1;
 			}
 
 			for (temp_ins = MAX_DYNAMIC_INSTANCE_NUM; temp_ins < MAX_INSTANCE_NUM; temp_ins++) {
-				mutex_lock(&(vMediaSyncInsList[temp_ins].m_lock));
+				spin_lock_irqsave(&(vMediaSyncInsList[temp_ins].m_lock),flags);
 				if (vMediaSyncInsList[temp_ins].pInstance == NULL) {
 					vMediaSyncInsList[temp_ins].pInstance = pInstance;
 					pInstance->mSyncId = sSyncInsId;
@@ -940,45 +948,52 @@ long mediasync_static_ins_binder(s32 sSyncInsId,
 						sizeof(pInstance->atrace_audio), "msync_a_%d", sSyncInsId);
 					snprintf(pInstance->atrace_pcrscr,
 						sizeof(pInstance->atrace_pcrscr), "msync_s_%d", sSyncInsId);
-
-					pInstance->frame_table[PTS_TYPE_AUDIO].rec_num = AUDIO_FRAME_LIST_SIZE;
-					pInstance->frame_table[PTS_TYPE_VIDEO].rec_num = VIDEO_FRAME_LIST_SIZE;
-					pInstance->frame_table[PTS_TYPE_AUDIO].mTableType = PTS_TYPE_AUDIO;
-					pInstance->frame_table[PTS_TYPE_VIDEO].mTableType = PTS_TYPE_VIDEO;
-					alloc_frame_list(&pInstance->frame_table[PTS_TYPE_AUDIO]);
-					alloc_frame_list(&pInstance->frame_table[PTS_TYPE_VIDEO]);
+					if (media_sync_calculate_cache_enable) {
+						pInstance->frame_table[PTS_TYPE_AUDIO].rec_num = AUDIO_FRAME_LIST_SIZE;
+						pInstance->frame_table[PTS_TYPE_VIDEO].rec_num = VIDEO_FRAME_LIST_SIZE;
+						pInstance->frame_table[PTS_TYPE_AUDIO].mTableType = PTS_TYPE_AUDIO;
+						pInstance->frame_table[PTS_TYPE_VIDEO].mTableType = PTS_TYPE_VIDEO;
+						alloc_frame_list(&pInstance->frame_table[PTS_TYPE_AUDIO]);
+						alloc_frame_list(&pInstance->frame_table[PTS_TYPE_VIDEO]);
+					}
 					mediasync_ins_reset_l(pInstance);
-					*pIns = pInstance;
-					mutex_unlock(&(vMediaSyncInsList[temp_ins].m_lock));
+					//*pIns = pInstance;
+					SyncManage = &(vMediaSyncInsList[temp_ins]);
+					spin_unlock_irqrestore(&(vMediaSyncInsList[temp_ins].m_lock),flags);
 					ret = 0;
 					break;
 				}
-				mutex_unlock(&(vMediaSyncInsList[temp_ins].m_lock));
+				spin_unlock_irqrestore(&(vMediaSyncInsList[temp_ins].m_lock),flags);
 			}
 		}else {
-			mutex_lock(&(pSyncManage->m_lock));
-			pInstance = pSyncManage->pInstance;
+			spin_lock_irqsave(&(SyncManage->m_lock),flags);
+			pInstance = SyncManage->pInstance;
 			if (pInstance != NULL) {
 				pInstance->mRef++;
-				*pIns = pInstance;
+				//*pIns = pInstance;
 				ret = 0;
 			}
-			mutex_unlock(&(pSyncManage->m_lock));
+			spin_unlock_irqrestore(&(SyncManage->m_lock),flags);
 		}
-		return ret;
 	}
+	*pSyncManage = SyncManage;
+	return ret;
 }
 
-long mediasync_ins_unbinder(s32 sSyncInsId, s32 sStreamType) {
+long mediasync_ins_unbinder(MediaSyncManager* pSyncManage, s32 sStreamType) {
 	mediasync_ins* pInstance = NULL;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	unsigned long flags = 0;
 	if (pSyncManage == NULL) {
 		return -1;
 	}
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+
 	pInstance = pSyncManage->pInstance;
-	if (pInstance == NULL)
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
-	mutex_lock(&(pSyncManage->m_lock));
+	}
+
 	pInstance->mRef--;
 
 	mediasync_pr_info(0,pInstance,"mRef:%d,mAVRef:%d,streamType:%d",pInstance->mRef,pInstance->mAVRef,sStreamType);
@@ -986,47 +1001,53 @@ long mediasync_ins_unbinder(s32 sSyncInsId, s32 sStreamType) {
 		mediasync_ins_reset_l(pInstance);
 
 	if (pInstance->mRef <= 0)
-		mediasync_ins_delete(sSyncInsId);
-	mutex_unlock(&(pSyncManage->m_lock));
+		mediasync_ins_delete(pSyncManage);
+
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }
 
-long mediasync_ins_reset(s32 sSyncInsId) {
+long mediasync_ins_reset(MediaSyncManager* pSyncManage) {
 	mediasync_ins* pInstance = NULL;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	unsigned long flags = 0;
 	if (pSyncManage == NULL) {
 		return -1;
 	}
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
 
 	pInstance = pSyncManage->pInstance;
-	if (pInstance == NULL)
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
+	}
 
 	mediasync_ins_reset_l(pInstance);
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_update_mediatime(s32 sSyncInsId,
+long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 				s64 lMediaTime,
 				s64 lSystemTime, bool forceUpdate) {
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 	u64 current_stc = 0;
 	s64 current_systemtime = 0;
 	s64 diff_system_time = 0;
 	s64 diff_mediatime = 0;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
-	current_stc = get_stc_time_us(sSyncInsId);
+	current_stc = get_stc_time_us(pInstance);
 	current_systemtime = get_system_time_us();
 #if 0
 	pInstance->mSyncMode = MEDIA_SYNC_PCRMASTER;
@@ -1111,63 +1132,65 @@ long mediasync_ins_update_mediatime(s32 sSyncInsId,
 		}
 	}
 	pInstance->mTrackMediaTime = lMediaTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }
 
-long mediasync_ins_set_mediatime_speed(s32 sSyncInsId,
+long mediasync_ins_set_mediatime_speed(MediaSyncManager* pSyncManage,
 					mediasync_speed fSpeed) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
+	unsigned long flags = 0;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mSpeed.mNumerator == fSpeed.mNumerator &&
 		pInstance->mSpeed.mDenominator == fSpeed.mDenominator) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return 0;
 	}
 
 	pInstance->mSpeed.mNumerator = fSpeed.mNumerator;
 	pInstance->mSpeed.mDenominator = fSpeed.mDenominator;
 	pInstance->mStcParmUpdateCount++;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
+long mediasync_ins_set_paused(MediaSyncManager* pSyncManage, s32 sPaused) {
 
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 	u64 current_stc = 0;
 	s64 current_systemtime = 0;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	if (sPaused != 0 && sPaused != 1) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (sPaused == pInstance->mPaused) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return 0;
 	}
 
-	current_stc = get_stc_time_us(sSyncInsId);
+	current_stc = get_stc_time_us(pInstance);
 	current_systemtime = get_system_time_us();
 
 	pInstance->mPaused = sPaused;
@@ -1181,465 +1204,504 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 
 	pInstance->mStcParmUpdateCount++;
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused) {
+long mediasync_ins_get_paused(MediaSyncManager* pSyncManage, s32* spPaused) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	*spPaused = pInstance->mPaused ;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode){
+long mediasync_ins_set_syncmode(MediaSyncManager* pSyncManage, s32 sSyncMode){
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncMode = sSyncMode;
 	pInstance->mSyncModeChange = 1;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_syncmode(s32 sSyncInsId, s32 *sSyncMode) {
+long mediasync_ins_get_syncmode(MediaSyncManager* pSyncManage, s32 *sSyncMode) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	*sSyncMode = pInstance->mSyncMode;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_mediatime_speed(s32 sSyncInsId, mediasync_speed *fpSpeed) {
+long mediasync_ins_get_mediatime_speed(MediaSyncManager* pSyncManage, mediasync_speed *fpSpeed) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	fpSpeed->mNumerator = pInstance->mSpeed.mNumerator;
 	fpSpeed->mDenominator = pInstance->mSpeed.mDenominator;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_anchor_time(s32 sSyncInsId,
+long mediasync_ins_get_anchor_time(MediaSyncManager* pSyncManage,
 				s64* lpMediaTime,
 				s64* lpSTCTime,
 				s64* lpSystemTime) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
+	unsigned long flags = 0;
 
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*lpMediaTime = pInstance->mLastMediaTime;
 	*lpSTCTime = pInstance->mLastStc;
 	*lpSystemTime = pInstance->mLastRealTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_systemtime(s32 sSyncInsId, s64* lpSTC, s64* lpSystemTime){
+long mediasync_ins_get_systemtime(MediaSyncManager* pSyncManage, s64* lpSTC, s64* lpSystemTime){
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 	u64 current_stc = 0;
 	s64 current_systemtime = 0;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	if (pSyncManage == NULL) {
 		return -1;
 	}
 
-	current_stc = get_stc_time_us(sSyncInsId);
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+
+	current_stc = get_stc_time_us(pInstance);
 	current_systemtime = get_system_time_us();
 
 	*lpSTC = current_stc;
 	*lpSystemTime = current_systemtime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime) {
+long mediasync_ins_get_nextvsync_systemtime(MediaSyncManager* pSyncManage, s64* lpSystemTime) {
 
 	return 0;
 }
 
-long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold) {
+long mediasync_ins_set_updatetime_threshold(MediaSyncManager* pSyncManage, s64 lTimeThreshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
+	unsigned long flags = 0;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	pInstance->mUpdateTimeThreshold = lTimeThreshold;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold) {
+long mediasync_ins_get_updatetime_threshold(MediaSyncManager* pSyncManage, s64* lpTimeThreshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	*lpTimeThreshold = pInstance->mUpdateTimeThreshold;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime) {
+long mediasync_ins_get_trackmediatime(MediaSyncManager* pSyncManage, s64* lpTrackMediaTime) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	*lpTrackMediaTime = pInstance->mTrackMediaTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
-long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type) {
+long mediasync_ins_set_clocktype(MediaSyncManager* pSyncManage, mediasync_clocktype type) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSourceClockType = type;
 	pInstance->mStcParmUpdateCount++;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type) {
+long mediasync_ins_get_clocktype(MediaSyncManager* pSyncManage, mediasync_clocktype* type) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*type = pInstance->mSourceClockType;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state state) {
+long mediasync_ins_set_clockstate(MediaSyncManager* pSyncManage, mediasync_clockprovider_state state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSourceClockState = state;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state* state) {
+long mediasync_ins_get_clockstate(MediaSyncManager* pSyncManage, mediasync_clockprovider_state* state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*state = pInstance->mSourceClockState;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_hasaudio(s32 sSyncInsId, int hasaudio) {
+long mediasync_ins_set_hasaudio(MediaSyncManager* pSyncManage, int hasaudio) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mHasAudio = hasaudio;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_hasaudio(s32 sSyncInsId, int* hasaudio) {
+long mediasync_ins_get_hasaudio(MediaSyncManager* pSyncManage, int* hasaudio) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*hasaudio = pInstance->mHasAudio;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
-long mediasync_ins_set_hasvideo(s32 sSyncInsId, int hasvideo) {
+long mediasync_ins_set_hasvideo(MediaSyncManager* pSyncManage, int hasvideo) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mHasVideo = hasvideo;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo) {
+long mediasync_ins_get_hasvideo(MediaSyncManager* pSyncManage, int* hasvideo) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*hasvideo = pInstance->mHasVideo;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_firstaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncInfo.firstAframeInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstAframeInfo.frameSystemTime = info.frameSystemTime;
-	if (info.framePts == -1 && info.frameSystemTime == -1) {
-		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
+	mediasync_pr_info(0,pInstance,"first audio framePts:0x%llx frameSystemTime:%lld us\n",
+							pInstance->mSyncInfo.firstAframeInfo.framePts,
+							pInstance->mSyncInfo.firstAframeInfo.frameSystemTime);
+	if (media_sync_calculate_cache_enable) {
+		if (info.framePts == -1 && info.frameSystemTime == -1) {
+			clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
+		}
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_firstaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.firstAframeInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.firstAframeInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_firstvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncInfo.firstVframeInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstVframeInfo.frameSystemTime = info.frameSystemTime;
-	if (info.framePts == -1 && info.frameSystemTime == -1) {
-		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
+	mediasync_pr_info(0,pInstance,"first video framePts:0x%llx frameSystemTime:%lld us\n",
+							pInstance->mSyncInfo.firstVframeInfo.framePts,
+							pInstance->mSyncInfo.firstVframeInfo.frameSystemTime);
+
+	if (media_sync_calculate_cache_enable) {
+		if (info.framePts == -1 && info.frameSystemTime == -1) {
+			clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
+		}
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_firstvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.firstVframeInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.firstVframeInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_firstdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncInfo.firstDmxPcrInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = info.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	mediasync_pr_info(0,pInstance,"first demux framePts:%lld frameSystemTime:%lld\n",
+							pInstance->mSyncInfo.firstDmxPcrInfo.framePts,
+							pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime);
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_firstdmxpcrinfo(MediaSyncManager* pSyncManage,mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	int64_t pcr = -1;
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
+	unsigned long flags = 0;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	int64_t pcr = -1;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -1648,8 +1710,7 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 			pInstance->mSyncInfo.firstDmxPcrInfo.framePts = pcr;
 			pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime = get_system_time_us();
-			mediasync_pr_info(1,pInstance,"sSyncInsId:%d pcr:%lld frameSystemTime:%lld\n",
-					sSyncInsId,
+			mediasync_pr_info(1,pInstance,"pcr:%lld frameSystemTime:%lld\n",
 					pcr,
 					pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime);
 		} else {
@@ -1660,67 +1721,72 @@ long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info
 
 	info->framePts = pInstance->mSyncInfo.firstDmxPcrInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.firstDmxPcrInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_refclockinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_refclockinfo(MediaSyncManager* pSyncManage,mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	if (pInstance->mSyncInfo.refClockInfo.framePts == info.framePts &&
 		pInstance->mSyncInfo.refClockInfo.frameSystemTime == info.frameSystemTime) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return 0;
 	}
 	pInstance->mSyncInfo.refClockInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.refClockInfo.frameSystemTime = info.frameSystemTime;
 	pInstance->mStcParmUpdateCount++;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	mediasync_pr_info(0,pInstance,"refclockinfo framePts:%lld frameSystemTime:%lld\n",pInstance->mSyncInfo.refClockInfo.framePts,pInstance->mSyncInfo.refClockInfo.frameSystemTime);
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_refclockinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_refclockinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.refClockInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.refClockInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_curaudioframeinfo(MediaSyncManager* pSyncManage,mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -1728,47 +1794,52 @@ long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	pInstance->mSyncInfo.curAudioInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curAudioInfo.frameSystemTime = info.frameSystemTime;
 	pInstance->mAudioCacheUpdateCount++;
-	pInstance->frame_table[PTS_TYPE_AUDIO].mLastProcessedPts = info.framePts;
-	if (pInstance->mCacheFrames) {
-		if (info.framePts != -1) {
-			update_audio_cache(pInstance,info.framePts,0);
+
+	if (media_sync_calculate_cache_enable) {
+		pInstance->frame_table[PTS_TYPE_AUDIO].mLastProcessedPts = info.framePts;
+		if (pInstance->mCacheFrames) {
+			if (info.framePts != -1) {
+				update_audio_cache(pInstance,info.framePts,0);
+			}
 		}
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_curaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.curAudioInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.curAudioInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_curvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -1777,68 +1848,73 @@ long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo inf
 	pInstance->mSyncInfo.curVideoInfo.frameSystemTime = info.frameSystemTime;
 	pInstance->mTrackMediaTime = div_u64(info.framePts * 100 , 9);
 	pInstance->mVideoCacheUpdateCount++;
-	pInstance->frame_table[PTS_TYPE_VIDEO].mLastProcessedPts = info.framePts;
-	if (pInstance->mCacheFrames) {
-		if (info.framePts != -1) {
-			update_video_cache(pInstance,info.framePts,0);
+	if (media_sync_calculate_cache_enable) {
+		pInstance->frame_table[PTS_TYPE_VIDEO].mLastProcessedPts = info.framePts;
+		if (pInstance->mCacheFrames) {
+			if (info.framePts != -1) {
+				update_video_cache(pInstance,info.framePts,0);
+			}
 		}
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_curvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.curVideoInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.curVideoInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_curdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncInfo.curDmxPcrInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = info.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_curdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
+	unsigned long flags = 0;
 	int64_t pcr = -1;
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -1846,8 +1922,7 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 		demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
 		pInstance->mSyncInfo.curDmxPcrInfo.framePts = pcr;
 		pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime = get_system_time_us();
-		mediasync_pr_info(1,pInstance,"sSyncInsId:%d pcr:%llx frameSystemTime:%llx\n",
-				sSyncInsId,
+		mediasync_pr_info(1,pInstance,"pcr:%llx frameSystemTime:%llx\n",
 				pcr,
 				pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime);
 	} else {
@@ -1857,461 +1932,542 @@ long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info) 
 
 	info->framePts = pInstance->mSyncInfo.curDmxPcrInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.curDmxPcrInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag) {
+long mediasync_ins_set_audiomute(MediaSyncManager* pSyncManage, int mute_flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mute_flag = mute_flag;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag) {
+long mediasync_ins_get_audiomute(MediaSyncManager* pSyncManage, int* mute_flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*mute_flag = pInstance->mute_flag;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info) {
+long mediasync_ins_set_audioinfo(MediaSyncManager* pSyncManage, mediasync_audioinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mAudioInfo.cacheDuration = info.cacheDuration;
 	pInstance->mAudioInfo.cacheSize = info.cacheSize;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info) {
+long mediasync_ins_get_audioinfo(MediaSyncManager* pSyncManage, mediasync_audioinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->cacheDuration = pInstance->mAudioInfo.cacheDuration;
 	info->cacheSize = pInstance->mAudioInfo.cacheSize;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info) {
+long mediasync_ins_set_videoinfo(MediaSyncManager* pSyncManage,mediasync_videoinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mVideoInfo.cacheDuration = info.cacheDuration;
 	pInstance->mVideoInfo.cacheSize = info.cacheSize;
 	pInstance->mVideoInfo.specialSizeCount = info.specialSizeCount;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 
 }
 
-long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info) {
+long mediasync_ins_get_videoinfo(MediaSyncManager* pSyncManage, mediasync_videoinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->cacheDuration = pInstance->mVideoInfo.cacheDuration;
 	info->cacheSize = pInstance->mVideoInfo.cacheSize;
 	info->specialSizeCount = pInstance->mVideoInfo.specialSizeCount;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
+const char* mediasync_syncstate_to_str(avsync_state state)
+{
+	const char* str = NULL;
+	switch (state) {
+		case MEDIASYNC_INIT:
+			str = "INIT";
+		break;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		case MEDIASYNC_AUDIO_ARRIVED:
+			str = "AUDIO_ARRIVED";
+		break;
+
+		case MEDIASYNC_VIDEO_ARRIVED:
+			str = "VIDEO_ARRIVED";
+		break;
+
+		case MEDIASYNC_AV_ARRIVED:
+			str = "AV_ARRIVED";
+		break;
+
+		case MEDIASYNC_AV_SYNCED:
+			str = "AV_SYNCED";
+		break;
+
+		case MEDIASYNC_RUNNING:
+			str = "RUNNING";
+		break;
+
+		case MEDIASYNC_VIDEO_LOST_SYNC:
+			str = "VIDEO_LOST_SYNC";
+		break;
+
+		case MEDIASYNC_AUDIO_LOST_SYNC:
+			str = "AUDIO_LOST_SYNC";
+		break;
+
+		case MEDIASYNC_EXIT:
+			str = "EXIT";
+		break;
+	}
+
+	return str;
+}
+
+long mediasync_ins_set_avsyncstate(MediaSyncManager* pSyncManage, s32 state) {
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
 	}
 
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+	mediasync_pr_info(0,pInstance,"state: %s --> %s.",
+			mediasync_syncstate_to_str(pInstance->mSyncInfo.state),
+			mediasync_syncstate_to_str(state));
+
 	pInstance->mSyncInfo.state = state;
 	pInstance->mSyncInfo.setStateCurTimeUs = get_system_time_us();
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state) {
+long mediasync_ins_get_avsyncstate(MediaSyncManager* pSyncManage, s32* state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*state = pInstance->mSyncInfo.state;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_avsync_state_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsync_state) {
+long mediasync_ins_get_avsync_state_cur_time_us(MediaSyncManager* pSyncManage, mediasync_avsync_state_cur_time_us* avsync_state) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	//pr_info("(%s)(pid:%d)(%px) \n",current->comm, current->pid,pSyncManage);
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	avsync_state->state = pInstance->mSyncInfo.state;
 	avsync_state->setStateCurTimeUs = pInstance->mSyncInfo.setStateCurTimeUs;
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
 
-long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold) {
+long mediasync_ins_set_startthreshold(MediaSyncManager* pSyncManage, s32 threshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mStartThreshold == threshold) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return 0;
 	}
 	pInstance->mStartThreshold = threshold;
 	pInstance->mStcParmUpdateCount++;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold) {
+long mediasync_ins_get_startthreshold(MediaSyncManager* pSyncManage, s32* threshold) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*threshold = pInstance->mStartThreshold;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adjust_pts) {
+long mediasync_ins_set_ptsadjust(MediaSyncManager* pSyncManage, s32 adjust_pts) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mPtsAdjust == adjust_pts) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return 0;
 	}
 	pInstance->mPtsAdjust = adjust_pts;
 	pInstance->mStcParmUpdateCount++;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adjust_pts) {
+long mediasync_ins_get_ptsadjust(MediaSyncManager* pSyncManage, s32* adjust_pts) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*adjust_pts = pInstance->mPtsAdjust;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s32 mode) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+long mediasync_ins_set_videoworkmode(MediaSyncManager* pSyncManage, s32 mode) {
+
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mVideoWorkMode = mode;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s32* mode) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+long mediasync_ins_get_videoworkmode(MediaSyncManager* pSyncManage, s32* mode) {
+
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*mode = pInstance->mVideoWorkMode;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_fccenable(s32 sSyncInsId, s32 enable) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+long mediasync_ins_set_fccenable(MediaSyncManager* pSyncManage, s32 enable) {
+
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mFccEnable = enable;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_fccenable(s32 sSyncInsId, s32* enable) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
+long mediasync_ins_get_fccenable(MediaSyncManager* pSyncManage, s32* enable) {
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*enable = pInstance->mFccEnable;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
 
-long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType) {
+long mediasync_ins_set_source_type(MediaSyncManager* pSyncManage, aml_Source_Type sourceType) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSourceType = sourceType;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType) {
+long mediasync_ins_get_source_type(MediaSyncManager* pSyncManage, aml_Source_Type* sourceType) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*sourceType = pInstance->mSourceType;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime) {
+long mediasync_ins_set_start_media_time(MediaSyncManager* pSyncManage, s64 startime) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	pInstance->mStartMediaTime = startime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime) {
+long mediasync_ins_get_start_media_time(MediaSyncManager* pSyncManage, s64* starttime) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	*starttime = pInstance->mStartMediaTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format) {
+long mediasync_ins_set_audioformat(MediaSyncManager* pSyncManage, mediasync_audio_format format) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-	return -1;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	pInstance->mAudioFormat.channels = format.channels;
 	pInstance->mAudioFormat.datawidth = format.datawidth;
 	pInstance->mAudioFormat.format = format.format;
 	pInstance->mAudioFormat.samplerate = format.samplerate;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 
 }
 
-long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* format) {
+long mediasync_ins_get_audioformat(MediaSyncManager* pSyncManage, mediasync_audio_format* format) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-	return -1;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -2319,21 +2475,22 @@ long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* forma
 	format->datawidth = pInstance->mAudioFormat.datawidth;
 	format->format = pInstance->mAudioFormat.format;
 	format->samplerate = pInstance->mAudioFormat.samplerate;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
+long mediasync_ins_set_pauseresume(MediaSyncManager* pSyncManage, int flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -2344,26 +2501,27 @@ long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag) {
 		pInstance->mSyncInfo.pauseAudioInfo.framePts = -1;
 		pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime = -1;
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag) {
+long mediasync_ins_get_pauseresume(MediaSyncManager* pSyncManage, int* flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*flag = pInstance->mPauseResumeFlag;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
@@ -2384,56 +2542,59 @@ long mediasync_ins_set_pcrslope_implementation(mediasync_ins* pInstance, mediasy
 }
 
 
-long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope) {
+long mediasync_ins_set_pcrslope(MediaSyncManager* pSyncManage, mediasync_speed pcrslope) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	mediasync_ins_set_pcrslope_implementation(pInstance,pcrslope);
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 
 }
 
-long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope){
+long mediasync_ins_get_pcrslope(MediaSyncManager* pSyncManage, mediasync_speed *pcrslope){
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pcrslope->mNumerator = pInstance->mPcrSlope.mNumerator;
 	pcrslope->mDenominator = pInstance->mPcrSlope.mDenominator;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_update_avref(s32 sSyncInsId, int flag) {
+long mediasync_ins_update_avref(MediaSyncManager* pSyncManage, int flag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -2441,59 +2602,64 @@ long mediasync_ins_update_avref(s32 sSyncInsId, int flag) {
 		pInstance->mAVRef ++;
 	else
 		pInstance->mAVRef --;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 
 }
 
-long mediasync_ins_get_avref(s32 sSyncInsId, int *ref) {
+long mediasync_ins_get_avref(MediaSyncManager* pSyncManage, int *ref) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*ref = pInstance->mAVRef;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	mediasync_ins_set_queue_audio_info_l(pInstance,&info);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }
 
-long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mCacheFrames) {
@@ -2505,43 +2671,47 @@ long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* inf
 		info->frameSystemTime = pInstance->mSyncInfo.queueAudioInfo.frameSystemTime;
 	}
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
 
-long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	mediasync_ins_set_queue_video_info_l(pInstance,&info);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 
 }
 
 EXPORT_SYMBOL(mediasync_ins_set_queue_video_info);
 
-long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mCacheFrames) {
@@ -2553,23 +2723,25 @@ long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* inf
 		info->framePts = pInstance->mSyncInfo.queueVideoInfo.framePts;
 		info->frameSystemTime = pInstance->mSyncInfo.queueVideoInfo.frameSystemTime;
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-/**/
-long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packets_info info) {
-	mediasync_ins* pInstance = NULL;
-	mediasync_frameinfo frameinfo;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+long mediasync_ins_set_audio_packets_info_implementation(MediaSyncManager* pSyncManage, mediasync_audio_packets_info info) {
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	mediasync_frameinfo frameinfo;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -2601,10 +2773,24 @@ long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packet
 			pInstance->mSyncInfo.audioPacketsInfo.packetsPts,\
 			pInstance->mSyncInfo.audioPacketsInfo.packetsSize);
 	mediasync_ins_set_queue_audio_info_l(pInstance, &frameinfo);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }
+
+
+/**/
+long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packets_info info) {
+
+	int ret = 0;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	ret = mediasync_ins_set_audio_packets_info_implementation(pSyncManage,info);
+	return ret;
+}
 EXPORT_SYMBOL(mediasync_ins_set_audio_packets_info);
+
 
 void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance, mediasync_audioinfo* info) {
 	int64_t Before_diff = 0;
@@ -2682,37 +2868,40 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 	return;
 }
 
-long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* info) {
+long mediasync_ins_get_audio_cache_info(MediaSyncManager* pSyncManage, mediasync_audioinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	mediasync_ins_get_audio_cache_info_implementation(pInstance,info);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packets_info info) {
-	mediasync_ins* pInstance = NULL;
-	mediasync_frameinfo frameinfo;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+long mediasync_ins_set_video_packets_info_implementation(MediaSyncManager* pSyncManage, mediasync_video_packets_info info) {
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	mediasync_frameinfo frameinfo;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
@@ -2749,7 +2938,22 @@ long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packet
 	}
 	pInstance->mVideoCacheUpdateCount++;
 	mediasync_ins_set_queue_video_info_l(pInstance,&frameinfo);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+	return 0;
+
+}
+
+
+
+long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packets_info info) {
+	int ret = 0;
+	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+	ret = mediasync_ins_set_video_packets_info_implementation(pSyncManage,info);
+	return ret;
+
 	return 0;
 
 }
@@ -2839,61 +3043,66 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 	return;
 }
 
-long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* info) {
+long mediasync_ins_get_video_cache_info(MediaSyncManager* pSyncManage, mediasync_videoinfo* info) {
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 
-	s32 index = get_index_from_sync_id(sSyncInsId);
-
-	if (index < 0 || index >= MAX_INSTANCE_NUM) {
+	if (pSyncManage == NULL) {
 		return -1;
 	}
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	mediasync_ins_get_video_cache_info_implementation(pInstance,info);
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
 
-long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_first_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
-
-	pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.framePts = info.framePts;
-	pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.frameSystemTime = info.frameSystemTime;
-	pInstance->mSyncInfo.firstAudioPacketsInfo.framePts = info.framePts;
-	pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = info.frameSystemTime;
-	if (info.framePts == -1 && info.frameSystemTime == -1) {
-		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
+	if (media_sync_calculate_cache_enable) {
+		pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.framePts = info.framePts;
+		pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.frameSystemTime = info.frameSystemTime;
+		pInstance->mSyncInfo.firstAudioPacketsInfo.framePts = info.framePts;
+		pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = info.frameSystemTime;
+		if (info.framePts == -1 && info.frameSystemTime == -1) {
+			clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
+		}
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }
 
-long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_first_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mCacheFrames) {
@@ -2903,46 +3112,50 @@ long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinf
 		info->framePts = pInstance->mSyncInfo.firstAudioPacketsInfo.framePts;
 		info->frameSystemTime = pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime;
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_first_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
-
-	pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.framePts = info.framePts;
-	pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.frameSystemTime = info.frameSystemTime;
-	pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.framePts;
-	pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = info.frameSystemTime;
-	if (info.framePts == -1 && info.frameSystemTime == -1) {
-		clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
+	if (media_sync_calculate_cache_enable) {
+		pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.framePts = info.framePts;
+		pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.frameSystemTime = info.frameSystemTime;
+		pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.framePts;
+		pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = info.frameSystemTime;
+		if (info.framePts == -1 && info.frameSystemTime == -1) {
+			clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
+		}
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 
 }
 
-long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_first_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 	if (pInstance->mCacheFrames) {
@@ -2952,136 +3165,147 @@ long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinf
 		info->framePts = pInstance->mSyncInfo.firstVideoPacketsInfo.framePts;
 		info->frameSystemTime = pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime;
 	}
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId) {
+long mediasync_ins_set_player_instance_id(MediaSyncManager* pSyncManage, s32 PlayerInstanceId) {
 
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mPlayerInstanceId = PlayerInstanceId;
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId) {
+long mediasync_ins_get_player_instance_id(MediaSyncManager* pSyncManage, s32* PlayerInstanceId) {
 
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	*PlayerInstanceId = pInstance->mPlayerInstanceId ;
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_pause_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncInfo.pauseVideoInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.pauseVideoInfo.frameSystemTime = info.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 
 }
 
-long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_pause_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.pauseVideoInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.pauseVideoInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
-long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info) {
+long mediasync_ins_set_pause_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	pInstance->mSyncInfo.pauseAudioInfo.framePts = info.framePts;
 	pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime = info.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 
 }
 
-long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info) {
+long mediasync_ins_get_pause_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
 		return -1;
+	}
 
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	info->framePts = pInstance->mSyncInfo.pauseAudioInfo.framePts;
 	info->frameSystemTime = pInstance->mSyncInfo.pauseAudioInfo.frameSystemTime;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return 0;
 }
 
 
-s64 mediasync_ins_get_stc_time(mediasync_ins* pInstance,s64 CurTimeUs) {
+s64 mediasync_ins_get_stc_time_implementation(mediasync_ins* pInstance,s64 CurTimeUs) {
 
 	u64 mCurPcr = 0;
 	u64 Interval = 0;
@@ -3097,6 +3321,35 @@ s64 mediasync_ins_get_stc_time(mediasync_ins* pInstance,s64 CurTimeUs) {
 
 	return mCurPcr;
 }
+
+s64 mediasync_ins_get_stc_time(MediaSyncManager* pSyncManage) {
+
+
+	u64 mCurPcr = 0;
+	u64 CurTimeUs = 0;
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+	CurTimeUs = get_system_time_us();
+	mCurPcr = mediasync_ins_get_stc_time_implementation(pInstance,CurTimeUs);
+
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+
+	return mCurPcr;
+
+}
+
+
+
 void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_info* info) {
 
 	s64 CurTimeUs = 0;
@@ -3141,7 +3394,7 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 	if (time_diff >= 500000) {
 		if (pInstance->mDemuxId >= 0) {
 			demux_get_pcr(pInstance->mDemuxId, 0, &pcr);
-			mCurPcr = mediasync_ins_get_stc_time(pInstance,CurTimeUs);
+			mCurPcr = mediasync_ins_get_stc_time_implementation(pInstance,CurTimeUs);
 		}
 		pcr_ns = div_u64(pcr * 100000 , 9);
 		pcr_diff = pcr_ns - pInstance->mLastCheckSlopeDemuxPts;
@@ -3285,143 +3538,219 @@ long mediasync_ins_get_update_info(mediasync_ins* pInstance, mediasync_update_in
 	return 0;
 }
 
-
-long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr) {
+long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, unsigned int is_compat_ptr) {
 	mediasync_ins* pInstance = NULL;
 	s32 minSize = 0;
-	long ret = -1;
+	long ret = 0;
+	mediasync_control mediasyncUserControl;
 	mediasync_control mediasyncControl;
-	s32 index = get_index_from_sync_id(sSyncInsId);
+	mediasync_update_info info;
 	ulong ptr;
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	if (pSyncManage == NULL) {
 		return -1;
 	}
-	if (copy_from_user((void *)&mediasyncControl,
+
+	if (copy_from_user((void *)&mediasyncUserControl,
 				(void *)arg,
 				sizeof(mediasyncControl))) {
-				return -EFAULT;
+		return -EFAULT;
 	}
 
-	switch (mediasyncControl.cmd) {
+	switch (mediasyncUserControl.cmd) {
+		case GET_UPDATE_INFO:
+		{
+			mediasyncControl.cmd = GET_UPDATE_INFO;
+			mediasyncControl.size = sizeof(mediasync_update_info);
+			mediasyncControl.ptr = (ulong)(&info);
+
+			mediasync_ins_ext_ctrls(pSyncManage,&mediasyncControl);
+
+			minSize = mediasyncUserControl.size;
+			if (minSize > mediasyncControl.size) {
+				minSize = mediasyncControl.size;
+			}
+
+			if (is_compat_ptr == 1) {
+#ifdef CONFIG_COMPAT
+				ptr = (ulong)compat_ptr(mediasyncUserControl.ptr);
+#else
+				ptr = mediasyncUserControl.ptr;
+#endif
+			} else {
+				ptr = mediasyncUserControl.ptr;
+			}
+
+			if (copy_to_user((void *)ptr,(void*)&info,minSize)) {
+				mediasync_pr_info(0,pInstance,"copy_to_user ptr -EFAULT \n");
+				ret = -EFAULT;
+				break;
+			}
+
+			mediasyncUserControl.size = minSize;
+			if (copy_to_user((void *)arg,&mediasyncUserControl,sizeof(mediasyncControl))) {
+				mediasync_pr_info(0,pInstance,"copy_to_user arg -EFAULT \n");
+				ret = -EFAULT;
+			}
+
+			break;
+		}
+		case GET_SLOW_SYNC_ENABLE:
+		case GET_TRICK_MODE:
+		{
+			mediasync_ins_ext_ctrls(pSyncManage,&mediasyncUserControl);
+			if (copy_to_user((void *)arg,&mediasyncUserControl,sizeof(mediasyncControl))) {
+				pr_info("copy_to_user arg -EFAULT \n");
+				ret = -EFAULT;
+			}
+			break;
+		}
+		case SET_VIDEO_FRAME_ADVANCE:
+		case SET_SLOW_SYNC_ENABLE:
+		case SET_TRICK_MODE:
+		{
+			mediasync_ins_ext_ctrls(pSyncManage,&mediasyncUserControl);
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return ret;
+}
+
+
+long mediasync_ins_ext_ctrls(MediaSyncManager* pSyncManage,mediasync_control* mediasyncControl)
+{
+	long ret = -1;
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	s32 minSize = 0;
+	//ulong ptr;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+
+	switch (mediasyncControl->cmd) {
 		case GET_UPDATE_INFO:
 		{
 			mediasync_update_info info;
 			mediasync_ins_get_update_info(pInstance,&info);
 			minSize = sizeof(mediasync_update_info);
 
-			if (minSize > mediasyncControl.size) {
-				minSize = mediasyncControl.size;
+			if (minSize > mediasyncControl->size) {
+				minSize = mediasyncControl->size;
 			}
 
-			if (is_compat_ptr == 1) {
-				#ifdef CONFIG_COMPAT
-				ptr = (ulong)compat_ptr(mediasyncControl.ptr);
-				#else
-				ptr = mediasyncControl.ptr;
-				#endif
-			} else {
-				ptr = mediasyncControl.ptr;
-			}
+			memcpy((mediasync_update_info*)mediasyncControl->ptr,&info,minSize);
 
-			if (copy_to_user((void *)ptr,(void*)&info,minSize)) {
-				mediasync_pr_info(0,pInstance,"copy_to_user ptr -EFAULT \n");
-				return -EFAULT;
-			}
+			mediasyncControl->size = minSize;
 
-			mediasyncControl.size = minSize;
-			if (copy_to_user((void *)arg,&mediasyncControl,sizeof(mediasyncControl))) {
-				mediasync_pr_info(0,pInstance,"copy_to_user arg -EFAULT \n");
-				return -EFAULT;
-			}
 			ret = 0;
 			break;
 		}
 		case SET_VIDEO_FRAME_ADVANCE:
 		{
-			pInstance->isVideoFrameAdvance = mediasyncControl.value;
+			pInstance->isVideoFrameAdvance = mediasyncControl->value;
 			ret = 0;
 			break;
 		}
 		case SET_SLOW_SYNC_ENABLE:
 		{
-			pInstance->mSlowSyncEnable = mediasyncControl.value;
+			pInstance->mSlowSyncEnable = mediasyncControl->value;
 			ret = 0;
 			break;
 		}
 		case GET_SLOW_SYNC_ENABLE:
 		{
-			mediasyncControl.value = pInstance->mSlowSyncEnable;
-			if (copy_to_user((void *)arg,&mediasyncControl,sizeof(mediasyncControl))) {
-				pr_info("copy_to_user arg -EFAULT \n");
-				return -EFAULT;
-			}
+			mediasyncControl->value = pInstance->mSlowSyncEnable;
 			ret = 0;
+			break;
+		}
+		case SET_TRICK_MODE:
+		{
+			pInstance->mStcParmUpdateCount++;
+			pInstance->mVideoTrickMode = mediasyncControl->value;
+			ret = 0;
+			//mediasync_pr_info(0,pInstance," set mVideoTrickMode : %d \n",pInstance->mVideoTrickMode);
+			break;
+		}
+		case GET_TRICK_MODE:
+		{
+			mediasyncControl->value = pInstance->mVideoTrickMode;
+			ret = 0;
+			//mediasync_pr_info(0,pInstance," get mVideoTrickMode : %d \n",pInstance->mVideoTrickMode);
 			break;
 		}
 		default:
 			break;
 	}
 
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+
 
 	return ret;
 }
 
 
-long mediasync_ins_set_video_smooth_tag(s32 sSyncInsId, s32 sSmooth_tag) {
+
+
+long mediasync_ins_set_video_smooth_tag(MediaSyncManager* pSyncManage, s32 sSmooth_tag) {
 	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-		return -1;
-	}
-
-	pInstance->mVideoSmoothTag = sSmooth_tag;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-
-	return 0;
-}
-
-long mediasync_ins_get_video_smooth_tag(s32 sSyncInsId, s32* spSmooth_tag) {
-	mediasync_ins* pInstance = NULL;
-	s32 index = get_index_from_sync_id(sSyncInsId);
-	if (index < 0 || index >= MAX_INSTANCE_NUM)
-		return -1;
-
-	mutex_lock(&(vMediaSyncInsList[index].m_lock));
-	pInstance = vMediaSyncInsList[index].pInstance;
-	if (pInstance == NULL) {
-		mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-		return -1;
-	}
-
-	*spSmooth_tag = pInstance->mVideoSmoothTag;
-	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
-
-	return 0;
-}
-
-long mediasync_ins_check_apts_valid(s32 sSyncInsId, s64 apts) {
-	long ret = -1;
-	mediasync_ins* pInstance = NULL;
-	mediasync_frameinfo_inner frame_in;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	unsigned long flags = 0;
 	if (pSyncManage == NULL) {
 		return -1;
 	}
 
-	mutex_lock(&(pSyncManage->m_lock));
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+
+	pInstance->mVideoSmoothTag = sSmooth_tag;
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+
+	return 0;
+}
+
+long mediasync_ins_get_video_smooth_tag(MediaSyncManager* pSyncManage, s32* spSmooth_tag) {
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
+	pInstance = pSyncManage->pInstance;
+	if (pInstance == NULL) {
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+		return -1;
+	}
+
+	*spSmooth_tag = pInstance->mVideoSmoothTag;
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
+
+	return 0;
+}
+
+long mediasync_ins_check_apts_valid(MediaSyncManager* pSyncManage, s64 apts) {
+	long ret = -1;
+	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
+	mediasync_frameinfo_inner frame_in;
+
+	if (pSyncManage == NULL) {
+		return -1;
+	}
+
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
 	frame_in.frameid = 0;
 	pInstance = pSyncManage->pInstance;
 	if (pInstance != NULL) {
@@ -3433,21 +3762,22 @@ long mediasync_ins_check_apts_valid(s32 sSyncInsId, s64 apts) {
 		}
 	}
 
-	mutex_unlock(&(pSyncManage->m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return ret;
 }
 
-long mediasync_ins_check_vpts_valid(s32 sSyncInsId, s64 vpts) {
+long mediasync_ins_check_vpts_valid(MediaSyncManager* pSyncManage, s64 vpts) {
 	long ret = -1;
 	mediasync_ins* pInstance = NULL;
+	unsigned long flags = 0;
 	mediasync_frameinfo_inner frame_in;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+
 	if (pSyncManage == NULL) {
 		return -1;
 	}
 
-	mutex_lock(&(pSyncManage->m_lock));
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
 	frame_in.frameid = 0;
 	pInstance = pSyncManage->pInstance;
 	if (pInstance != NULL) {
@@ -3459,28 +3789,27 @@ long mediasync_ins_check_vpts_valid(s32 sSyncInsId, s64 vpts) {
 		}
 	}
 
-	mutex_unlock(&(pSyncManage->m_lock));
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 
 	return ret;
 }
 
-long mediasync_ins_set_cache_frames(s32 sSyncInsId, s64 cache) {
+long mediasync_ins_set_cache_frames(MediaSyncManager* pSyncManage, s64 cache) {
 	mediasync_ins* pInstance = NULL;
-	MediaSyncManager* pSyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
+	unsigned long flags = 0;
 	if (pSyncManage == NULL) {
 		return -1;
 	}
-	mutex_lock(&(pSyncManage->m_lock));
+	spin_lock_irqsave(&(pSyncManage->m_lock),flags);
 	pInstance = pSyncManage->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&(pSyncManage->m_lock));
+		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
 
 	mediasync_pr_info(0,pInstance,"mCacheFrames=%lld",cache);
 	pInstance->mCacheFrames = cache;
-	mutex_unlock(&(pSyncManage->m_lock));
-
+	spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 	return 0;
 }
 
@@ -3489,3 +3818,9 @@ MODULE_PARM_DESC(media_sync_debug_level, "\n mediasync debug level\n");
 
 module_param(media_sync_user_debug_level, uint, 0664);
 MODULE_PARM_DESC(media_sync_user_debug_level, "\n mediasync user debug level\n");
+
+
+module_param(media_sync_calculate_cache_enable, uint, 0664);
+MODULE_PARM_DESC(media_sync_calculate_cache_enable, "\n mediasync calculate cache enable\n");
+
+

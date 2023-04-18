@@ -29,6 +29,11 @@
 
 #define MIN_UPDATETIME_THRESHOLD_US 50000
 #define RECORD_SLOPE_NUM 5
+#define DEFAULT_TRIGGER_DISCONTINUE_THRESHOLD 630000//(7000 * 90)
+#define DEFAULT_REMOVE_DISCONTINUE_THRESHOLD 450000
+#define DEFAULT_FRAME_SEGMENT_THRESHOLD 45000//(500 * 90)
+#define TIME_DISCONTINUE_DURATION  5000000 // (5s * TIME_UNIT_S)
+#define ABSSUB(a, b) (((a) >= (b)) ? ((a) - (b)) : ((b) - (a)))
 
 typedef enum {
 	MEDIA_SYNC_VMASTER = 0,
@@ -36,6 +41,15 @@ typedef enum {
 	MEDIA_SYNC_PCRMASTER = 2,
 	MEDIA_SYNC_MODE_MAX = 255,
 } sync_mode;
+
+typedef enum {
+    MEDIA_VIDEO = 0,
+    MEDIA_AUDIO = 1,
+    MEDIA_DMXPCR = 2,
+    MEDIA_SUBTITLE = 3,
+    MEDIA_COMMON = 4,
+    MEDIA_TYPE_MAX = 255,
+} sync_stream_type;
 
 typedef enum {
 	MEDIASYNC_INIT = 0,
@@ -57,11 +71,21 @@ typedef enum {
 	REF_CLOCK,
 } mediasync_clocktype;
 
+/*Video trick mode*/
+typedef enum {
+    VIDEO_TRICK_MODE_NONE = 0,          // Disable trick mode
+    VIDEO_TRICK_MODE_PAUSE = 1,         // Pause the video decoder
+    VIDEO_TRICK_MODE_PAUSE_NEXT = 2,    // Pause the video decoder when a new frame displayed
+    VIDEO_TRICK_MODE_IONLY = 3          // Decoding and Out I frame only
+} mediasync_video_trick_mode;
+
 typedef enum {
 	GET_UPDATE_INFO = 0,
 	GET_SLOW_SYNC_ENABLE,
+	GET_TRICK_MODE,
 	SET_VIDEO_FRAME_ADVANCE = 500,
 	SET_SLOW_SYNC_ENABLE,
+	SET_TRICK_MODE,
 } mediasync_control_cmd;
 
 typedef struct m_control {
@@ -256,6 +280,7 @@ typedef struct instance{
 	u32 isVideoFrameAdvance;
 	s64 mLastCheckSlopeSystemtime;
 	s64 mLastCheckSlopeDemuxPts;
+	s32 mVideoTrickMode;
 	mediasync_clocktype mSourceClockType;
 	mediasync_clockprovider_state mSourceClockState;
 	mediasync_audioinfo mAudioInfo;
@@ -275,116 +300,127 @@ typedef struct instance{
 	s32 mlastCheckVideocacheDuration;
 }mediasync_ins;
 
+typedef struct Media_Sync_Manage {
+	mediasync_ins* pInstance;
+	spinlock_t m_lock;
+} MediaSyncManager;
+
 long mediasync_init(void);
 long mediasync_ins_alloc(s32 sDemuxId,
 			s32 sPcrPid,
 			s32 *sSyncInsId,
-			mediasync_ins **pIns);
+			MediaSyncManager **pSyncManage);
 
 long mediasync_ins_binder(s32 sSyncInsId,
-			mediasync_ins **pIns);
+			MediaSyncManager **pSyncManage);
 long mediasync_static_ins_binder(s32 sSyncInsId,
-			mediasync_ins **pIns);
-long mediasync_ins_unbinder(s32 sSyncInsId, s32 sStreamType);
-long mediasync_ins_update_mediatime(s32 sSyncInsId,
+			MediaSyncManager **pSyncManage);
+long mediasync_ins_unbinder(MediaSyncManager* pSyncManage, s32 sStreamType);
+long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 					s64 lMediaTime,
 					s64 lSystemTime, bool forceUpdate);
-long mediasync_ins_set_mediatime_speed(s32 sSyncInsId, mediasync_speed fSpeed);
-long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused);
-long mediasync_ins_get_paused(s32 sSyncInsId, s32* spPaused);
-long mediasync_ins_get_trackmediatime(s32 sSyncInsId, s64* lpTrackMediaTime);
-long mediasync_ins_set_syncmode(s32 sSyncInsId, s32 sSyncMode);
-long mediasync_ins_get_syncmode(s32 sSyncInsId, s32 *sSyncMode);
-long mediasync_ins_get_mediatime_speed(s32 sSyncInsId, mediasync_speed *fpSpeed);
-long mediasync_ins_get_anchor_time(s32 sSyncInsId,
+long mediasync_ins_set_mediatime_speed(MediaSyncManager* pSyncManage, mediasync_speed fSpeed);
+long mediasync_ins_set_paused(MediaSyncManager* pSyncManage, s32 sPaused);
+long mediasync_ins_get_paused(MediaSyncManager* pSyncManage, s32* spPaused);
+long mediasync_ins_get_trackmediatime(MediaSyncManager* pSyncManage, s64* lpTrackMediaTime);
+long mediasync_ins_set_syncmode(MediaSyncManager* pSyncManage, s32 sSyncMode);
+long mediasync_ins_get_syncmode(MediaSyncManager* pSyncManage, s32 *sSyncMode);
+long mediasync_ins_get_mediatime_speed(MediaSyncManager* pSyncManage, mediasync_speed *fpSpeed);
+long mediasync_ins_get_anchor_time(MediaSyncManager* pSyncManage,
 				s64* lpMediaTime,
 				s64* lpSTCTime,
 				s64* lpSystemTime);
-long mediasync_ins_get_systemtime(s32 sSyncInsId,
+long mediasync_ins_get_systemtime(MediaSyncManager* pSyncManage,
 				s64* lpSTC,
 				s64* lpSystemTime);
-long mediasync_ins_get_nextvsync_systemtime(s32 sSyncInsId, s64* lpSystemTime);
-long mediasync_ins_set_updatetime_threshold(s32 sSyncInsId, s64 lTimeThreshold);
-long mediasync_ins_get_updatetime_threshold(s32 sSyncInsId, s64* lpTimeThreshold);
+long mediasync_ins_get_nextvsync_systemtime(MediaSyncManager* pSyncManage, s64* lpSystemTime);
+long mediasync_ins_set_updatetime_threshold(MediaSyncManager* pSyncManage, s64 lTimeThreshold);
+long mediasync_ins_get_updatetime_threshold(MediaSyncManager* pSyncManage, s64* lpTimeThreshold);
 
-long mediasync_ins_set_clocktype(s32 sSyncInsId, mediasync_clocktype type);
-long mediasync_ins_get_clocktype(s32 sSyncInsId, mediasync_clocktype* type);
-long mediasync_ins_set_avsyncstate(s32 sSyncInsId, s32 state);
-long mediasync_ins_get_avsyncstate(s32 sSyncInsId, s32* state);
-long mediasync_ins_set_hasaudio(s32 sSyncInsId, int hasaudio);
-long mediasync_ins_get_hasaudio(s32 sSyncInsId, int* hasaudio);
-long mediasync_ins_set_hasvideo(s32 sSyncInsId, int hasvideo);
-long mediasync_ins_get_hasvideo(s32 sSyncInsId, int* hasvideo);
-long mediasync_ins_set_audioinfo(s32 sSyncInsId, mediasync_audioinfo info);
-long mediasync_ins_get_audioinfo(s32 sSyncInsId, mediasync_audioinfo* info);
-long mediasync_ins_set_videoinfo(s32 sSyncInsId, mediasync_videoinfo info);
-long mediasync_ins_set_audiomute(s32 sSyncInsId, int mute_flag);
-long mediasync_ins_get_audiomute(s32 sSyncInsId, int* mute_flag);
-long mediasync_ins_get_videoinfo(s32 sSyncInsId, mediasync_videoinfo* info);
-long mediasync_ins_set_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_firstaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_firstvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_firstdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_refclockinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_refclockinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_curaudioframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_curvideoframeinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_curdmxpcrinfo(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_clockstate(s32 sSyncInsId, mediasync_clockprovider_state state);
-long mediasync_ins_get_clockstate(s32 sSyncInsId, mediasync_clockprovider_state* state);
-long mediasync_ins_set_startthreshold(s32 sSyncInsId, s32 threshold);
-long mediasync_ins_get_startthreshold(s32 sSyncInsId, s32* threshold);
-long mediasync_ins_set_ptsadjust(s32 sSyncInsId, s32 adjust_pts);
-long mediasync_ins_get_ptsadjust(s32 sSyncInsId, s32* adjust_pts);
-long mediasync_ins_set_videoworkmode(s32 sSyncInsId, s32 mode);
-long mediasync_ins_get_videoworkmode(s32 sSyncInsId, s32* mode);
-long mediasync_ins_set_fccenable(s32 sSyncInsId, s32 enable);
-long mediasync_ins_get_fccenable(s32 sSyncInsId, s32* enable);
-long mediasync_ins_set_source_type(s32 sSyncInsId, aml_Source_Type sourceType);
-long mediasync_ins_get_source_type(s32 sSyncInsId, aml_Source_Type* sourceType);
-long mediasync_ins_set_start_media_time(s32 sSyncInsId, s64 startime);
-long mediasync_ins_get_start_media_time(s32 sSyncInsId, s64* starttime);
-long mediasync_ins_set_audioformat(s32 sSyncInsId, mediasync_audio_format format);
-long mediasync_ins_get_audioformat(s32 sSyncInsId, mediasync_audio_format* format);
-long mediasync_ins_set_pauseresume(s32 sSyncInsId, int flag);
-long mediasync_ins_get_pauseresume(s32 sSyncInsId, int* flag);
-long mediasync_ins_set_pcrslope(s32 sSyncInsId, mediasync_speed pcrslope);
-long mediasync_ins_get_pcrslope(s32 sSyncInsId, mediasync_speed *pcrslope);
-long mediasync_ins_reset(s32 sSyncInsId);
-long mediasync_ins_update_avref(s32 sSyncInsId, int flag);
-long mediasync_ins_get_avref(s32 sSyncInsId, int *ref);
-long mediasync_ins_set_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
+long mediasync_ins_set_clocktype(MediaSyncManager* pSyncManage, mediasync_clocktype type);
+long mediasync_ins_get_clocktype(MediaSyncManager* pSyncManage, mediasync_clocktype* type);
+long mediasync_ins_set_avsyncstate(MediaSyncManager* pSyncManage, s32 state);
+long mediasync_ins_get_avsyncstate(MediaSyncManager* pSyncManage, s32* state);
+long mediasync_ins_set_hasaudio(MediaSyncManager* pSyncManage, int hasaudio);
+long mediasync_ins_get_hasaudio(MediaSyncManager* pSyncManage, int* hasaudio);
+long mediasync_ins_set_hasvideo(MediaSyncManager* pSyncManage, int hasvideo);
+long mediasync_ins_get_hasvideo(MediaSyncManager* pSyncManage, int* hasvideo);
+long mediasync_ins_set_audioinfo(MediaSyncManager* pSyncManage, mediasync_audioinfo info);
+long mediasync_ins_get_audioinfo(MediaSyncManager* pSyncManage, mediasync_audioinfo* info);
+long mediasync_ins_set_videoinfo(MediaSyncManager* pSyncManage, mediasync_videoinfo info);
+long mediasync_ins_set_audiomute(MediaSyncManager* pSyncManage, int mute_flag);
+long mediasync_ins_get_audiomute(MediaSyncManager* pSyncManage, int* mute_flag);
+long mediasync_ins_get_videoinfo(MediaSyncManager* pSyncManage, mediasync_videoinfo* info);
+long mediasync_ins_set_firstaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_firstaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_firstvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_firstvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_firstdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_firstdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_refclockinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_refclockinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_curaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_curaudioframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_curvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_curvideoframeinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_curdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_curdmxpcrinfo(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_clockstate(MediaSyncManager* pSyncManage, mediasync_clockprovider_state state);
+long mediasync_ins_get_clockstate(MediaSyncManager* pSyncManage, mediasync_clockprovider_state* state);
+long mediasync_ins_set_startthreshold(MediaSyncManager* pSyncManage, s32 threshold);
+long mediasync_ins_get_startthreshold(MediaSyncManager* pSyncManage, s32* threshold);
+long mediasync_ins_set_ptsadjust(MediaSyncManager* pSyncManage, s32 adjust_pts);
+long mediasync_ins_get_ptsadjust(MediaSyncManager* pSyncManage, s32* adjust_pts);
+long mediasync_ins_set_videoworkmode(MediaSyncManager* pSyncManage, s32 mode);
+long mediasync_ins_get_videoworkmode(MediaSyncManager* pSyncManage, s32* mode);
+long mediasync_ins_set_fccenable(MediaSyncManager* pSyncManage, s32 enable);
+long mediasync_ins_get_fccenable(MediaSyncManager* pSyncManage, s32* enable);
+long mediasync_ins_set_source_type(MediaSyncManager* pSyncManage, aml_Source_Type sourceType);
+long mediasync_ins_get_source_type(MediaSyncManager* pSyncManage, aml_Source_Type* sourceType);
+long mediasync_ins_set_start_media_time(MediaSyncManager* pSyncManage, s64 startime);
+long mediasync_ins_get_start_media_time(MediaSyncManager* pSyncManage, s64* starttime);
+long mediasync_ins_set_audioformat(MediaSyncManager* pSyncManage, mediasync_audio_format format);
+long mediasync_ins_get_audioformat(MediaSyncManager* pSyncManage, mediasync_audio_format* format);
+long mediasync_ins_set_pauseresume(MediaSyncManager* pSyncManage, int flag);
+long mediasync_ins_get_pauseresume(MediaSyncManager* pSyncManage, int* flag);
+long mediasync_ins_set_pcrslope(MediaSyncManager* pSyncManage, mediasync_speed pcrslope);
+long mediasync_ins_get_pcrslope(MediaSyncManager* pSyncManage, mediasync_speed *pcrslope);
+long mediasync_ins_reset(MediaSyncManager* pSyncManage);
+long mediasync_ins_update_avref(MediaSyncManager* pSyncManage, int flag);
+long mediasync_ins_get_avref(MediaSyncManager* pSyncManage, int *ref);
+long mediasync_ins_set_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+
+long mediasync_ins_set_audio_packets_info_implementation(MediaSyncManager* pSyncManage, mediasync_audio_packets_info info);
+
 long mediasync_ins_set_audio_packets_info(s32 sSyncInsId, mediasync_audio_packets_info info);
-long mediasync_ins_get_audio_cache_info(s32 sSyncInsId, mediasync_audioinfo* info);
+long mediasync_ins_get_audio_cache_info(MediaSyncManager* pSyncManage, mediasync_audioinfo* info);
+long mediasync_ins_set_video_packets_info_implementation(MediaSyncManager* pSyncManage, mediasync_video_packets_info info);
 long mediasync_ins_set_video_packets_info(s32 sSyncInsId, mediasync_video_packets_info info);
-long mediasync_ins_get_video_cache_info(s32 sSyncInsId, mediasync_videoinfo* info);
-long mediasync_ins_set_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_first_queue_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_first_queue_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_player_instance_id(s32 sSyncInsId, s32 PlayerInstanceId);
-long mediasync_ins_get_player_instance_id(s32 sSyncInsId, s32* PlayerInstanceId);
-long mediasync_ins_get_avsync_state_cur_time_us(s32 sSyncInsId, mediasync_avsync_state_cur_time_us* avsyncstate);
-long mediasync_ins_set_pause_video_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_pause_video_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_set_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo info);
-long mediasync_ins_get_pause_audio_info(s32 sSyncInsId, mediasync_frameinfo* info);
-long mediasync_ins_check_apts_valid(s32 sSyncInsId, s64 apts);
-long mediasync_ins_check_vpts_valid(s32 sSyncInsId, s64 vpts);
-long mediasync_ins_set_cache_frames(s32 sSyncInsId, s64 cache);
-long mediasync_ins_ext_ctrls(s32 sSyncInsId, ulong arg, unsigned int is_compat_ptr);
-s64 mediasync_ins_get_stc_time(mediasync_ins* pInstance,s64 CurTimeUs);
+
+long mediasync_ins_get_video_cache_info(MediaSyncManager* pSyncManage, mediasync_videoinfo* info);
+long mediasync_ins_set_first_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_first_queue_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_first_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_first_queue_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_player_instance_id(MediaSyncManager* pSyncManage, s32 PlayerInstanceId);
+long mediasync_ins_get_player_instance_id(MediaSyncManager* pSyncManage, s32* PlayerInstanceId);
+long mediasync_ins_get_avsync_state_cur_time_us(MediaSyncManager* pSyncManage, mediasync_avsync_state_cur_time_us* avsyncstate);
+long mediasync_ins_set_pause_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_pause_video_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_set_pause_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo info);
+long mediasync_ins_get_pause_audio_info(MediaSyncManager* pSyncManage, mediasync_frameinfo* info);
+long mediasync_ins_check_apts_valid(MediaSyncManager* pSyncManage, s64 apts);
+long mediasync_ins_check_vpts_valid(MediaSyncManager* pSyncManage, s64 vpts);
+long mediasync_ins_set_cache_frames(MediaSyncManager* pSyncManage, s64 cache);
+long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, unsigned int is_compat_ptr);
+long mediasync_ins_ext_ctrls(MediaSyncManager* pSyncManage,mediasync_control* mediasyncControl);
+s64 mediasync_ins_get_stc_time(MediaSyncManager* pSyncManage);
 void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_info* info);
 long mediasync_ins_set_pcrslope_implementation(mediasync_ins* pInstance, mediasync_speed pcrslope);
-long mediasync_ins_set_video_smooth_tag(s32 sSyncInsId, s32 sSmooth_tag);
-long mediasync_ins_get_video_smooth_tag(s32 sSyncInsId, s32* spSmooth_tag);
+long mediasync_ins_set_video_smooth_tag(MediaSyncManager* pSyncManage, s32 sSmooth_tag);
+long mediasync_ins_get_video_smooth_tag(MediaSyncManager* pSyncManage, s32* spSmooth_tag);
 
 #endif
