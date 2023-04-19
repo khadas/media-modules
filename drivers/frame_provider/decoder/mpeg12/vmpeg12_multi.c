@@ -865,24 +865,19 @@ static bool error_skip(struct vdec_mpeg12_hw_s *hw,
 
 static inline void vmpeg12_save_hw_context(struct vdec_mpeg12_hw_s *hw, u32 reg)
 {
-	if (reg == 3) {
-		hw->ctx_valid = 0;
-		//pr_info("%s, hw->userdata_wp_ctx %d\n", __func__, hw->userdata_wp_ctx);
-	} else {
-		hw->seqinfo = READ_VREG(MREG_SEQ_INFO);
-		hw->reg_pic_width = READ_VREG(MREG_PIC_WIDTH);
-		hw->reg_pic_height = READ_VREG(MREG_PIC_HEIGHT);
-		hw->reg_mpeg1_2_reg = READ_VREG(MPEG1_2_REG);
-		hw->reg_pic_head_info = READ_VREG(PIC_HEAD_INFO);
-		hw->reg_f_code_reg = READ_VREG(F_CODE_REG);
-		hw->reg_slice_ver_pos_pic_type = READ_VREG(SLICE_VER_POS_PIC_TYPE);
-		hw->reg_vcop_ctrl_reg = READ_VREG(VCOP_CTRL_REG);
-		hw->reg_mb_info = READ_VREG(MB_INFO);
-		hw->reg_signal_type = READ_VREG(AV_SCRATCH_H);
-		debug_print(DECODE_ID(hw), PRINT_FLAG_PARA_DATA,
-			"signal_type = %x", hw->reg_signal_type);
-		hw->ctx_valid = 1;
-	}
+	hw->seqinfo = READ_VREG(MREG_SEQ_INFO);
+	hw->reg_pic_width = READ_VREG(MREG_PIC_WIDTH);
+	hw->reg_pic_height = READ_VREG(MREG_PIC_HEIGHT);
+	hw->reg_mpeg1_2_reg = READ_VREG(MPEG1_2_REG);
+	hw->reg_pic_head_info = READ_VREG(PIC_HEAD_INFO);
+	hw->reg_f_code_reg = READ_VREG(F_CODE_REG);
+	hw->reg_slice_ver_pos_pic_type = READ_VREG(SLICE_VER_POS_PIC_TYPE);
+	hw->reg_vcop_ctrl_reg = READ_VREG(VCOP_CTRL_REG);
+	hw->reg_mb_info = READ_VREG(MB_INFO);
+	hw->reg_signal_type = READ_VREG(AV_SCRATCH_H);
+	debug_print(DECODE_ID(hw), PRINT_FLAG_PARA_DATA,
+		"signal_type = %x\n", hw->reg_signal_type);
+	hw->ctx_valid = 1;
 }
 
 static void vmmpeg2_reset_udr_mgr(struct vdec_mpeg12_hw_s *hw)
@@ -2236,6 +2231,13 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 	}
 
 	reg = READ_VREG(MREG_BUFFEROUT);
+	debug_print(DECODE_ID(hw), PRINT_FLAG_VLD_DETAIL,
+		"%s: lvl=%x ctrl=%x bcnt=%x reg %x\n",
+		__func__,
+		READ_VREG(VLD_MEM_VIFIFO_LEVEL),
+		READ_VREG(VLD_MEM_VIFIFO_CONTROL),
+		READ_VREG(VIFF_BIT_CNT), reg);
+
 	if (reg == MPEG12_DATA_REQUEST) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_RUN_FLOW,
 			"%s: data request, bcnt=%x\n",
@@ -2317,26 +2319,11 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			u32 consume_byte, res_byte, bitcnt;
 
 			bitcnt = READ_VREG(VIFF_BIT_CNT);
-			res_byte = bitcnt >> 3;
+			res_byte = (bitcnt >> 3) + 4; //4: next start code
 			consume_byte = hw->chunk_size - res_byte;
 
 			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 				"%s, size 0x%x, consume 0x%x, res 0x%x\n", __func__,
-				hw->chunk_size, consume_byte, res_byte);
-
-			if (consume_byte > VDEC_FIFO_ALIGN) {
-				consume_byte -= VDEC_FIFO_ALIGN;
-				res_byte += VDEC_FIFO_ALIGN;
-			}
-
-			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
-				"%s, size 0x%x, consume 0x%x, res 0x%x, (consume_byte -= VDEC_FIFO_ALIGN)\n", __func__,
-				hw->chunk_size, consume_byte, res_byte);
-
-			consume_byte -= 0x80; //0x80, constant value, the count(0x25byte, 0x27byte, 0x29byte, 0x2abyte, 0x2bbyte) decoded in the next frame
-			res_byte += 0x80;
-			debug_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
-				"%s, size 0x%x, consume 0x%x, res 0x%x, (consume_byte -= 0x80)\n", __func__,
 				hw->chunk_size, consume_byte, res_byte);
 
 			hw->consume_byte = consume_byte;
@@ -4356,6 +4343,9 @@ MODULE_PARM_DESC(debug_enable,
 module_param(pre_decode_buf_level, int, 0664);
 MODULE_PARM_DESC(pre_decode_buf_level,
 		"\n ammvdec_mpeg12 pre_decode_buf_level\n");
+
+module_param(frmbase_cont_bitlevel, uint, 0664);
+MODULE_PARM_DESC(frmbase_cont_bitlevel, "\nfrmbase_cont_bitlevel\n");
 
 module_param(start_decode_buf_level, int, 0664);
 MODULE_PARM_DESC(start_decode_buf_level,
