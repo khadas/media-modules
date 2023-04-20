@@ -313,6 +313,7 @@ extern int max_di_instance;
 extern int bypass_nr_flag;
 extern int es_node_expand;
 extern int force_di_permission;
+extern int debug_di_post;
 
 extern int vdec_get_size_ratio(int dw_mode);
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type);
@@ -724,6 +725,8 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	config.dw_mode			= dw;
 	config.tw_mode			= tw;
 
+	if (debug_di_post)
+		config.vpp_work_mode	= VPP_WORK_MODE_DI_POST;
 	aml_buf_configure(&ctx->bm, &config);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -816,19 +819,21 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 			vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
 	}
 
-	vf->index_disp = ctx->index_disp;
-	vf->omx_index = vf->index_disp;
+	if (!debug_di_post) {
+		vf->index_disp = ctx->index_disp;
+		vf->omx_index = vf->index_disp;
 
-	if (vb2_buf->memory == VB2_MEMORY_DMABUF) {
-		struct dma_buf * dma;
+		if (vb2_buf->memory == VB2_MEMORY_DMABUF) {
+			struct dma_buf * dma;
 
-		dma = dstbuf->vb.vb2_buf.planes[0].dbuf;
-		if (dmabuf_is_uvm(dma)) {
-			/* only Y will contain vframe */
-			comp_buf_set_vframe(ctx, vb2_buf, vf);
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-				"set vf(%px) into %dth buf\n",
-				vf, vb2_buf->index);
+			dma = dstbuf->vb.vb2_buf.planes[0].dbuf;
+			if (dmabuf_is_uvm(dma)) {
+				/* only Y will contain vframe */
+				comp_buf_set_vframe(ctx, vb2_buf, vf);
+				v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
+					"set vf(%px) into %dth buf\n",
+					vf, vb2_buf->index);
+			}
 		}
 	}
 }
@@ -889,9 +894,12 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 
 	dump_cma_and_sys_memsize(ctx, NULL);
 
-	vf->index_disp = ctx->index_disp;
-	if ((vf->type & VIDTYPE_V4L_EOS) == 0)
-		ctx->index_disp++;
+	if (!debug_di_post) {
+		vf->index_disp = ctx->index_disp;
+		if ((vf->type & VIDTYPE_V4L_EOS) == 0)
+			ctx->index_disp++;
+	}
+
 	ctx->post_to_upper_done = false;
 
 	if (ctx->stream_mode) {
@@ -4037,6 +4045,8 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	config.dw_mode		= dw;
 	config.tw_mode		= tw;
 
+	if (debug_di_post)
+		config.vpp_work_mode	= VPP_WORK_MODE_DI_POST;
 	aml_buf_configure(&ctx->bm, &config);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,

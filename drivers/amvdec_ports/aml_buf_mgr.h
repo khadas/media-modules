@@ -32,6 +32,10 @@
 #define BUF_FBC_NUM_MAX		(64)
 #define BUF_MAX_PLANES		(3)
 
+/* VPP work mode. */
+#define VPP_WORK_MODE_DI_M2M	(0)
+#define VPP_WORK_MODE_DI_POST	(1)
+
 struct aml_buf_mgr_s;
 
 /*
@@ -42,6 +46,7 @@ struct aml_buf_mgr_s;
  * @enable_fbc		: Enables the AFBC feature.
  * @enable_secure	: Indicates the secure mode.
  * @memory_mode		: memory mode used by v4l2 vb queue.
+ * @vpp_work_mode	: 0: used DI m2m interface, 1: DI post process mode.
  * @planes		: The number of planes used.
  * @luma_length		: The size of the image brightness data.
  * @chroma_length	: The size of the image chroma data.
@@ -51,6 +56,7 @@ struct aml_buf_config {
 	bool	enable_fbc;
 	bool 	enable_secure;
 	int	memory_mode;
+	int	vpp_work_mode;
 	int	planes;
 	u32	luma_length;
 	u32	chroma_length;
@@ -177,6 +183,7 @@ struct aml_buf {
  * @mmu		: The context of mmu box.
  * @fbc_array	: AFBC buffer array data.
  * @get_fbc_info : Used to get AFBC data size information.
+ * @vpp_handle	: The handle of DI post mode.
  */
 struct aml_buf_mgr_s {
 	struct buf_core_mgr_s		bc;
@@ -196,6 +203,9 @@ struct aml_buf_mgr_s {
 #endif
 	struct aml_buf_fbc		*fbc_array;
 	get_fbc_info			get_fbc_info;
+
+	void				*vpp_handle;
+	u32				frm_cnt;
 };
 
 /*
@@ -224,6 +234,19 @@ static inline struct aml_buf_mgr_s *bc_to_bm(struct buf_core_mgr_s *bc)
 static inline struct aml_buf *entry_to_aml_buf(void *entry)
 {
 	return container_of(entry, struct aml_buf, entry);
+}
+
+/*
+ * aml_buf_set_vframe() - Copy the contents of vf into ambuf.
+ *
+ * @ambuf	: The struct of aml_buf.
+ * @vf		: The struct of vframe.
+ *
+ * Used to associate vframe within aml_buf.
+ */
+static inline void aml_buf_set_vframe(struct aml_buf *ambuf, struct vframe_s *vf)
+{
+	ambuf->vframe = *vf;
 }
 
 /*

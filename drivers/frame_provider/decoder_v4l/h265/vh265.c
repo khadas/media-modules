@@ -8509,6 +8509,7 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 static void get_pair_fb(struct hevc_state_s *hevc, struct vframe_s *vf)
 {
 	int i;
+
 	for (i = 0; i < 2; i ++) {
 		if (hevc->pair_fb[i] == NULL) {
 			hevc->pair_fb[i] = (struct aml_buf *)vf->v4l_mem_handle;
@@ -8519,7 +8520,10 @@ static void get_pair_fb(struct hevc_state_s *hevc, struct vframe_s *vf)
 	if (i >= 2) {
 		hevc->pair_fb[0] = (struct aml_buf *)vf->v4l_mem_handle;
 		hevc->pair_fb[1] = NULL;
+		i = 0;
 	}
+
+	aml_buf_set_vframe(hevc->pair_fb[i], vf);
 }
 
 static void clear_pair_fb(struct hevc_state_s *hevc)
@@ -9383,7 +9387,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 							clear_pair_fb(hevc);
 						} else {
 							set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
-
 							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 							ret = aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 						}
@@ -9520,6 +9523,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->v4l_mem_handle	= (ulong)aml_buf;
 
 	vdec_vframe_ready(vdec, vf);
+	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);

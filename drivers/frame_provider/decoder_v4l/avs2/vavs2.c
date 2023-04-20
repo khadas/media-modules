@@ -4493,6 +4493,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			set_vframe(dec, vf, pic, 0);
 			decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
+			aml_buf_set_vframe(aml_buf, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->pts_name, vf->timestamp);
 			ATRACE_COUNTER(dec->new_q_name, kfifo_len(&dec->newframe_q));
@@ -4564,6 +4565,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->v4l_mem_handle	= (ulong)aml_buf;
 
 	vdec_vframe_ready(vdec, vf);
+	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);

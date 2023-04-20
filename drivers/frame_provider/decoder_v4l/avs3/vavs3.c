@@ -5488,8 +5488,10 @@ static void v4l_submit_vframe(struct AVS3Decoder_s *dec)
 			pic->is_display = 1;
 			if (pic->error_mark && (error_handle_policy & 0x4))
 				vavs3_vf_put(vavs3_vf_get(pvdec), pvdec);
-			else
+			else {
+				aml_buf_set_vframe(aml_buf, vf);
 				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
+			}
 			if (vf->type & VIDTYPE_V4L_EOS) {
 				pr_info("[%d] AVS3 EOS notify.\n", ctx->id);
 				break;
@@ -5642,6 +5644,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 #endif
 
 	vdec_vframe_ready(vdec, vf);
+
 	kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 	dec->eos = 1;
 

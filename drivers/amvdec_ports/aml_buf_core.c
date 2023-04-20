@@ -324,6 +324,11 @@ static int buf_core_done(struct buf_core_mgr_s *bc,
 		goto out;
 	}
 
+	if (bc->vpp_dque &&
+		!bc->vpp_dque(bc, entry)) {
+		atomic_inc(&entry->ref);
+	}
+
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__, user,
@@ -369,6 +374,22 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		goto out;
 	}
 
+	if (bc->vpp_que &&
+		!bc->vpp_que(bc, entry)) {
+		/*
+		 * For DI post scenario, if seek or change resolution is doing,
+		 * the reset callback will be executed in this process, and
+		 * the state of all entries will be cleaned, but in fact
+		 * the memory associated with entry may still be used
+		 * as reference in DI mgr. If vpp_que returns 0, this entry
+		 * is referenced by DI mgr, wait for DI mgr to be used, and
+		 * then call callback to retrieve the buffer.
+		 */
+		if (entry->user == BUF_USER_MAX) {
+			goto out;
+		}
+	}
+
 	if (bc->external_process)
 		bc->external_process(bc, entry);
 
@@ -381,6 +402,26 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 
 out:
 	mutex_unlock(&bc->mutex);
+}
+
+static void buf_core_vpp_cb(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
+{
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		__func__, entry->user,
+		entry->key,
+		entry->state,
+		bc->state,
+		atomic_read(&entry->ref),
+		kref_read(&bc->core_ref),
+		bc->free_num);
+
+	if (!atomic_dec_return(&entry->ref)) {
+		buf_core_free_que(bc, entry);
+	} else {
+		entry->state = BUF_STATE_REF;
+		buf_core_update_holder(bc, entry, BUF_USER_DEC, BUF_PUT);
+	}
 }
 
 static int buf_core_ready_num(struct buf_core_mgr_s *bc)
@@ -415,6 +456,9 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		bc->state,
 		kref_read(&bc->core_ref),
 		bc->free_num);
+
+	if (bc->vpp_reset)
+		bc->vpp_reset(bc);
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		list_del(&entry->node);
@@ -637,6 +681,7 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->buf_ops.fill	= buf_core_fill;
 	bc->buf_ops.ready_num	= buf_core_ready_num;
 	bc->buf_ops.empty	= buf_core_empty;
+	bc->buf_ops.vpp_cb	= buf_core_vpp_cb;
 	bc->buf_ops.update_holder = buf_core_update_holder;
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);

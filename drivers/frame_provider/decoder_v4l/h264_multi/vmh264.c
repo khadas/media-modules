@@ -3369,6 +3369,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 		atomic_add(1, &hw->vf_pre_count);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
+		aml_buf_set_vframe(aml_buf, vf);
+
 		if (!frame->show_frame) {
 			vh264_vf_put(vf, vdec);
 			atomic_add(1, &hw->vf_get_count);
@@ -3449,10 +3451,9 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				vh264_vf_put(vh264_vf_get(vdec), vdec);
 				frame->pre_output = 1;
 			} else {
-			    struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 				set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
-				vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
-				aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
+				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
 		} else {
 			vh264_vf_put(vh264_vf_get(vdec), vdec);
@@ -3599,6 +3600,7 @@ int notify_v4l_eos(struct vdec_s *vdec)
 		vf->v4l_mem_handle	= (ulong)aml_buf;
 
 		vdec_vframe_ready(vdec, vf);
+		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 		ATRACE_COUNTER(hw->trace.pts_name, vf->timestamp);

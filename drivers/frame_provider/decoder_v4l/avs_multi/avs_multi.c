@@ -3567,6 +3567,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
 		vdec_vframe_ready(vdec, vf);
+		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
@@ -3665,6 +3666,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
 		vdec_vframe_ready(vdec, vf);
+		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
@@ -3776,6 +3778,7 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		}
 		decoder_do_frame_check(hw_to_vdec(hw), vf);
 		vdec_vframe_ready(vdec, vf);
+		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 		ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
@@ -3851,6 +3854,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->v4l_mem_handle	= (ulong)aml_buf;
 
 	vdec_vframe_ready(vdec, vf);
+	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);

@@ -6307,6 +6307,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			if (v4l2_ctx->is_stream_off) {
 				vav1_vf_put(vav1_vf_get(vdec), vdec);
 			} else {
+				aml_buf_set_vframe(aml_buf, vf);
 				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 			}
@@ -6357,6 +6358,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->v4l_mem_handle	= (ulong)aml_buf;
 
 	vdec_vframe_ready(vdec, vf);
+	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);

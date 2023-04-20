@@ -20,6 +20,8 @@
 
 #include <linux/device.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
+#include <linux/amlogic/media/video_processor/di_proc_buf_mgr.h>
+#include <linux/amlogic/meson_uvm_core.h>
 
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
 #include "../frame_provider/decoder/utils/decoder_mmu_box.h"
@@ -30,6 +32,110 @@
 #include "aml_vcodec_util.h"
 #include "vdec_drv_if.h"
 #include "utils/common.h"
+
+#define IS_VPP_POST(bm)	(bm->config.vpp_work_mode == VPP_WORK_MODE_DI_POST)
+
+static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
+{
+	struct buf_core_mgr_s *bc = caller_data;
+	struct buf_core_entry *entry = NULL;
+	struct dma_buf *dbuf = file->private_data;
+	struct uvm_handle *uvmh = dbuf->priv;
+	ulong key = sg_dma_address(uvmh->ua->sgt->sgl);
+
+	hash_for_each_possible(bc->buf_table, entry, h_node, key) {
+		if (key == entry->key) {
+			break;
+		}
+	}
+
+	if (bc->buf_ops.vpp_cb)
+		bc->buf_ops.vpp_cb(bc, entry);
+}
+
+static int aml_buf_vpp_que(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
+{
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	struct aml_buf *buf = entry_to_aml_buf(entry);
+	int ret = -1;
+
+	ret = buf_mgr_q_checkin(bm->vpp_handle, buf->planes[0].dbuf->file);
+
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, ret:%d\n",
+		__func__, entry->user, ret);
+
+	return ret;
+}
+
+static int aml_buf_vpp_dque(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
+{
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct vframe_s *vf = &buf->vframe;
+	int ret = -1;
+
+	vf->index_disp	= bm->frm_cnt;
+	vf->omx_index	= bm->frm_cnt;
+
+	if (!(vf->type & VIDTYPE_V4L_EOS))
+		bm->frm_cnt++;
+
+	dmabuf_set_vframe(buf->planes[0].dbuf, &buf->vframe, VF_SRC_DECODER);
+
+	ret = buf_mgr_dq_checkin(bm->vpp_handle, buf->planes[0].dbuf->file);
+
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, ret:%d\n",
+		__func__, entry->user, ret);
+
+	return ret;
+}
+
+static int aml_buf_vpp_reset(struct buf_core_mgr_s *bc)
+{
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	int ret = -1;
+
+	ret = buf_mgr_reset(bm->vpp_handle);
+
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, ret:%d\n",
+		__func__, ret);
+
+	return ret;
+}
+
+static int aml_buf_vpp_mgr_init(struct aml_buf_mgr_s *bm)
+{
+	if (!IS_VPP_POST(bm))
+		return 0;
+
+	if (!bm->vpp_handle) {
+		bm->vpp_handle = buf_mgr_creat(DEC_TYPE_V4L_DEC,
+					      bm->bc.id,
+					      &bm->bc,
+					      aml_buf_vpp_callback);
+		if (!bm->vpp_handle) {
+			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+				"%s, The vpp buf mgr creat fail.\n",
+				__func__);
+			return -1;
+		}
+
+		bm->bc.vpp_que	= aml_buf_vpp_que;
+		bm->bc.vpp_dque = aml_buf_vpp_dque;
+		bm->bc.vpp_reset = aml_buf_vpp_reset;
+	}
+
+	return 0;
+}
+
+static void aml_buf_vpp_mgr_release(struct aml_buf_mgr_s *bm)
+{
+	if (bm->vpp_handle)
+		buf_mgr_release(bm->vpp_handle);
+}
 
 static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1, void **bmmu) {
 	struct aml_buf_fbc_info fbc_info;
@@ -347,6 +453,8 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 	if (bm->fbc_array) {
 		aml_buf_fbc_destroy(bm);
 	}
+
+	aml_buf_vpp_mgr_release(bm);
 }
 
 static void aml_buf_flush(struct aml_buf_mgr_s *bm,
@@ -510,6 +618,13 @@ static int aml_buf_set_default_parms(struct aml_buf_mgr_s *bm,
 	} else {
 		// alloc buffer
 		aml_buf_set_planes(bm, buf);
+	}
+
+	ret = aml_buf_vpp_mgr_init(bm);
+	if (ret) {
+		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+			"VPP buf mgr init failed.\n");
+		return ret;
 	}
 
 	ret = task_chain_init(&buf->task, bm->priv, buf, buf->index);

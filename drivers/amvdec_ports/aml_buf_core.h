@@ -164,6 +164,7 @@ struct buf_core_ops {
 	void	(*fill)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	int	(*ready_num)(struct buf_core_mgr_s *);
 	bool	(*empty)(struct buf_core_mgr_s *);
+	void	(*vpp_cb)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*update_holder)(struct buf_core_mgr_s *, struct buf_core_entry *,
 		enum buf_core_user, enum buf_direction direction);
 };
@@ -198,6 +199,9 @@ struct buf_core_mem_ops {
  * @prepare	: The interface is used for the preprocessing of buffer data.
  * @input	: The interface uses data input and is triggered after calling the interface fill.
  * @output	: The interface uses data output and is triggered after the interface is called done.
+ * vpp_que	: Interact with DI mgr to notify the buffer that has been displayed back to the driver.
+ * vpp_dque	: The decoded buffer is submitted to DI mgr for post-processing.
+ * vpp_reset	: Used to reset the buffer information managed by DI mgr.
  * @mem_ops	: Set of interfaces for memory-related operations.
  * @buf_ops	: Set of interfaces for buffer operations.
  */
@@ -221,6 +225,9 @@ struct buf_core_mgr_s {
 	void	(*prepare)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*input)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	int	(*output)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
+	int	(*vpp_que)(struct buf_core_mgr_s *, struct buf_core_entry *);
+	int	(*vpp_dque)(struct buf_core_mgr_s *, struct buf_core_entry *);
+	int	(*vpp_reset)(struct buf_core_mgr_s *);
 	void    (*external_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	int	(*get_pre_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 
