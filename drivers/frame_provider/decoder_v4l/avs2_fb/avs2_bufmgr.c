@@ -962,7 +962,7 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 		return -2;
 		}
 
-	hc->f_rec = avs2_dec->fref[i];
+	hc->f_rec = &avs2_dec->frm_pool[i];
 	hc->currentFrame = hc->f_rec->ref;
 	hc->f_rec->imgtr_fwRefDistance = img->tr;
 	hc->f_rec->imgcoi_ref = img->coding_order;
@@ -1750,7 +1750,7 @@ void init_avs2_decoder(struct avs2_decoder *avs2_dec)
 	struct Video_Dec_data_s *hd = &avs2_dec->hd;
 	if (is_avs2_print_bufmgr_detail())
 		pr_info("[t] struct avs2_dec @0x%p\n", avs2_dec);
-	memset(avs2_dec, 0, sizeof(struct avs2_decoder));
+	//memset(avs2_dec, 0, sizeof(struct avs2_decoder));
 #ifdef AML
 	avs2_dec->to_prepare_disp_count = 1;
 #endif

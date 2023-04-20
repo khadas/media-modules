@@ -810,6 +810,7 @@ struct avs2_frame_s {
 #endif
 	uint32_t luma_size;
 	uint32_t chroma_size;
+	int is_display;
 };
 
 

@@ -1635,8 +1635,8 @@ static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
 #endif
 			pic->vf_ref == 0) {
 			if (pic->referred_by_others == 0) {
-#if 0
-				struct aml_buf *aml_buf = index_to_afbc_aml_buf(dec, pic->index);
+#if 1
+				struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
 #ifdef AVS2_10B_MMU
 				if (dec->front_back_mode)
 					decoder_mmu_box_free_idx(aml_buf->fbc->mmu_1,
@@ -1694,7 +1694,7 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 #endif
 #else
 	if (dec->front_back_mode == 1) {
-		struct aml_buf *aml_buf = index_to_afbc_aml_buf(dec, pic->index);
+		struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
 
 #ifdef AVS2_10B_MMU
 		decoder_mmu_box_alloc_idx(
