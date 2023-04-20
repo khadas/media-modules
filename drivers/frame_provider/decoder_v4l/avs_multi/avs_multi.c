@@ -1439,6 +1439,7 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 	unsigned long buf_start;
 	int need_alloc_buf_num;
 	struct vdec_s *vdec = NULL;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (hw->m_ins_flag)
 		vdec = hw_to_vdec(hw);
@@ -1498,8 +1499,10 @@ static int vavs_canvas_init(struct vdec_avs_hw_s *hw)
 #endif
 		ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle, i,
 				decbuf_size, DRIVER_NAME, &buf_start);
-		if (ret < 0)
+		if (ret < 0) {
+			vdec_v4l_post_error_event(ctx, DECODER_ERROR_ALLOC_BUFFER_FAIL);
 			return ret;
+		}
 		if (i == (need_alloc_buf_num - 1)) {
 			if (firmware_sel == 1)
 				hw->buf_offset = buf_start -
@@ -1957,6 +1960,7 @@ static unsigned char es_write_addr[MAX_CODED_FRAME_SIZE]  __aligned(64);
 static void vavs_local_init(struct vdec_avs_hw_s *hw)
 {
 	int i;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	hw->vavs_ratio = hw->vavs_amstream_dec_info.ratio;
 
@@ -2013,8 +2017,10 @@ static void vavs_local_init(struct vdec_avs_hw_s *hw)
 		CODEC_MM_FLAGS_CMA_CLEAR |
 		CODEC_MM_FLAGS_FOR_VDECODER,
 		BMMU_ALLOC_FLAGS_WAIT);
-	if (hw->mm_blk_handle == NULL)
+	if (hw->mm_blk_handle == NULL) {
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		pr_info("Error, decoder_bmmu_box_alloc_box fail\n");
+	}
 
 }
 
@@ -2284,6 +2290,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 	int ret, size = -1;
 	struct firmware_s *fw;
 	u32 fw_size = 0x1000 * 16;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))
@@ -2310,6 +2317,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 		amvdec_disable();
 		pr_err("get firmware fail.");
 		vfree(fw);
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -1;
 	}
 
@@ -2341,6 +2349,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 		/*vfree(buf);*/
 		pr_err("AVS: the %s fw loading failed, err: %x\n",
 			tee_enabled() ? "TEE" : "local", ret);
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -EBUSY;
 	}
 
@@ -2685,6 +2694,7 @@ static void vavs_work(struct work_struct *work)
 		userdata_push_process(hw);
 		return;
 	} else if (hw->dec_result == DEC_RESULT_DONE) {
+		ctx->decoder_status_info.decoder_count++;
 		if (!hw->ctx_valid)
 			hw->ctx_valid = 1;
 #ifdef DEBUG_MULTI_FRAME_INS
@@ -2808,6 +2818,9 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	u64 current_timestamp = ctx->current_timestamp;
 
+	ctx->decoder_status_info.decoder_error_count++;
+	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
+
 	spin_lock_irqsave(&lock, flags);
 	for (i = 0; i < VF_POOL_SIZE; i++) {
 		vf = &hw->vfpool[i].vf;
@@ -2875,6 +2888,7 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 static void timeout_process(struct vdec_avs_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	if (hw->process_busy) {
 		pr_info("%s, process busy\n", __func__);
@@ -2899,6 +2913,7 @@ static void timeout_process(struct vdec_avs_hw_s *hw)
 		}
 	}
 	hw->dec_result = DEC_RESULT_DONE;
+	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 
 	debug_print(hw, PRINT_FLAG_ERROR,
 		"%s decoder timeout, status=%d, level=%d, bit_cnt=0x%x\n",
@@ -3258,6 +3273,7 @@ void (*callback)(struct vdec_s *, void *, int),
 			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
 				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&hw->work);
 			hw->run_flag = 0;
 			return;
@@ -3875,6 +3891,8 @@ static int v4l_res_change(struct vdec_avs_hw_s *hw)
 			vavs_get_ps_info(hw, &ps);
 			vdec_v4l_set_ps_infos(ctx, &ps);
 			vdec_v4l_res_ch_event(ctx);
+			ctx->decoder_status_info.frame_height = ps.visible_height;
+			ctx->decoder_status_info.frame_width = ps.visible_width;
 
 			hw->v4l_params_parsed = false;
 			hw->res_ch_flag = 1;
@@ -4001,9 +4019,6 @@ static irqreturn_t vmavs_isr_thread_handler(struct vdec_s *vdec, int irq)
 
 		reg = READ_VREG(DECODE_STATUS); // need find a null register pyx
 		if (reg == DECODE_STATUS_INFO) {
-			struct aml_vcodec_ctx *ctx =
-				(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
-
 			hw->frame_width = READ_VREG(AVS_PIC_INFO) & 0x3fff;
 			hw->frame_height = (READ_VREG(AVS_PIC_INFO) >> 14) & 0x3fff;
 			hw->interlace_flag = (READ_VREG(AVS_PIC_INFO) >> 28) & 0x1;
@@ -4683,6 +4698,7 @@ static s32 vavs_init2(struct vdec_avs_hw_s *hw)
 	int  size = -1;
 	struct firmware_s *fw;
 	u32 fw_size = 0x1000 * 16;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))
@@ -4709,6 +4725,7 @@ static s32 vavs_init2(struct vdec_avs_hw_s *hw)
 
 	if (size < 0) {
 		amvdec_disable();
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		pr_err("get firmware fail.");
 		return -1;
 	}
@@ -4920,6 +4937,7 @@ static void init_hw(struct vdec_s *vdec)
 {
 	struct vdec_avs_hw_s *hw =
 	(struct vdec_avs_hw_s *)vdec->private;
+	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 	int ret;
 	pr_info("%s, %d\n", __func__, __LINE__);
 	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXM)
@@ -4932,6 +4950,7 @@ static void init_hw(struct vdec_s *vdec)
 	if (ret < 0) {
 		amvdec_disable();
 		/*vfree(buf);*/
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		pr_err("AVS: the %s fw loading failed, err: %x\n",
 			tee_enabled() ? "TEE" : "local", ret);
 	}

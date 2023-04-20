@@ -2745,6 +2745,8 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 	}
 
 	if (frame->data_flag & ERROR_FLAG) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 		vdec_count_info(&hw->gvs, 1, 0);
 		if (frame->slice_type == I_SLICE) {
 			hw->gvs.i_concealed_frames++;
@@ -2763,7 +2765,8 @@ static int post_prepare_process(struct vdec_s *vdec, struct FrameStore *frame)
 				hw->gvs.b_lost_frames++;
 			}
 		}
-
+		ctx->decoder_status_info.decoder_error_count++;
+		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 	}
 
 	if ((!hw->enable_fence) &&
@@ -5156,6 +5159,8 @@ static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 pa
 	int mb_height = 0;
 	int dec_dpb_size;
 	int level_idc = param4 & 0xff;
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	mb_width = param1 & 0xff;
 	mb_total = (param1 >> 8) & 0xffff;
@@ -5172,6 +5177,7 @@ static int get_dec_dpb_size_active(struct vdec_h264_hw_s *hw, u32 param1, u32 pa
 			mb_height);
 		hw->error_frame_width = mb_width << 4;
 		hw->error_frame_height = mb_height << 4;
+		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		return -1;
 	}
 	hw->error_frame_width = 0;
@@ -7182,6 +7188,7 @@ pic_done_proc:
 			hw->get_data_count = 0x7fffffff;
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
 			decode_frame_count[DECODE_ID(hw)]++;
+			ctx->decoder_status_info.decoder_count++;
 			if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
 				hw->gvs.i_decoded_frames++;
 			} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
@@ -7369,6 +7376,10 @@ send_again:
 		} else
 			goto empty_proc;
 	} else if (dec_dpb_status == H264_DECODE_OVER_SIZE) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+
+		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		dpb_print(DECODE_ID(hw), 0,
 			"vmh264 decode oversize !!\n");
 		buf_ref_process_for_exception(hw);
@@ -7550,6 +7561,8 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 static void timeout_process(struct vdec_h264_hw_s *hw)
 {
 	struct vdec_s *vdec = hw_to_vdec(hw);
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
 	/*
 	 * In this very timeout point,the vh264_work arrives,
@@ -7570,6 +7583,7 @@ static void timeout_process(struct vdec_h264_hw_s *hw)
 	if (hw->mmu_enable) {
 		amhevc_stop();
 	}
+	vdec_v4l_post_error_event(ctx, DECODER_WARNING_DECODER_TIMEOUT);
 
 	dpb_print(DECODE_ID(hw),
 		PRINT_FLAG_ERROR, "%s decoder timeout, DPB_STATUS_REG 0x%x\n", __func__, READ_VREG(DPB_STATUS_REG));
@@ -8999,6 +9013,8 @@ bool is_over_interlace_size(int w, int h, int size)
 
 int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 {
+	struct aml_vcodec_ctx *ctx =
+		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	hw->mmu_enable = 1;
 	{
 		hw->canvas_mode = CANVAS_BLKMODE_LINEAR;
@@ -9016,6 +9032,7 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 			extif_size, DRIVER_NAME, &hw->extif_addr) < 0) {
 			h264_free_hw_stru(&vdec->dev, (void *)hw);
 			vdec->dec_status = NULL;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 			return -ENOMEM;
 		}
 	}
@@ -9480,6 +9497,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 						}
 					}
 					hw->v4l_params_parsed = true;
+					ctx->decoder_status_info.frame_height = ps.visible_height;
+					ctx->decoder_status_info.frame_width = ps.visible_width;
 					if (hw->double_write_mode != 0x10) {
 						h264_set_comp_info(ctx, &ps);
 					}
@@ -9637,6 +9656,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		return;
 	} else if (hw->dec_result == DEC_RESULT_DONE ||
 		hw->dec_result == DEC_RESULT_TIMEOUT) {
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 		if (hw->dec_result == DEC_RESULT_TIMEOUT &&
 			hw->mmu_enable) {
 			hevc_set_frame_done(hw);
@@ -9685,6 +9706,7 @@ result_done:
 
 		h264_mmu_box_free_idx_tail(hw);
 
+		ctx->decoder_status_info.decoder_count++;
 		decode_frame_count[DECODE_ID(hw)]++;
 		if (hw->dpb.mSlice.slice_type == I_SLICE) {
 			hw->gvs.i_decoded_frames++;
@@ -9757,6 +9779,8 @@ result_done:
 		}
 	} else if (hw->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
+		struct aml_vcodec_ctx *ctx =
+			(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 		bufmgr_h264_remove_unused_frame(p_H264_Dpb, 0);
 		if (!is_buffer_available(vdec)) {
 			if (vdec->next_status == VDEC_STATUS_DISCONNECTED)
@@ -9773,6 +9797,7 @@ result_done:
 			hw->get_data_count = 0x7fffffff;
 			WRITE_VREG(DPB_STATUS_REG, H264_ACTION_SEARCH_HEAD);
 			decode_frame_count[DECODE_ID(hw)]++;
+			ctx->decoder_status_info.decoder_count++;
 			if (p_H264_Dpb->mSlice.slice_type == I_SLICE) {
 				hw->gvs.i_decoded_frames++;
 			} else if (p_H264_Dpb->mSlice.slice_type == P_SLICE) {
@@ -10270,6 +10295,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 				"MH264 the %s fw loading failed, err: %x\n",
 				tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
+			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&hw->work);
 			return;
 		}
@@ -10285,6 +10311,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 					"MH264_MMU the %s fw loading failed, err: %x\n",
 					tee_enabled() ? "TEE" : "local", ret);
 				hw->dec_result = DEC_RESULT_FORCE_EXIT;
+				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 				vdec_schedule_work(&hw->work);
 				return;
 			}
@@ -10854,6 +10881,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		V_BUF_ADDR_OFFSET, DRIVER_NAME, &hw->cma_alloc_addr) < 0) {
 		h264_free_hw_stru(&pdev->dev, (void *)hw);
 		pdata->dec_status = NULL;
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		return -ENOMEM;
 	}
 
@@ -10891,6 +10919,7 @@ static int ammvdec_h264_probe(struct platform_device *pdev)
 		ammvdec_h264_mmu_release(hw);
 		h264_free_hw_stru(&pdev->dev, (void *)hw);
 		pdata->dec_status = NULL;
+		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
 		return -ENODEV;
 	}
 #ifdef MH264_USERDATA_ENABLE

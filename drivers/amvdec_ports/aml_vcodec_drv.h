@@ -618,6 +618,14 @@ struct canvas_cache {
 	struct mutex		lock;
 };
 
+struct aml_decoder_status_info {
+	u32 error_type;
+	u32 frame_width;
+	u32 frame_height;
+	u32 decoder_count;
+	u32 decoder_error_count;
+};
+
 struct cma_sys_size_info {
 	int max_total_size;
 	int cma_part;
@@ -839,6 +847,7 @@ struct aml_vcodec_ctx {
 						  struct vframe_s *);
 	bool			no_fbc_output;
 	struct cma_sys_size_info mem_size_info;
+	struct aml_decoder_status_info	decoder_status_info;
 };
 
 /**
