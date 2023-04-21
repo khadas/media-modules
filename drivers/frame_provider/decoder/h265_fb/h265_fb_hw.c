@@ -946,7 +946,7 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 #endif
 #endif
 #endif
-	cur_mmu_4k_number = hevc_mmu_page_num(hevc, pic->width, pic->height, 0); // to do: !bit_depth_10);
+	cur_mmu_4k_number = hevc_mmu_page_num(hevc, pic->width, pic->height / 2 + 64 + 8, 0); // to do: !bit_depth_10);
 	if (cur_mmu_4k_number < 0)
 		return;
 	ret = decoder_mmu_box_alloc_idx(
