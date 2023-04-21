@@ -8,6 +8,11 @@
 #define NEW_FRONT_BACK_CODE
 #define LARGE_INSTRUCTION_SPACE_SUPORT
 #define BUFMGR_SANITY_CHECK
+
+#define P010_ENABLE
+
+#define OW_TRIPLE_WRITE
+
 #include "com_def.h"
 
 #ifdef SIMULATION

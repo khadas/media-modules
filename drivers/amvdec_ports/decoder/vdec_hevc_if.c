@@ -178,6 +178,8 @@ static void vdec_parser_parms(struct vdec_hevc_inst *inst)
 			ctx->config.parm.dec.cfg.ref_buf_margin);
 		pbuf += sprintf(pbuf, "hevc_double_write_mode:%d;",
 			ctx->config.parm.dec.cfg.double_write_mode);
+		pbuf += sprintf(pbuf, "hevc_triple_write_mode:%d;",
+			ctx->config.parm.dec.cfg.triple_write_mode);
 		pbuf += sprintf(pbuf, "hevc_buf_width:4096;");
 		pbuf += sprintf(pbuf, "hevc_buf_height:2304;");
 		pbuf += sprintf(pbuf, "save_buffer_mode:0;");
@@ -713,6 +715,12 @@ static int vdec_hevc_get_param(unsigned long h_vdec,
 			*mode = vdec_get_dw_mode(inst, 0);
 		break;
 	}
+	case GET_PARAM_TW_MODE:
+	{
+		u32 *mode = out;
+		*mode = inst->ctx->config.parm.dec.cfg.triple_write_mode;
+		break;
+	}
 	case GET_PARAM_COMP_BUF_INFO:
 		get_param_comp_buf_info(inst, out);
 		break;
@@ -738,6 +746,7 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	struct vdec_hevc_dec_info *dec = &inst->vsi->dec;
 	struct v4l2_rect *rect = &inst->vsi->crop;
 	int dw = inst->parms.cfg.double_write_mode;
+	int tw = inst->parms.cfg.triple_write_mode;
 
 	/* fill visible area size that be used for EGL. */
 	pic->visible_width	= ps->visible_width;
@@ -756,6 +765,7 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 
 	pic->y_len_sz		= ALIGN(vdec_pic_scale(inst, pic->coded_width, dw), 64) *
 				  ALIGN(vdec_pic_scale(inst, pic->coded_height, dw), 64);
+	pic->y_len_sz		= pic->y_len_sz << is_output_p010(dw);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	pic->dpb_frames		= ps->dpb_frames;
@@ -764,6 +774,13 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 	dec->dpb_sz		= ps->dpb_size;
 	pic->field		= ps->field;
 	pic->bitdepth           = ps->bitdepth;
+
+	if (tw) {
+		pic->y_len_sz_ex	= ALIGN(vdec_pic_scale(inst, pic->coded_width, tw), 64) *
+					  ALIGN(vdec_pic_scale(inst, pic->coded_height, tw), 64);
+		pic->y_len_sz_ex	= pic->y_len_sz_ex << is_output_p010(tw);
+		pic->c_len_sz_ex	= pic->y_len_sz_ex >> 1;
+	}
 
 	inst->parms.ps		= *ps;
 	inst->parms.parms_status |=
@@ -774,11 +791,11 @@ static void set_param_ps_info(struct vdec_hevc_inst *inst,
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 		"Parse from ucode, visible(%d x %d), coded(%d x %d), "
-		"scan:%s, bitdepth(%d)\n",
+		"scan:%s, bitdepth(%d), dw/tw(%x, %x)\n",
 		pic->visible_width, pic->visible_height,
 		pic->coded_width, pic->coded_height,
 		pic->field == V4L2_FIELD_NONE ? "P" : "I",
-		ps->bitdepth);
+		ps->bitdepth, dw, tw);
 }
 
 static void set_cfg_info(struct vdec_hevc_inst *inst,

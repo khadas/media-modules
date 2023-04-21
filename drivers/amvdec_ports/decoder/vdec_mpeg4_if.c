@@ -505,6 +505,13 @@ static int vdec_mpeg4_get_param(unsigned long h_vdec,
 		break;
 	}
 
+	case GET_PARAM_TW_MODE:
+	{
+		unsigned int* mode = out;
+		*mode = VDEC_TW_INVALID;
+		break;
+	}
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
 			"invalid get parameter type=%d\n", type);

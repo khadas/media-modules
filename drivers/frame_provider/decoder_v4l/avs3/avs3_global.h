@@ -8,6 +8,7 @@
 #define NEW_FRONT_BACK_CODE
 #define LARGE_INSTRUCTION_SPACE_SUPPORT
 #define BUFMGR_SANITY_CHECK
+
 #include "com_def.h"
 
 #ifdef SIMULATION

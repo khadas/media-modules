@@ -68,5 +68,9 @@ int vdec_v4l_get_dw_mode(
 	struct aml_vcodec_ctx *ctx,
 	unsigned int *dw_mode);
 
+int vdec_v4l_get_tw_mode(
+	struct aml_vcodec_ctx *ctx,
+	unsigned int *tw_mode);
+
 #endif
 

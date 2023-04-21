@@ -1362,6 +1362,19 @@ typedef struct PIC_BUFFER_CONFIG_s {
 	ulong dw_y_adr;
 	ulong dw_u_v_adr;
 	int double_write_mode;
+	u32 luma_size;
+	u32 chroma_size;
+
+	u32 tw_y_adr;
+	u32 tw_u_v_adr;
+	u32 triple_write_mode;
+	//int tw_y_canvas_index;
+	//int tw_uv_canvas_index;
+	struct canvas_config_s tw_canvas_config[2];
+
+	u32 luma_size_ex;
+	u32 chroma_size_ex;
+
 	int y_canvas_index;
 	int uv_canvas_index;
 	int vf_ref;

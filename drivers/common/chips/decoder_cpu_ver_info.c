@@ -319,6 +319,21 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_support_h264_mmu    = true,
 		.is_hevc_dual_core_mode_support = false,
 		.vdec_max_resolution = RESOLUTION_4K,
+		.hevc_max_resolution = RESOLUTION_4K,
+	},
+
+	[AM_MESON_CPU_MAJOR_ID_T3X - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_T3X,
+		.reg_compat = s5_mm_registers_compat,	//register compact
+		.max_vdec_clock        = 800,
+		.max_hevcf_clock       = 800,
+		.max_hevcb_clock       = 800,
+		.hevc_clk_combine_flag = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = true,
+		.is_support_h264_mmu    = true,
+		.is_hevc_dual_core_mode_support = false,
+		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
 };
@@ -474,6 +489,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-t5m",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_T5M - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-t3x",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_T3X - MAJOR_ID_START],
 	},
 	{},
 };

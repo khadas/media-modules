@@ -1550,6 +1550,16 @@ typedef struct avs3_frame_s{
 	bool in_dpb;
 	u64 time;
 #endif
+#ifdef OW_TRIPLE_WRITE
+	unsigned int tw_y_adr;
+	unsigned int tw_u_v_adr;
+
+	//int tw_y_canvas_index;
+	//int tw_uv_canvas_index;
+	struct canvas_config_s tw_canvas_config[2];
+
+	u32 triple_write_mode;
+#endif
 } avs3_frame_t;
 #endif
 /* picture store structure */

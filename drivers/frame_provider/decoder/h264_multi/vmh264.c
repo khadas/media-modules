@@ -72,7 +72,7 @@
 #include "../../decoder/utils/vdec_profile.h"
 
 #define DETECT_WRONG_MULTI_SLICE
-
+#define MCRCC_ENABLE
 /*
 to enable DV of frame mode
 #define DOLBY_META_SUPPORT in ucode
@@ -1661,6 +1661,163 @@ static void  hevc_sao_set_slice_type(struct vdec_h264_hw_s *hw,
 	return;
 }
 
+#ifdef MCRCC_ENABLE
+
+static int mcrcc_hit_rate;
+static int mcrcc_bypass_rate;
+
+static void mcrcc_perfcount_reset_mmu(struct vdec_h264_hw_s *hw)
+{
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE, "[cache_util.c] Entered mcrcc_perfcount_reset_mmu...\n");
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)0x1);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)0x0);
+}
+
+static void mcrcc_get_hitrate_mmu(struct vdec_h264_hw_s *hw)
+{
+	unsigned   tmp;
+	unsigned   raw_mcr_cnt;
+	unsigned   hit_mcr_cnt;
+	unsigned   byp_mcr_cnt_nchoutwin;
+	unsigned   byp_mcr_cnt_nchcanv;
+	unsigned   hit_mcr_0_cnt;
+	unsigned   hit_mcr_1_cnt;
+	int      hitrate;
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[cache_util.c] Entered mcrcc_get_hitrate_mmu...\n");
+
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x0<<1));
+	raw_mcr_cnt = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x1<<1));
+	hit_mcr_cnt = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x2<<1));
+	byp_mcr_cnt_nchoutwin = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x3<<1));
+	byp_mcr_cnt_nchcanv = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] raw_mcr_cnt: %d\n",raw_mcr_cnt);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] hit_mcr_cnt: %d\n",hit_mcr_cnt);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] byp_mcr_cnt_nchoutwin: %d\n",byp_mcr_cnt_nchoutwin);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] byp_mcr_cnt_nchcanv: %d\n",byp_mcr_cnt_nchcanv);
+
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x4<<1));
+	tmp = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] miss_mcr_0_cnt: %d\n",tmp);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x5<<1));
+	tmp = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] miss_mcr_1_cnt: %d\n",tmp);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x6<<1));
+	hit_mcr_0_cnt = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] hit_mcr_0_cnt: %d\n",hit_mcr_0_cnt);
+	WRITE_VREG(HEVCD_MCRCC_PERFMON_CTL, (unsigned int)(0x7<<1));
+	hit_mcr_1_cnt = READ_VREG(HEVCD_MCRCC_PERFMON_DATA);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] hit_mcr_1_cnt: %d\n",hit_mcr_1_cnt);
+
+	if (raw_mcr_cnt != 0) {
+		hitrate = 100 * hit_mcr_0_cnt/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] CANV0_HIT_RATE : %.2f\%\n", hitrate);
+		hitrate = 100 * hit_mcr_1_cnt/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] CANV1_HIT_RATE : %.2f\%\n", hitrate);
+		hitrate = 100 * byp_mcr_cnt_nchcanv/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] NONCACH_CANV_BYP_RATE : %.2f\%\n", hitrate);
+		hitrate = 100 * byp_mcr_cnt_nchoutwin/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] CACHE_OUTWIN_BYP_RATE : %.2f\%\n", hitrate);
+	}
+
+	if (raw_mcr_cnt != 0) {
+		hitrate = 100 * hit_mcr_cnt/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] MCRCC_HIT_RATE : %.2f\% ( %d / %d )\n", hitrate, hit_mcr_cnt, raw_mcr_cnt);
+		hitrate = 100 * (byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv)/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] MCRCC_BYP_RATE : %.2f ( %d / %d )\%\n", hitrate, byp_mcr_cnt_nchoutwin+byp_mcr_cnt_nchcanv, raw_mcr_cnt);
+	} else {
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] MCRCC_HIT_RATE : na\n");
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] MCRCC_BYP_RATE : na\n");
+	}
+
+	mcrcc_hit_rate = 100*hit_mcr_cnt/raw_mcr_cnt;
+	mcrcc_bypass_rate = 100*(byp_mcr_cnt_nchoutwin + byp_mcr_cnt_nchcanv)/raw_mcr_cnt;
+
+}
+
+static void decomp_perfcount_reset_mmu(struct vdec_h264_hw_s *hw)
+{
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[cache_util.c] Entered decomp_perfcount_reset_mmu...\n");
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)0x1);
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)0x0);
+}
+
+static void decomp_get_hitrate_mmu(struct vdec_h264_hw_s *hw)
+{
+	unsigned raw_mcr_cnt;
+	unsigned hit_mcr_cnt;
+	int hitrate;
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[cache_util.c] Entered decomp_get_hitrate_mmu...\n");
+
+	// INFO
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x0<<1));
+	raw_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x1<<1));
+	hit_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] hcache_raw_cnt_total: %d\n",raw_mcr_cnt);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] hcache_hit_cnt_total: %d\n",hit_mcr_cnt);
+
+	if (raw_mcr_cnt != 0) {
+		hitrate = 100 * hit_mcr_cnt/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] DECOMP_HCACHE_HIT_RATE : %.2f\%\n", hitrate);
+	} else {
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] DECOMP_HCACHE_HIT_RATE : na\n");
+	}
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x2<<1));
+	raw_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x3<<1));
+	hit_mcr_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] dcache_raw_cnt_total: %d\n",raw_mcr_cnt);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] dcache_hit_cnt_total: %d\n",hit_mcr_cnt);
+
+	if (raw_mcr_cnt != 0) {
+		hitrate = 100 * hit_mcr_cnt/raw_mcr_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] DECOMP_DCACHE_HIT_RATE : %.2f\%\n", hitrate);
+
+		//hitrate = ((float)hit_mcr_cnt/(float)raw_mcr_cnt);
+		//hitrate = (mcrcc_hit_rate + (mcrcc_bypass_rate * hitrate))*100;
+		hitrate = mcrcc_hit_rate + (mcrcc_bypass_rate * hit_mcr_cnt/raw_mcr_cnt);
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] MCRCC_DECOMP_DCACHE_EFFECTIVE_HIT_RATE : %.2f\%\n", hitrate);
+	} else {
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] DECOMP_DCACHE_HIT_RATE : na\n");
+	}
+}
+
+static void decomp_get_comprate_mmu(struct vdec_h264_hw_s *hw)
+{
+	unsigned raw_ucomp_cnt;
+	unsigned fast_comp_cnt;
+	unsigned slow_comp_cnt;
+	int comprate;
+
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[cache_util.c] Entered decomp_get_comprate_mmu...\n");
+
+	// INFO
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x4<<1));
+	fast_comp_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x5<<1));
+	slow_comp_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+	WRITE_VREG(HEVCD_MPP_DECOMP_PERFMON_CTL, (unsigned int)(0x6<<1));
+	raw_ucomp_cnt = READ_VREG(HEVCD_MPP_DECOMP_PERFMON_DATA);
+
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] decomp_fast_comp_total: %d\n",fast_comp_cnt);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] decomp_slow_comp_total: %d\n",slow_comp_cnt);
+	dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] decomp_raw_uncomp_total: %d\n",raw_ucomp_cnt);
+
+	if (raw_ucomp_cnt != 0) {
+		comprate = 100*(fast_comp_cnt + slow_comp_cnt)/raw_ucomp_cnt;
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] DECOMP_COMP_RATIO : %.2f\%\n", comprate);
+	} else {
+		dpb_print(DECODE_ID(hw), DEBUG_CACHE_HIT_RATE,"[MCRCC INFO] DECOMP_COMP_RATIO : na\n");
+	}
+}
+#endif
+
 static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 			struct StorablePicture *pic) {
 	u32 mc_y_adr;
@@ -1672,6 +1829,16 @@ static void  hevc_sao_set_pic_buffer(struct vdec_h264_hw_s *hw,
 	int  dw_mode = hw->double_write_mode;
 	if (hw->is_new_pic != 1)
 		return;
+
+#ifdef MCRCC_ENABLE
+	if (pic->poc > 0) {
+		mcrcc_get_hitrate_mmu(hw);
+		decomp_get_hitrate_mmu(hw);
+		decomp_get_comprate_mmu(hw);
+	}
+	mcrcc_perfcount_reset_mmu(hw);
+	decomp_perfcount_reset_mmu(hw);
+#endif
 
 	if (hw->is_idr_frame) {
 		/* William TBD */

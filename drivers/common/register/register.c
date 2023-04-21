@@ -106,14 +106,11 @@ void write_dos_reg(ulong addr, int val)
 	s32 reg_compat_offset;
 	struct bus_reg_desc *dos_desc = reg_desc[DOS_BUS];
 
-	//pr_info("(1)--->>write_dos_reg addr %lx,  %x\n", addr, NEW_REG_CHECK_MASK);
 	if (addr & NEW_REG_CHECK_MASK) {
 		addr &= (~NEW_REG_CHECK_MASK);
 		reg_compat_offset = 0;
-		//pr_info("(2)--->>write_dos_reg addr %lx\n", addr);
 	} else {
 		reg_compat_offset = dos_desc[addr].reg_compat_offset;
-		//pr_info("(3)--->>write_dos_reg addr %lx, %d\n", addr, reg_compat_offset);
 	}
 
 	if ((reg_compat_offset + addr) < 0) {

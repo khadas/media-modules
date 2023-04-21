@@ -324,7 +324,8 @@ bool is_hevc_front_back_clk_combined(void)
 		(cpu_id == AM_MESON_CPU_MAJOR_ID_S4D) ||
 		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5W) ||
 		(cpu_id == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5M))
+		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5M) ||
+		(cpu_id == AM_MESON_CPU_MAJOR_ID_T3X))
 		return true;
 
 	return false;

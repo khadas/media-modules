@@ -161,7 +161,8 @@ static void pm_vdec_clock_on(int id)
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
 			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M))
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
+			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X))
 			amports_switch_gate("clk_hevcf_mux", 1);
 		else
 			amports_switch_gate("clk_hevc_mux", 1);
@@ -195,8 +196,9 @@ static void pm_vdec_clock_off(int id)
 
 static void dos_local_config(bool is_on, int id)
 {
-	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5 &&
-		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M)
+	if ((get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X))
 		return;
 
 	if (is_on) {

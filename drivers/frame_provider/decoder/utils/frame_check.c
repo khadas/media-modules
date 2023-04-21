@@ -188,33 +188,40 @@ unsigned int vdec_cav_get_height(int index);
 #define canvasV(v) canvas_2(v)
 #define canvasUV(v) canvas_1(v)
 
-static int get_frame_size(struct pic_check_mgr_t *pic,
+static int fc_frame_size_get(struct pic_check_mgr_t *pic,
 	struct vframe_s *vf)
 {
+
 	if (is_oversize(vf->width, vf->height)) {
-			dbg_print(FC_ERROR, "vf size err: w=%d, h=%d\n",
-				vf->width, vf->height);
-			return -1;
+		dbg_print(FC_ERROR, "vf pic over size %d x %d\n",
+			vf->width, vf->height);
+		return -1;
 	}
-	pic->height = vf->height;
-	pic->width = vf->width;
-	pic->size_y = vf->width * vf->height;
-	pic->size_uv = pic->size_y >> (1 + pic->mjpeg_flag);
+	pic->height   = vf->height;
+	pic->width    = vf->width;
+	pic->size_y   = (vf->width * vf->height);
+	pic->size_uv  = pic->size_y >> (1 + pic->mjpeg_flag);
 	pic->size_pic = pic->size_y + (pic->size_y >> 1);
 
-	if ((!(vf->type & VIDTYPE_VIU_NV21)) && (!pic->mjpeg_flag))
+	/* return mmu without yuv */
+	if (((vf->type & VIDTYPE_VIU_NV21) == 0) && (!pic->mjpeg_flag))
 		return 0;
 
 	if ((vf->canvas0Addr == vf->canvas1Addr) &&
 		(vf->canvas0Addr != 0) &&
 		(vf->canvas0Addr != -1)) {
 		pic->canvas_w = vdec_cav_get_width(canvasY(vf->canvas0Addr));
-			//canvas_get_width(canvasY(vf->canvas0Addr));
 		pic->canvas_h = vdec_cav_get_height(canvasY(vf->canvas0Addr));
-			//canvas_get_height(canvasY(vf->canvas0Addr));
 	} else {
 		pic->canvas_w = vf->canvas0_config[0].width;
 		pic->canvas_h = vf->canvas0_config[0].height;
+	}
+
+	/* for p010 */
+	if (vf->canvas0_config[0].bit_depth) {
+		pic->size_y   <<= 1;
+		pic->size_uv  <<= 1;
+		pic->size_pic <<= 1;
 	}
 
 	if ((pic->canvas_h < 1) || (pic->canvas_w < 1)) {
@@ -222,56 +229,56 @@ static int get_frame_size(struct pic_check_mgr_t *pic,
 			pic->canvas_w, vf->width, pic->canvas_h, vf->height);
 		return -1;
 	}
-/*
-	int blkmod;
-	blkmod = canvas_get_blkmode(canvasY(vf->canvas0Addr));
-	if (blkmod != CANVAS_BLKMODE_LINEAR) {
-		dbg_print(0, "WARN: canvas blkmod %x\n", blkmod);
-	}
-*/
+
 	return 0;
 }
 
-static int canvas_get_virt_addr(struct pic_check_mgr_t *pic,
+static int fc_data_addr_prepare(struct pic_check_mgr_t *mgr,
 	struct vframe_s *vf)
 {
 	unsigned long phy_y_addr, phy_uv_addr;
-	void *vaddr_y, *vaddr_uv;
+	int flush_size = ((mgr->canvas_w * mgr->canvas_h) <<
+		(vf->canvas0_config[0].bit_depth ? 1 : 0));    //p010 flush size
 
 	if ((vf->canvas0Addr == vf->canvas1Addr) &&
-		(vf->canvas0Addr != 0) &&
-		(vf->canvas0Addr != -1)) {
-		phy_y_addr = vdec_cav_get_addr(canvasY(vf->canvas0Addr)); //canvas_get_addr(canvasY(vf->canvas0Addr));
-		phy_uv_addr = vdec_cav_get_addr(canvasUV(vf->canvas0Addr)); //canvas_get_addr(canvasUV(vf->canvas0Addr));
+		(vf->canvas0Addr != 0) && (vf->canvas0Addr != -1)) {
+		phy_y_addr = vdec_cav_get_addr(canvasY(vf->canvas0Addr));
+		phy_uv_addr = vdec_cav_get_addr(canvasUV(vf->canvas0Addr));
 	} else {
 		phy_y_addr = vf->canvas0_config[0].phy_addr;
 		phy_uv_addr = vf->canvas0_config[1].phy_addr;
 	}
-	vaddr_y	= codec_mm_phys_to_virt(phy_y_addr);
-	vaddr_uv = codec_mm_phys_to_virt(phy_uv_addr);
-
-	if (((!vaddr_y) || (!vaddr_uv)) && ((!phy_y_addr) || (!phy_uv_addr))) {
-		dbg_print(FC_ERROR, "%s, y_addr %p(0x%lx), uv_addr %p(0x%lx)\n",
-			__func__, vaddr_y, phy_y_addr, vaddr_uv, phy_uv_addr);
-		return -1;
+	if (!phy_y_addr || !phy_uv_addr) {
+		dbg_print(FC_ERROR, "%s, y_addr (0x%lx), uv_addr (0x%lx)\n",
+			__func__, phy_y_addr, phy_uv_addr);
+		return -EFAULT;
 	}
-	pic->y_vaddr = vaddr_y;
-	pic->uv_vaddr = vaddr_uv;
-	pic->y_phyaddr = phy_y_addr;
-	pic->uv_phyaddr = phy_uv_addr;
+	mgr->y_phyaddr  = phy_y_addr;
+	mgr->uv_phyaddr = phy_uv_addr;
 
-	if (pic->mjpeg_flag) {
+	/* try to search vaddr from codec mm, flush if found */
+	mgr->y_vaddr = codec_mm_phys_to_virt(phy_y_addr);
+	if (mgr->y_vaddr)
+		codec_mm_dma_flush(mgr->y_vaddr, flush_size, DMA_FROM_DEVICE);
+
+	mgr->uv_vaddr = codec_mm_phys_to_virt(phy_uv_addr);
+	if (mgr->uv_vaddr)
+		codec_mm_dma_flush(mgr->uv_vaddr,
+			(flush_size >> (1 + mgr->mjpeg_flag)), DMA_FROM_DEVICE);
+
+	if (mgr->mjpeg_flag) {
 		if ((vf->canvas0Addr == vf->canvas1Addr) &&
-		(vf->canvas0Addr != 0) &&
-		(vf->canvas0Addr != -1)) {
-			pic->extra_v_phyaddr = canvas_get_addr(canvasV(vf->canvas0Addr));
+		(vf->canvas0Addr != 0) && (vf->canvas0Addr != -1)) {
+			mgr->extra_v_phyaddr = canvas_get_addr(canvasV(vf->canvas0Addr));
 		} else {
-			pic->extra_v_phyaddr = vf->canvas0_config[2].phy_addr;
+			mgr->extra_v_phyaddr = vf->canvas0_config[2].phy_addr;
 		}
-		pic->extra_v_vaddr = codec_mm_phys_to_virt(pic->extra_v_phyaddr);
+		if (!mgr->extra_v_phyaddr)
+			return -EFAULT;
 
-		if (!pic->extra_v_vaddr && !pic->extra_v_phyaddr)
-			return -1;
+		mgr->extra_v_vaddr = codec_mm_phys_to_virt(mgr->extra_v_phyaddr);
+		if (mgr->extra_v_vaddr)
+			codec_mm_dma_flush(mgr->extra_v_vaddr, flush_size >> 2, DMA_FROM_DEVICE);
 	}
 
 	return 0;
@@ -660,11 +667,14 @@ static int do_yuv_dump(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 		}
 	} else {
 			u32 uv_stride, uv_cpsize;
-			ret |= do_yuv_unit_cp(&tmp_addr, mgr->y_phyaddr, mgr->y_vaddr,
-				vf->height, vf->width, mgr->canvas_w);
+			u32 is_p010 = vf->canvas0_config[0].bit_depth ? 1 : 0;
 
-			uv_stride = (mgr->mjpeg_flag) ? (mgr->canvas_w >> 1) : mgr->canvas_w;
-			uv_cpsize = (mgr->mjpeg_flag) ? (vf->width >> 1) : vf->width;
+			ret |= do_yuv_unit_cp(&tmp_addr, mgr->y_phyaddr, mgr->y_vaddr,
+				vf->height, (vf->width << is_p010), mgr->canvas_w << is_p010);
+
+			uv_stride = (mgr->mjpeg_flag) ? (mgr->canvas_w >> 1) : (mgr->canvas_w << is_p010);
+			uv_cpsize = (mgr->mjpeg_flag) ? (vf->width >> 1) : (vf->width << is_p010);
+
 			ret |= do_yuv_unit_cp(&tmp_addr, mgr->uv_phyaddr, mgr->uv_vaddr,
 					vf->height >> 1, uv_cpsize, uv_stride);
 
@@ -830,13 +840,11 @@ static int aux_data_crc_store(struct aux_data_check_mgr_t *mgr,int crc)
 	return ret;
 }
 
-
-
-static int crc32_vmap_le(unsigned int *crc32,
-	ulong phyaddr, unsigned int size)
+//u32 __pure crc32_le(u32 crc, unsigned char const *p, size_t len);
+static u32 crc32_vmap_le(u32 crc, unsigned char const *paddr, size_t size)
 {
+	ulong phyaddr = (ulong)paddr;
 	void *vaddr = NULL;
-	unsigned int crc = *crc32;
 	unsigned int tmp_size = 0;
 
 	/*single mode cannot use codec_mm_vmap*/
@@ -861,7 +869,7 @@ static int crc32_vmap_le(unsigned int *crc32,
 			if (vaddr == NULL) {
 				dbg_print(FC_CRC_DEBUG, "%s: kmap_atomic failed phy: 0x%x\n",
 					__func__, (unsigned int)phyaddr);
-				return -1;
+				return 0;
 			}
 
 			crc = crc32_le(crc, vaddr, tmp_size);
@@ -884,7 +892,7 @@ static int crc32_vmap_le(unsigned int *crc32,
 			if (vaddr == NULL) {
 				dbg_print(FC_CRC_DEBUG, "%s: codec_mm_vmap failed phy: 0x%x\n",
 					__func__, (unsigned int)phyaddr);
-				return -1;
+				return 0;
 			}
 			codec_mm_dma_flush(vaddr,
 				tmp_size, DMA_FROM_DEVICE);
@@ -894,60 +902,42 @@ static int crc32_vmap_le(unsigned int *crc32,
 			codec_mm_unmap_phyaddr(vaddr);
 		}
 	}
-	*crc32 = crc;
 
-	return 0;
+	return crc;
 }
 
 static int do_check_nv21(struct pic_check_mgr_t *mgr, struct vframe_s *vf)
 {
-	int i;
 	unsigned int crc_y = 0, crc_uv = 0;
 	void *p_yaddr, *p_uvaddr;
-	ulong y_phyaddr, uv_phyaddr;
-	int ret = 0;
+	u32 (*crc_func)(u32, unsigned char const *, size_t);
 
-	p_yaddr = mgr->y_vaddr;
-	p_uvaddr = mgr->uv_vaddr;
-	y_phyaddr = mgr->y_phyaddr;
-	uv_phyaddr = mgr->uv_phyaddr;
-	if ((p_yaddr == NULL) || (p_uvaddr == NULL))
-	{
-		if (vf->width == mgr->canvas_w) {
-			ret = crc32_vmap_le(&crc_y, y_phyaddr, mgr->size_y);
-			ret |= crc32_vmap_le(&crc_uv, uv_phyaddr, mgr->size_uv);
-		} else {
-			for (i = 0; i < vf->height; i++) {
-				ret |= crc32_vmap_le(&crc_y, y_phyaddr, vf->width);
-				y_phyaddr += mgr->canvas_w;
-			}
-			for (i = 0; i < vf->height/2; i++) {
-				ret |= crc32_vmap_le(&crc_uv, uv_phyaddr, vf->width);
-				uv_phyaddr += mgr->canvas_w;
-			}
-		}
-		if (ret < 0) {
-			dbg_print(0, "calc crc failed, may codec_mm_vmap failed\n");
-			return ret;
-		}
+	if (mgr->y_vaddr && mgr->uv_vaddr) {
+		crc_func = crc32_le;
+		p_yaddr  = (void *)mgr->y_vaddr;
+		p_uvaddr = (void *)mgr->uv_vaddr;
 	} else {
-		if (mgr->frame_cnt == 0) {
-			unsigned int *p = mgr->y_vaddr;
-			dbg_print(0, "YUV0000: %08x-%08x-%08x-%08x\n",
-				p[0], p[1], p[2], p[3]);
+		crc_func = crc32_vmap_le;
+		p_yaddr  = (void *)mgr->y_phyaddr;
+		p_uvaddr = (void *)mgr->uv_phyaddr;
+	}
+
+	/* aligned width */
+	if (vf->width == mgr->canvas_w) {
+		crc_y = crc_func(crc_y, p_yaddr, mgr->size_y);
+		crc_uv = crc_func(crc_uv, p_uvaddr, mgr->size_uv);
+	} else {
+		int i;
+		int usize = vf->width << (vf->canvas0_config[0].bit_depth ? 1 : 0);
+		int stride = mgr->canvas_w << (vf->canvas0_config[0].bit_depth ? 1 : 0);
+
+		for (i = 0; i < vf->height; i++) {
+				crc_y = crc_func(crc_y, p_yaddr, usize);
+			p_yaddr += stride;
 		}
-		if (vf->width == mgr->canvas_w) {
-			crc_y = crc32_le(crc_y, p_yaddr, mgr->size_y);
-			crc_uv = crc32_le(crc_uv, p_uvaddr, mgr->size_uv);
-		} else {
-			for (i = 0; i < vf->height; i++) {
-				crc_y = crc32_le(crc_y, p_yaddr, vf->width);
-				p_yaddr += mgr->canvas_w;
-			}
-			for (i = 0; i < vf->height/2; i++) {
-				crc_uv = crc32_le(crc_uv, p_uvaddr, vf->width);
-				p_uvaddr += mgr->canvas_w;
-			}
+		for (i = 0; i < vf->height/2; i++) {
+			crc_uv = crc_func(crc_uv, p_uvaddr, usize);
+			p_uvaddr += stride;
 		}
 	}
 
@@ -1116,27 +1106,22 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 	struct fbc_decoder_param param;
 #endif
 
-	if (vdec == NULL) {
-		if (single_mode_vdec == NULL)
-			return 0;
-		mgr = &single_mode_vdec->vfc;
-	} else {
-		mgr = &vdec->vfc;
-		single_mode_vdec = NULL;
-	}
+	/* multi instance vdec should not be null */
+	if (!vdec)
+		vdec = single_mode_vdec;
+	if (!vdec || !vf)
+		return -ENODEV;
 
-	if (!single_mode_vdec &&
-		unlikely(in_interrupt()))
+	if (!vdec_single(vdec) && unlikely(in_interrupt()))
+		return -EFAULT;
+
+	mgr = &vdec->vfc;
+	if (!mgr->enable)
 		return 0;
 
-	if ((mgr == NULL) || (vf == NULL) ||
-		(mgr->enable == 0))
-		return 0;
+	mgr->mjpeg_flag = (vdec->format == VFORMAT_MJPEG);
 
-	mgr->mjpeg_flag = ((vdec) &&
-		(vdec->format == VFORMAT_MJPEG)) ? 1 : 0;
-
-	if (get_frame_size(mgr, vf) < 0)
+	if (fc_frame_size_get(mgr, vf) < 0)
 		return -1;
 
 	if (mgr->last_size_pic != mgr->size_pic) {
@@ -1155,32 +1140,18 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 		resize = 0;
 	mgr->last_size_pic = mgr->size_pic;
 
-	if ((vf->type & VIDTYPE_VIU_NV21) || (mgr->mjpeg_flag) ||
-		(vf->type & VIDTYPE_VIU_NV12)) {
-		int flush_size;
+	if ((vf->type & VIDTYPE_VIU_NV21) ||
+		(vf->type & VIDTYPE_VIU_NV12) ||
+		(mgr->mjpeg_flag)) {
 
-		if (canvas_get_virt_addr(mgr, vf) < 0)
+		if (fc_data_addr_prepare(mgr, vf) < 0)
 			return -2;
-
-		/* flush */
-		flush_size = mgr->mjpeg_flag ?
-				((mgr->canvas_w * mgr->canvas_h) >> 2) :
-				((mgr->canvas_w * mgr->canvas_h) >> 1);
-		if (mgr->y_vaddr)
-			codec_mm_dma_flush(mgr->y_vaddr,
-				mgr->canvas_w * mgr->canvas_h, DMA_FROM_DEVICE);
-		if (mgr->uv_vaddr)
-			codec_mm_dma_flush(mgr->uv_vaddr,
-				flush_size, DMA_FROM_DEVICE);
-		if ((mgr->mjpeg_flag) && (mgr->extra_v_vaddr))
-			codec_mm_dma_flush(mgr->extra_v_vaddr,
-				flush_size, DMA_FROM_DEVICE);
 
 		if (mgr->enable & CRC_MASK)
 			ret = do_check_nv21(mgr, vf);
 
 		if (mgr->enable & YUV_MASK)
-			do_yuv_dump(mgr, vf);
+			ret = do_yuv_dump(mgr, vf);
 
 	} else if  (vf->type & VIDTYPE_SCATTER) {
 		check = &mgr->pic_check;
@@ -1196,8 +1167,7 @@ int decoder_do_frame_check(struct vdec_s *vdec, struct vframe_s *vf)
 			vfree(mgr->pic_dump.buf_addr);
 			mgr->pic_dump.buf_addr = NULL;
 		}
-		if (fbc_check_prepare(check,
-				resize, mgr->size_y) < 0)
+		if (fbc_check_prepare(check, resize, mgr->size_y) < 0)
 			return -3;
 		planes[0] = check->fbc_planes[0];
 		planes[1] = check->fbc_planes[1];

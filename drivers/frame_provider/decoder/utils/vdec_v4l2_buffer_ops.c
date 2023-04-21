@@ -224,6 +224,22 @@ int vdec_v4l_get_dw_mode(struct aml_vcodec_ctx *ctx,
 }
 EXPORT_SYMBOL(vdec_v4l_get_dw_mode);
 
+int vdec_v4l_get_tw_mode(struct aml_vcodec_ctx *ctx,
+	unsigned int *tw_mode)
+{
+	int ret = -1;
+
+	if (ctx->drv_handle == 0)
+		return -EIO;
+
+	ret = ctx->dec_if->get_param(ctx->drv_handle,
+		GET_PARAM_TW_MODE, tw_mode);
+
+	return ret;
+}
+EXPORT_SYMBOL(vdec_v4l_get_tw_mode);
+
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 void v4l2_m2m_job_pause(struct v4l2_m2m_dev *m2m_dev,
 			struct v4l2_m2m_ctx *m2m_ctx)

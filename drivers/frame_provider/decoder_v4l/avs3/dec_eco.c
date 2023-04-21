@@ -1003,7 +1003,8 @@ int dec_eco_pic_header(union param_u *param, COM_PIC_HEADER * pic_header, COM_SQ
 			pic_header->rpl_l1_idx = 0;
 		}
 #ifdef BUFMGR_SANITY_CHECK
-		if (pic_header->rpl_l1_idx<MAX_NUM_RPLS)
+		if ((pic_header->rpl_l1_idx >= 0) &&
+			(pic_header->rpl_l1_idx < MAX_NUM_RPLS))
 #endif
 			memcpy(&pic_header->rpl_l1, &sqh->rpls_l1[pic_header->rpl_l1_idx], sizeof(pic_header->rpl_l1));
 		pic_header->rpl_l1.poc = pic_header->poc;

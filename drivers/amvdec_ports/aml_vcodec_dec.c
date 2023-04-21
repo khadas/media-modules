@@ -317,7 +317,8 @@ extern int force_di_permission;
 
 extern int get_double_write_ratio(int dw_mode);
 static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type);
-static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
+static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
+				       struct v4l2_pix_format_mplane *pix_mp,
 				       struct v4l2_pix_format *pix,
 				       struct aml_q_data *q_data,
 				       u32 type);
@@ -631,6 +632,7 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	struct aml_buf_config config;
 	struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
 	u32 dw = VDEC_DW_NO_AFBC;
+	u32 tw = VDEC_TW_INVALID;
 
 	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &ctx->last_decoded_picinfo)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
@@ -639,6 +641,12 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	}
 
 	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		return;
+
+	}
+
+	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
 		return;
 
@@ -673,12 +681,17 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	v4l_buf_size_decision(ctx);
 
 	config.enable_extbuf	= true;
-	config.enable_fbc	= (dw != VDEC_DW_NO_AFBC) ? true : false;
+	config.enable_fbc	= ((dw != VDEC_DW_NO_AFBC) || tw) ? true : false;
 	config.enable_secure	= ctx->is_drm_mode;
 	config.memory_mode	= que->memory;
 	config.planes		= V4L2_TYPE_IS_MULTIPLANAR(que->type) ? 2 : 1;
 	config.luma_length	= ctx->picinfo.y_len_sz;
 	config.chroma_length	= ctx->picinfo.c_len_sz;
+	config.luma_length_ex	= ctx->picinfo.y_len_sz_ex;
+	config.chroma_length_ex	= ctx->picinfo.c_len_sz_ex;
+	config.dw_mode			= dw;
+	config.tw_mode			= tw;
+
 	aml_buf_configure(&ctx->bm, &config);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
@@ -863,15 +876,21 @@ void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx)
 	}
 
 	do {
-		unsigned int dw_mode = VDEC_DW_NO_AFBC;
+		u32 dw_mode = VDEC_DW_NO_AFBC;
+		u32 tw_mode = VDEC_TW_INVALID;
 		struct file *fp;
 		char file_name[64] = {0};
 
 		if (!dump_capture_frame || ctx->is_drm_mode)
 			break;
+
 		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
 			break;
-		if (dw_mode == VDEC_DW_AFBC_ONLY)
+
+		if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
+			break;
+
+		if ((dw_mode == VDEC_DW_AFBC_ONLY) && (tw_mode == VDEC_TW_INVALID))
 			break;
 
 		snprintf(file_name, 64, "%s/dec_dump_%ux%u.raw", dump_path, vf->width, vf->height);
@@ -2559,7 +2578,7 @@ static int vidioc_try_fmt_vid_cap_out(struct file *file, void *priv,
 
 	if (ctx->state >= AML_STATE_PROBE)
 		update_ctx_dimension(ctx, f->type);
-	copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
+	copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 
 	if (!V4L2_TYPE_IS_OUTPUT(f->type))
 		return 0;
@@ -2594,10 +2613,19 @@ static int vidioc_vdec_g_selection(struct file *file, void *priv,
 
 	if (ctx->internal_dw_scale) {
 		if (ctx->state >= AML_STATE_PROBE) {
-			unsigned int dw_mode = VDEC_DW_NO_AFBC;
+			u32 dw_mode = VDEC_DW_NO_AFBC;
+			u32 tw_mode = VDEC_TW_INVALID;
+
 			if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
 				return -EBUSY;
-			ratio = get_double_write_ratio(dw_mode);
+
+			if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
+				return -EBUSY;
+
+			if ((dw_mode == VDEC_DW_AFBC_ONLY) && tw_mode)
+				ratio = get_double_write_ratio(tw_mode);
+			else
+				ratio = get_double_write_ratio(dw_mode);
 		}
 	}
 
@@ -2661,10 +2689,19 @@ static int vidioc_vdec_s_selection(struct file *file, void *priv,
 
 	if (ctx->internal_dw_scale) {
 		if (ctx->state >= AML_STATE_PROBE) {
-			unsigned int dw_mode = VDEC_DW_NO_AFBC;
+			u32 dw_mode = VDEC_DW_NO_AFBC;
+			u32 tw_mode = VDEC_TW_INVALID;
+
 			if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
 				return -EBUSY;
-			ratio = get_double_write_ratio(dw_mode);
+
+			if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
+				return -EBUSY;
+
+			if ((dw_mode == VDEC_DW_AFBC_ONLY) && tw_mode)
+				ratio = get_double_write_ratio(tw_mode);
+			else
+				ratio = get_double_write_ratio(dw_mode);
 		}
 	}
 
@@ -2687,6 +2724,7 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 {
 	struct aml_q_data *q_data;
 	unsigned int dw_mode = VDEC_DW_NO_AFBC;
+	unsigned int tw_mode = VDEC_TW_INVALID;
 	int ratio = 1;
 
 	q_data = aml_vdec_get_q_data(ctx, type);
@@ -2706,24 +2744,69 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 
 		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
 		q_data->bytesperline[1] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+
+		q_data->bytesperline[0] = q_data->bytesperline[0] << is_output_p010(dw_mode);
+		q_data->bytesperline[1] = q_data->bytesperline[1] << is_output_p010(dw_mode);
 	} else {
 		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
 		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
 		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
 		q_data->sizeimage[0] += ctx->picinfo.c_len_sz;
 		q_data->bytesperline[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline[0] = q_data->bytesperline[0] << is_output_p010(dw_mode);
+	}
+
+	/* For triple write. */
+	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
+		return;
+
+	if (tw_mode == VDEC_TW_INVALID)
+		return;
+
+	if (ctx->internal_dw_scale)
+		ratio = get_double_write_ratio(tw_mode);
+
+	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
+		q_data->sizeimage_ex[0] = ctx->picinfo.y_len_sz_ex;
+		q_data->sizeimage_ex[1] = ctx->picinfo.c_len_sz_ex;
+
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
+
+		q_data->bytesperline_ex[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline_ex[1] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+
+		q_data->bytesperline_ex[0] = q_data->bytesperline_ex[0] << is_output_p010(tw_mode);
+		q_data->bytesperline_ex[1] = q_data->bytesperline_ex[1] << is_output_p010(tw_mode);
+	} else {
+		q_data->coded_width = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->coded_height = ALIGN(ctx->picinfo.coded_height / ratio, 64);
+		q_data->sizeimage_ex[0] = ctx->picinfo.y_len_sz_ex;
+		q_data->sizeimage_ex[0] += ctx->picinfo.c_len_sz_ex;
+		q_data->bytesperline_ex[0] = ALIGN(ctx->picinfo.coded_width / ratio, 64);
+		q_data->bytesperline_ex[0] = q_data->bytesperline_ex[0] << is_output_p010(tw_mode);
 	}
 }
 
-static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
+static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
+				       struct v4l2_pix_format_mplane *pix_mp,
 				       struct v4l2_pix_format *pix,
 				       struct aml_q_data *q_data,
 				       u32 type)
 {
+	u32 dw_mode = VDEC_DW_NO_AFBC;
+	u32 tw_mode = VDEC_TW_INVALID;
 	int i;
 
 	if (!pix || !pix_mp || !q_data)
 		return;
+
+	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
+		return;
+
+	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
+		return;
+
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
 		pix_mp->width		= q_data->coded_width;
@@ -2734,6 +2817,11 @@ static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
 		for (i = 0; i < q_data->fmt->num_planes; i++) {
 			pix_mp->plane_fmt[i].bytesperline = q_data->bytesperline[i];
 			pix_mp->plane_fmt[i].sizeimage = q_data->sizeimage[i];
+
+			if ((dw_mode == VDEC_DW_AFBC_ONLY) && tw_mode) {
+				pix_mp->plane_fmt[i].bytesperline = q_data->bytesperline_ex[i];
+				pix_mp->plane_fmt[i].sizeimage = q_data->sizeimage_ex[i];
+			}
 		}
 	} else {
 		pix->width		= q_data->coded_width;
@@ -2741,6 +2829,11 @@ static void copy_v4l2_format_dimention(struct v4l2_pix_format_mplane *pix_mp,
 		pix->pixelformat	= q_data->fmt->fourcc;
 		pix->bytesperline	= q_data->bytesperline[0];
 		pix->sizeimage		= q_data->sizeimage[0];
+
+		if ((dw_mode == VDEC_DW_AFBC_ONLY) && tw_mode) {
+			pix->bytesperline	= q_data->bytesperline_ex[0];
+			pix->sizeimage		= q_data->sizeimage_ex[0];
+		}
 	}
 }
 
@@ -2886,7 +2979,7 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 			pix_mp->pixelformat : pix->pixelformat;
 		if (ctx->state >= AML_STATE_PROBE) {
 			update_ctx_dimension(ctx, f->type);
-			copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
+			copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 		}
 	}
 
@@ -3052,7 +3145,7 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	if ((!V4L2_TYPE_IS_OUTPUT(f->type)) &&
 	    (ctx->state >= AML_STATE_PROBE)) {
 		update_ctx_dimension(ctx, f->type);
-		copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
+		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 	} else if (f->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		/*
 		 * This is run on OUTPUT
@@ -3060,9 +3153,9 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 		 * so width and height have no meaning.
 		 * Assign value here to pass v4l2-compliance test
 		 */
-		copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
+		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 	} else {
-		copy_v4l2_format_dimention(pix_mp, pix, q_data, f->type);
+		copy_v4l2_format_dimension(ctx, pix_mp, pix, q_data, f->type);
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
 			"type=%d state=%d Format information could not be read, not ready yet!\n",
@@ -3137,16 +3230,21 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 		}
 	} else {
 		int dw_mode = VDEC_DW_NO_AFBC;
+		int tw_mode = VDEC_TW_INVALID;
 
 		if (vq->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
 			*nplanes = 2;
 		else
 			*nplanes = 1;
 
-		if (!vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
-			if (dw_mode == VDEC_DW_AFBC_ONLY)
-				*nplanes = 1;
-		}
+		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
+			return -EINVAL;
+
+		if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
+			return -EINVAL;
+
+		if ((dw_mode == VDEC_DW_AFBC_ONLY) && (tw_mode == VDEC_TW_INVALID))
+			*nplanes = 1;
 
 		for (i = 0; i < *nplanes; i++) {
 			sizes[i] = q_data->sizeimage[i];
@@ -3664,6 +3762,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	struct aml_vcodec_mem src_mem;
 	struct aml_buf_config config;
 	u32 dw = VDEC_DW_NO_AFBC;
+	u32 tw = VDEC_TW_INVALID;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT,
 		"%s, vb: %lx, type: %d, idx: %d, state: %d, used: %d, ts: %llu\n",
@@ -3676,13 +3775,6 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
 		struct aml_buf *aml_buf = buf->aml_buf;
 		struct vframe_s *vf = &aml_buf->vframe;
-		u32 dw_mode = VDEC_DW_NO_AFBC;
-
-		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode)) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
-			return;
-
-		}
 
 		/* DI hook must be detached if the dmabuff be reused. */
 		if (ctx->vpp_cfg.enable_local_buf) {
@@ -3839,6 +3931,12 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 
 	}
 
+	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		return;
+
+	}
+
 	if (!ctx->picinfo.dpb_frames)
 		return;
 
@@ -3846,12 +3944,17 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	ctx->last_decoded_picinfo = ctx->picinfo;
 
 	config.enable_extbuf	= true;
-	config.enable_fbc	= (dw != VDEC_DW_NO_AFBC) ? true : false;
+	config.enable_fbc	= ((dw != VDEC_DW_NO_AFBC) || tw) ? true : false;
 	config.enable_secure	= ctx->is_drm_mode;
 	config.memory_mode	= vb->vb2_queue->memory;
 	config.planes		= V4L2_TYPE_IS_MULTIPLANAR(vb->vb2_queue->type) ? 2 : 1;
 	config.luma_length	= ctx->picinfo.y_len_sz;
 	config.chroma_length	= ctx->picinfo.c_len_sz;
+	config.luma_length_ex	= ctx->picinfo.y_len_sz_ex;
+	config.chroma_length_ex	= ctx->picinfo.c_len_sz_ex;
+	config.dw_mode			= dw;
+	config.tw_mode			= tw;
+
 	aml_buf_configure(&ctx->bm, &config);
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,

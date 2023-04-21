@@ -334,7 +334,8 @@ static int vcodec_feature_support_format(int vformat)
 			else
 				return 0;
 		case VFORMAT_AVS3:
-			if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5)
+			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+				(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
 				return 1;
 			return 0;
 		case VFORMAT_AVS:

@@ -43,7 +43,8 @@ bool is_support_vdec_canvas(void)
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
 		return true;
 	return false;
 }
@@ -355,8 +356,8 @@ void config_cav_lut_ex(u32 index, ulong addr, u32 width,
 			(( cav_lut.blk_mode & 0x3) << 24);
 		*/
 		u32 addr_bits_l = ((((addr + 7) >> 3) & CANVAS_ADDR_LMASK) << CAV_WADDR_LBIT);
-		u32 width_l     = ((((width    + 7) >> 3) & CANVAS_WIDTH_LMASK) << CAV_WIDTH_LBIT);
-		u32 width_h     = ((((width    + 7) >> 3) >> CANVAS_WIDTH_LWID) << CAV_WIDTH_HBIT);
+		u32 width_l     = ((((width + 7) >> 3) & CANVAS_WIDTH_LMASK) << CAV_WIDTH_LBIT);
+		u32 width_h     = ((((width + 7) >> 3) >> CANVAS_WIDTH_LWID) << CAV_WIDTH_HBIT);
 		u32 height_h    = (height & CANVAS_HEIGHT_MASK) << CAV_HEIGHT_HBIT;
 		u32 blkmod_h    = (blkmode & CANVAS_BLKMODE_MASK) << CAV_BLKMODE_HBIT;
 		u32 switch_bits_ctl = (endian & 0xf) << CAV_ENDIAN_HBIT;

@@ -456,8 +456,10 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		} else if (!strcmp(name, "vp9_back")) {
 			format = VIDEO_DEC_VP9_BACK;
 			vdec = OPTEE_VDEC_HEVCB;
-		} else
+		} else {
 			format = VIDEO_DEC_VP9_MMU;
+			vdec = OPTEE_VDEC_HEVC;
+		}
 		break;
 
 	case VFORMAT_AVS2:
@@ -774,7 +776,8 @@ static s32 amhevc_loadmc(const u32 *p)
 
 		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
 			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5))
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0xf << 16)));
 		else
 			WRITE_VREG(HEVC_IMEM_DMA_CTRL, (0x8000 | (0x7 << 16)));

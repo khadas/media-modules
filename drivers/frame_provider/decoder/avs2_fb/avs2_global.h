@@ -29,6 +29,10 @@
 #define SANITY_CHECK
 #undef NO_DISPLAY
 
+#define P010_ENABLE
+
+#define OW_TRIPLE_WRITE
+
 /* #include "define.h" */
 #define RD      "19.2"
 #define VERSION "19.2"
@@ -785,6 +789,16 @@ struct avs2_frame_s {
 	int height;
 	int depth;
 	struct avs2_frame_s *ref_pic[MAXREF];
+#endif
+#ifdef OW_TRIPLE_WRITE
+	unsigned int tw_y_adr;
+	unsigned int tw_u_v_adr;
+
+	//int tw_y_canvas_index;
+	//int tw_uv_canvas_index;
+	struct canvas_config_s tw_canvas_config[2];
+
+	u32 triple_write_mode;
 #endif
 };
 

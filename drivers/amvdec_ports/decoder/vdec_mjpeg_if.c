@@ -510,6 +510,13 @@ static int vdec_mjpeg_get_param(unsigned long h_vdec,
 		break;
 	}
 
+	case GET_PARAM_TW_MODE:
+	{
+		u32 *mode = out;
+		*mode = VDEC_TW_INVALID;
+		break;
+	}
+
 	default:
 		v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_ERROR,
 			"invalid get parameter type=%d\n", type);

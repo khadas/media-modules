@@ -1555,6 +1555,16 @@ typedef struct avs3_frame_s {
 	u64 time;
 	int is_display;
 #endif
+	u32 tw_y_adr;
+	u32 tw_u_v_adr;
+	u32 luma_size_ex;
+	u32 chroma_size_ex;
+
+	//int tw_y_canvas_index;
+	//int tw_uv_canvas_index;
+	struct canvas_config_s tw_canvas_config[2];
+
+	u32 triple_write_mode;
 } avs3_frame_t;
 #endif
 /* picture store structure */
