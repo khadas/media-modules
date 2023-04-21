@@ -1895,7 +1895,7 @@ struct hevc_state_s {
 	unsigned long buf_start;
 	u32 buf_size;
 	u32 mv_buf_size;
-
+	u32 curr_pic_offset;
 	struct BuffInfo_s work_space_buf_store;
 	struct BuffInfo_s *work_space_buf;
 
@@ -9561,7 +9561,6 @@ static int post_picture_early(struct vdec_s *vdec, int index)
 
 	pic->fence		= vdec->sync->fence;
 	pic->stream_offset	= READ_VREG(HEVC_SHIFT_BYTE_COUNT);
-
 	if (hevc->chunk) {
 		pic->pts	= hevc->chunk->pts;
 		pic->pts64	= hevc->chunk->pts64;
@@ -11064,8 +11063,13 @@ force_output:
 #endif
 		} else if (ret == 0) {
 			if ((hevc->new_pic) && (hevc->cur_pic)) {
-				hevc->cur_pic->stream_offset =
-				READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+				if (hevc->chunk != NULL) {
+					hevc->curr_pic_offset += hevc->chunk->size;
+				} else {
+					hevc->cur_pic->stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+					hevc->curr_pic_offset = hevc->cur_pic->stream_offset;
+				}
+				vdec_count_info(hevc->gvs, 0, hevc->curr_pic_offset);
 				hevc_print(hevc, H265_DEBUG_OUT_PTS,
 					"read stream_offset = 0x%x\n",
 					hevc->cur_pic->stream_offset);
@@ -12768,7 +12772,6 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		if (run_ready(vdec, VDEC_HEVC)) {
 			int r;
 			int decode_size;
-
 			r = vdec_prepare_input(vdec, &hevc->chunk);
 			if (r < 0) {
 				hevc->dec_result = DEC_RESULT_GET_DATA_RETRY;
@@ -13592,7 +13595,6 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		!vdec_secure(vdec)) {
 		int jj;
 		u8 *data = NULL;
-
 		if (!hevc->chunk->block->is_mapped)
 			data = codec_mm_vmap(hevc->chunk->block->start +
 				hevc->data_offset, r);

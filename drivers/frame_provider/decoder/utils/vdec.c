@@ -1244,6 +1244,9 @@ EXPORT_SYMBOL(vdec_set_no_powerdown);
 void  vdec_count_info(struct vdec_info *vs, unsigned int err,
 	unsigned int offset)
 {
+	if (!vs)
+		return;
+
 	if (err)
 		vs->error_frame_count++;
 	if (offset) {
@@ -1259,14 +1262,14 @@ void  vdec_count_info(struct vdec_info *vs, unsigned int err,
 				vs->offset = offset;
 			vs->samp_cnt += vs->frame_dur;
 		} else {
-			vs->bit_rate = (offset - vs->offset) / 2;
-			/*pr_info("bitrate : %u\n",vs->bit_rate);*/
+			if (offset > vs->offset)
+				vs->bit_rate = (offset - vs->offset) / 2;
 			vs->samp_cnt = 0;
 		}
 	}
 		vs->frame_count++;
-	/*pr_info("size : %u, offset : %u, dur : %u, cnt : %u\n",
-		vs->offset,offset,vs->frame_dur,vs->samp_cnt);*/
+	/* pr_info("size : %u, offset : %u, dur : %u, cnt : %u\n",
+		vs->offset,offset,vs->frame_dur,vs->samp_cnt); */
 	return;
 }
 EXPORT_SYMBOL(vdec_count_info);

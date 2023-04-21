@@ -2000,7 +2000,7 @@ struct hevc_state_s {
 	unsigned long buf_start;
 	u32 buf_size;
 	u32 mv_buf_size;
-
+	u32 curr_pic_offset;
 	struct BuffInfo_s work_space_buf_store;
 	struct BuffInfo_s *work_space_buf;
 
@@ -11824,6 +11824,14 @@ force_output:
 #endif
 		} else if (ret == 0) {
 			if ((hevc->new_pic) && (hevc->cur_pic)) {
+				if (hevc->chunk != NULL) {
+					hevc->curr_pic_offset += hevc->chunk->size;
+				} else {
+					hevc->cur_pic->stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+					hevc->curr_pic_offset = hevc->cur_pic->stream_offset;
+				}
+				vdec_count_info(hevc->gvs, 0, hevc->curr_pic_offset);
+
 				hevc->cur_pic->stream_offset = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
 				hevc_print(hevc, H265_DEBUG_OUT_PTS,
 					"read stream_offset = 0x%x\n",

@@ -1037,7 +1037,7 @@ struct VP9Decoder_s {
 	int double_write_mode;
 #endif
 	long used_4k_num;
-
+	u32 curr_pic_offset;
 	unsigned char m_ins_flag;
 	char *provider_name;
 	union param_u param;
@@ -7533,7 +7533,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			atomic_add(1, &pbi->vf_pre_count);
 			pbi_update_gvs(pbi);
 			/*count info*/
-			vdec_count_info(pbi->gvs, 0, stream_offset);
+			if (pbi->chunk)
+				pbi->curr_pic_offset += pbi->chunk->size;
+			else
+				pbi->curr_pic_offset = stream_offset;
+			vdec_count_info(pbi->gvs, 0, pbi->curr_pic_offset);
+
 			if (stream_offset) {
 				if (slice_type == KEY_FRAME) {
 					pbi->gvs->i_decoded_frames++;

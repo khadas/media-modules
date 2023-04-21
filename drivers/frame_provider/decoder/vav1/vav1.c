@@ -673,7 +673,7 @@ struct AV1HW_s {
 	struct work_struct set_clk_work;
 	u32 start_shift_bytes;
 	u32 data_size;
-
+	u32 curr_pic_offset;
 	struct BuffInfo_s work_space_buf_store;
 	unsigned long buf_start;
 	u32 buf_size;
@@ -6645,30 +6645,34 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				pts_valid = 0;
 				pts_us64_valid = 0;
 			}
-		} else
-#endif
-		if (pts_lookup_offset_us64
-			(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
-			&frame_size, 0,
-			&vf->pts_us64) != 0) {
-#ifdef DEBUG_PTS
-			hw->pts_missed++;
-#endif
-			vf->pts = 0;
-			vf->pts_us64 = 0;
-			pts_valid = 0;
-			pts_us64_valid = 0;
+			hw->curr_pic_offset += hw->chunk->size;
 		} else {
-#ifdef DEBUG_PTS
-			hw->pts_hit++;
 #endif
-			pts_valid = 1;
-			pts_us64_valid = 1;
+			if (pts_lookup_offset_us64
+				(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
+				&frame_size, 0,
+				&vf->pts_us64) != 0) {
+#ifdef DEBUG_PTS
+				hw->pts_missed++;
+#endif
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+				pts_valid = 0;
+				pts_us64_valid = 0;
+			} else {
+#ifdef DEBUG_PTS
+				hw->pts_hit++;
+#endif
+				pts_valid = 1;
+				pts_us64_valid = 1;
+			}
+			hw->curr_pic_offset = stream_offset;
 		}
 		av1_print(hw, AV1_DEBUG_OUT_PTS,
 			"av1 output slice type %d, dur %d, pts %d, pts64 %lld, ts: %llu\n",
 			pic_config->slice_type, hw->frame_dur, vf->pts, vf->pts_us64, vf->timestamp);
 
+		vdec_count_info(hw->gvs, 0, hw->curr_pic_offset);
 		fill_frame_info(hw, pic_config, frame_size, vf->pts);
 
 		vf->index = 0xff00 | pic_config->index;
@@ -9434,6 +9438,7 @@ int vav1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
+	vstatus->bit_rate = av1->gvs->bit_rate;
 	vstatus->status = av1->stat | av1->fatal_error;
 	vstatus->frame_dur = av1->frame_dur;
 //#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC

@@ -661,7 +661,7 @@ struct AV1HW_s {
 	struct work_struct set_clk_work;
 	u32 start_shift_bytes;
 	u32 data_size;
-
+	u32 curr_pic_offset;
 	struct BuffInfo_s work_space_buf_store;
 	unsigned long buf_start;
 	u32 buf_size;
@@ -6124,26 +6124,30 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				pts_valid = 0;
 				pts_us64_valid = 0;
 			}
-		} else
-#endif
-		if (pts_lookup_offset_us64
-			(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
-			&frame_size, 0,
-			&vf->pts_us64) != 0) {
-#ifdef DEBUG_PTS
-			hw->pts_missed++;
-#endif
-			vf->pts = 0;
-			vf->pts_us64 = 0;
-			pts_valid = 0;
-			pts_us64_valid = 0;
+			hw->curr_pic_offset += hw->data_size;
 		} else {
-#ifdef DEBUG_PTS
-			hw->pts_hit++;
 #endif
-			pts_valid = 1;
-			pts_us64_valid = 1;
+			if (pts_lookup_offset_us64
+				(PTS_TYPE_VIDEO, stream_offset, &vf->pts,
+				&frame_size, 0,
+				&vf->pts_us64) != 0) {
+#ifdef DEBUG_PTS
+				hw->pts_missed++;
+#endif
+				vf->pts = 0;
+				vf->pts_us64 = 0;
+				pts_valid = 0;
+				pts_us64_valid = 0;
+			} else {
+#ifdef DEBUG_PTS
+				hw->pts_hit++;
+#endif
+				pts_valid = 1;
+				pts_us64_valid = 1;
+			}
+			hw->curr_pic_offset = stream_offset;
 		}
+		vdec_count_info(hw->gvs, 0, hw->curr_pic_offset);
 
 		if (hw->av1_first_pts_ready) {
 			if (hw->frame_dur && ((vf->pts == 0) || (vf->pts_us64 == 0))) {
@@ -9066,6 +9070,7 @@ int vav1_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = 0;
+	vstatus->bit_rate = av1->gvs->bit_rate;
 	vstatus->status = av1->stat | av1->fatal_error;
 	vstatus->frame_dur = av1->frame_dur;
 	vstatus->bit_rate = av1->gvs->bit_rate;

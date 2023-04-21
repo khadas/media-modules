@@ -754,7 +754,7 @@ struct vdec_h264_hw_s {
 	struct vframe_s vframe_dummy;
 
 	unsigned char buffer_empty_flag;
-
+	u32 curr_pic_offset;
 	u32 frame_width;
 	u32 frame_height;
 	u32 frame_dur;
@@ -6680,6 +6680,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
+			hw->gvs.frame_dur = hw->frame_dur;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			DEL_EXIST(hw,
 				p_H264_Dpb->mVideo.dec_picture) = 0;
@@ -6706,7 +6707,8 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					p_H264_Dpb->mSlice.slice_type,
 					hw->chunk->pts, 1);
 #endif
-
+				hw->curr_pic_offset += hw->chunk->size;
+				vdec_count_info(&hw->gvs, 0,hw->curr_pic_offset);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			} else if (vdec->master) {
 				/*dv enhance layer,
@@ -6723,7 +6725,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				u32 vpts_valid = 0;
 				u32 vpts = 0;
 				checkout_pts_offset pts_info;
-
+				vdec_count_info(&hw->gvs, 0,offset);
 				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
 				if (vdec->pts_server_id == 0) {
 					if (pts_pickout_offset_us64(PTS_TYPE_VIDEO,
@@ -8284,6 +8286,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	else
 		vstatus->frame_rate = -1;
 	vstatus->error_count = hw->gvs.error_frame_count;
+	vstatus->bit_rate = hw->gvs.bit_rate;
 	vstatus->status = hw->stat;
 	if (hw->h264_ar == 0x3ff)
 		ar_tmp = (0x100 *

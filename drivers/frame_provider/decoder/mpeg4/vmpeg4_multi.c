@@ -247,7 +247,8 @@ struct vdec_mpeg4_hw_s {
 	u32 frame_height;
 	u32 frame_dur;
 	u32 frame_prog;
-
+	u32 bit_rate;
+	u32 curr_pic_offset;
 	u32 ctx_valid;
 	u32 reg_vcop_ctrl_reg;
 	u32 reg_pic_head_info;
@@ -270,6 +271,7 @@ struct vdec_mpeg4_hw_s {
 	u32 eos;
 	void *mm_blk_handle;
 
+	struct vdec_info   gvs;
 	struct vframe_chunk_s *chunk;
 	u32 chunk_offset;
 	u32 chunk_size;
@@ -1314,6 +1316,15 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 				hw->profile_idc, hw->level_idc);
 		}
 
+		if (hw->chunk)
+			hw->curr_pic_offset += hw->chunk->size;
+		else
+			hw->curr_pic_offset = READ_VREG(MP4_OFFSET_REG);
+
+		hw->gvs.frame_dur = hw->frame_dur;
+		vdec_count_info(&hw->gvs, 0, hw->curr_pic_offset);
+		hw->bit_rate = hw->gvs.bit_rate;
+
 		index = spec_to_index(hw, READ_VREG(REC_CANVAS_ADDR));
 		if (index < 0) {
 			mmpeg4_debug_print(DECODE_ID(hw), 0,
@@ -1977,6 +1988,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 		vstatus->frame_rate = -1;
 	vstatus->error_count = READ_VREG(MP4_ERR_COUNT);
 	vstatus->status = hw->stat;
+	vstatus->bit_rate = hw->bit_rate;
 	vstatus->frame_dur = hw->frame_dur;
 	vstatus->error_frame_count = READ_VREG(MP4_ERR_COUNT);
 	vstatus->drop_frame_count = hw->drop_frame_count;

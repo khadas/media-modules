@@ -733,7 +733,7 @@ struct vdec_h264_hw_s {
 	struct vframe_s vframe_dummy;
 
 	unsigned char buffer_empty_flag;
-
+	u32 curr_pic_offset;
 	u32 frame_width;
 	u32 frame_height;
 	u32 frame_dur;
@@ -6297,6 +6297,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			get_picture_qos_info(p_H264_Dpb->mVideo.dec_picture);
+			hw->gvs.frame_dur = hw->frame_dur;
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			DEL_EXIST(hw,
 				p_H264_Dpb->mVideo.dec_picture) = 0;
@@ -6336,6 +6337,8 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					p_H264_Dpb->mVideo.dec_picture->pts64 = pts_st.pts_64;
 					p_H264_Dpb->mVideo.dec_picture->timestamp = pts_st.pts_64;
 				}
+				hw->curr_pic_offset += hw->chunk->size;
+				vdec_count_info(&hw->gvs, 0, hw->curr_pic_offset);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 			} else if (vdec->master) {
 				/*dv enhance layer,
@@ -6353,6 +6356,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				u64 dur_offset = hw->frame_dur;
 				dur_offset = (dur_offset << 32) | offset;
 
+				vdec_count_info(&hw->gvs, 0,offset);
 				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
 				if (ctx->pts_serves_ops->cal_offset(ctx->ptsserver_id, dur_offset, &pts_st)) {
 					pic->pts = 0;
@@ -7901,7 +7905,7 @@ static int dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 			DISP_RATIO_ASPECT_RATIO_MAX);
 	vstatus->ratio_control =
 		ar << DISP_RATIO_ASPECT_RATIO_BIT;
-
+	vstatus->bit_rate = hw->gvs.bit_rate;
 	vstatus->error_frame_count = hw->gvs.error_frame_count;
 	vstatus->drop_frame_count = hw->gvs.drop_frame_count;
 	vstatus->frame_count = decode_frame_count[DECODE_ID(hw)];
