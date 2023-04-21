@@ -5848,12 +5848,9 @@ static int config_pic(struct VP9Decoder_s *pbi,
 
 			if (vdec->vdata != NULL) {
 				int index = 0;
-				struct vdec_data_buf_s data_buf;
-				data_buf.alloc_policy = ALLOC_HDR10P_BUF;
-				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
 
 				if (pic_config->vdec_data_index == -1) {
-					index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
+					index = vdec_data_get_index((ulong)vdec->vdata);
 					pic_config->vdec_data_index = index;
 				} else {
 					index = pic_config->vdec_data_index;
@@ -5861,10 +5858,10 @@ static int config_pic(struct VP9Decoder_s *pbi,
 
 				if (index >= 0) {
 					pic_config->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
-					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
-					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, VF_BUFFER_IDX(i));
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[VF_BUFFER_IDX(i)].node);
 					decoder_bmmu_box_add_callback_func(pbi->bmmu_box, VF_BUFFER_IDX(i),
-						(void *)&vdec->vdata->release_callback[i]);
+						(void *)&vdec->vdata->release_callback[VF_BUFFER_IDX(i)]);
 				} else {
 					vp9_print(pbi, 0, "vdec data is full\n");
 				}
@@ -5987,21 +5984,17 @@ static void init_pic_list(struct VP9Decoder_s *pbi)
 
 			if (vdec->vdata != NULL) {
 				int index = 0;
-				struct vdec_data_buf_s data_buf;
-				data_buf.alloc_policy = ALLOC_HDR10P_BUF;
-				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
-
-				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
+				index = vdec_data_get_index((ulong)vdec->vdata);
 
 				if (index >= 0) {
 					struct PIC_BUFFER_CONFIG_s *pic;
 					pic = &cm->buffer_pool->frame_bufs[i].buf;
 					pic->vdec_data_index = index;
 					pic->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
-					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
-					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, HEADER_BUFFER_IDX(i));
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[HEADER_BUFFER_IDX(i)].node);
 					decoder_bmmu_box_add_callback_func(pbi->bmmu_box, HEADER_BUFFER_IDX(i),
-						(void *)&vdec->vdata->release_callback[i]);
+						(void *)&vdec->vdata->release_callback[HEADER_BUFFER_IDX(i)]);
 				} else {
 					vp9_print(pbi, 0, "vdec data is full\n");
 				}
