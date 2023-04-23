@@ -137,6 +137,12 @@ to enable DV of frame mode
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 #define INVALID_IDX -1  /* Invalid buffer index.*/
 
+#define MMU_COMPRESS_HEADER_SIZE_1080P  0x10000
+#define MMU_COMPRESS_HEADER_SIZE_4K  0x48000
+#define MMU_COMPRESS_HEADER_SIZE_8K  0x120000
+
+#define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
+
 static int mmu_enable;
 /*mmu do not support mbaff*/
 static int force_enable_mmu = 0;
@@ -9327,6 +9333,17 @@ static int h264_max_mmu_buf_size(int max_w, int max_h)
 	return buf_size;
 }
 
+static int h264_get_header_size(int w, int h)
+{
+	w = ALIGN(w, 64);
+	h = ALIGN(h, 64);
+
+	if (IS_4K_SIZE(w, h))
+		return ALIGN(MMU_COMPRESS_HEADER_SIZE_4K, 0x10000);
+
+	return ALIGN(MMU_COMPRESS_HEADER_SIZE_1080P, 0x10000);
+}
+
 static void h264_get_comp_buf_info(struct aml_vdec_ps_infos *ps,
 		struct vdec_comp_buf_info *info)
 {
@@ -9334,7 +9351,7 @@ static void h264_get_comp_buf_info(struct aml_vdec_ps_infos *ps,
 	int h = ps->mb_height << 4;
 
 	info->max_size = h264_max_mmu_buf_size(w, h);
-	info->header_size = compute_losless_comp_header_size(w,h);
+	info->header_size = h264_get_header_size(w,h);
 	info->frame_buffer_size = h264_mmu_page_num(w, h, 0);
 
 	pr_info("h264 get comp info: %d %d %d\n",
