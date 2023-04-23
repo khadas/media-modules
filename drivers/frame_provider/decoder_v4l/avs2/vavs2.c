@@ -5580,15 +5580,14 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 		debug_buffer_mgr_more(dec);
 		get_frame_rate(&dec->avs2_dec.param, dec);
 
-// The video_signal_type is type of uint16_t and result false, so comment it out.
-		if (dec->avs2_dec.param.p.video_signal_type & (1<<30)) {
+		if (dec->avs2_dec.param.p.video_signal_type & (1<<14)) {
 			union param_u *pPara;
 
-			avs2_print(dec, 0, "avs2 HDR meta data present\n");
+			avs2_print(dec, AVS2_DBG_HDR_INFO, "avs2 HDR meta data present\n");
 			pPara = &dec->avs2_dec.param;
 
 			/*clean this flag*/
-			pPara->p.video_signal_type &= ~(1<<30);
+			pPara->p.video_signal_type &= ~(1<<14);
 
 			dec->vf_dp.present_flag = 1;
 

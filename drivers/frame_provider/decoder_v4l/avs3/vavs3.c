@@ -7052,14 +7052,14 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		debug_buffer_mgr_more(dec);
 		get_frame_rate(&dec->avs3_dec.param, dec);
 
-		if (dec->avs3_dec.param.p.video_signal_type & (1<<30)) {
+		if (dec->avs3_dec.param.p.video_signal_type & (1<<14)) {
 			union param_u *pPara;
 
-			avs3_print(dec, 0, "avs3 HDR meta data present\n");
+			avs3_print(dec, AVS3_DBG_HDR_INFO, "avs3 HDR meta data present\n");
 			pPara = &dec->avs3_dec.param;
 
 			/*clean this flag*/
-			pPara->p.video_signal_type &= ~(1<<30);
+			pPara->p.video_signal_type &= ~(1<<14);
 
 			dec->vf_dp.present_flag = 1;
 
