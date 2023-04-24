@@ -1179,6 +1179,8 @@ long mediasync_ins_set_paused(s32 sSyncInsId, s32 sPaused) {
 	pInstance->mLastRealTime = current_systemtime;
 	pInstance->mLastStc = current_stc;
 
+	pInstance->mStcParmUpdateCount++;
+
 	mutex_unlock(&(vMediaSyncInsList[index].m_lock));
 
 	return 0;
