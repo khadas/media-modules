@@ -71,6 +71,7 @@
 #include "../../decoder/utils/aml_buf_helper.h"
 #include "../../../amvdec_ports/aml_vcodec_ts.h"
 #include "../../decoder/utils/decoder_dma_alloc.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define DETECT_WRONG_MULTI_SLICE
 
@@ -7128,6 +7129,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 		hw->last_mby_mbx = 0;
 		hw->last_vld_level = 0;
 		start_process_time(hw);
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_VDEC_1);
 	} else if (dec_dpb_status == H264_PIC_DATA_DONE
 		||((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
 #ifdef DETECT_WRONG_MULTI_SLICE
@@ -7532,6 +7534,9 @@ static irqreturn_t vh264_isr(struct vdec_s *vdec, int irq)
 
 	p_H264_Dpb->vdec = vdec;
 	p_H264_Dpb->dec_dpb_status = READ_VREG(DPB_STATUS_REG);
+	if (p_H264_Dpb->dec_dpb_status == H264_PIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_VDEC_1);
+	}
 
 	if (p_H264_Dpb->dec_dpb_status == H264_SLICE_HEAD_DONE ||
 		p_H264_Dpb->dec_dpb_status == H264_CONFIG_REQUEST) {

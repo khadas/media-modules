@@ -521,6 +521,11 @@ struct vdec_s {
 	bool front_pic_done;
 	bool back_pic_done;
 #endif
+	char decode_hw_front_time_name[32];
+	char decode_hw_back_time_name[32];
+	char decode_hw_front_spend_time_avg[32];
+	char decode_hw_back_spend_time_avg[32];
+
 };
 
 #define CODEC_MODE(a, b, c, d)\

@@ -70,6 +70,7 @@
 #include <linux/amlogic/media/video_sink/video.h>
 #include <linux/amlogic/media/codec_mm/configs.h>
 #include "../../../include/regs/dos_registers.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define FOR_S5
 #define PXP_NO_SWAP
@@ -10468,6 +10469,11 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 	struct hevc_state_s *hevc =
 		(struct hevc_state_s *)vdec->private;
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
+
+	hevc->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (hevc->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
 	/*BackEnd_Handle()*/
 	if (hevc->front_back_mode != 1) {
 		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
@@ -10479,8 +10485,6 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 
 	if (pic->error_mark)
 		hevc->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
-	else
-		hevc->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 
 	if (debug & H265_DEBUG_BUFMGR)
 		hevc_print(hevc, 0,
@@ -11935,8 +11939,8 @@ force_output:
 			/* Interrupt Amrisc to execute */
 			WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
 		}
-
-	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
+		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	} else if (dec_status == HEVC_DECODE_OVER_SIZE) {
 		hevc_print(hevc, 0 , "hevc  decode oversize !!\n");
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -11970,6 +11974,11 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	unsigned int dec_status;
 	struct hevc_state_s *hevc = (struct hevc_state_s *)data;
 	struct aml_vcodec_ctx *ctx = hevc->v4l2_ctx;
+
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 
 	if ((debug & HEVC_BE_SIMULATE_IRQ)
 		&&(READ_VREG(DEBUG_REG1_DBE) ||

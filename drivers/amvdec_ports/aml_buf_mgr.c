@@ -180,6 +180,9 @@ static int aml_buf_fbc_init(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 			"fail to alloc %dth bmmu\n", i);
 		return -ENOMEM;
 	}
+	if (!bm->config.enable_secure) {
+		codec_mm_memset(fbc->haddr, 0, fbc->hsize);
+	}
 
 	if (bm->bmmu_dw) {
 		ret = decoder_bmmu_box_alloc_buf_phy(bm->bmmu_dw,
@@ -192,6 +195,9 @@ static int aml_buf_fbc_init(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
 				"fail to alloc %dth bmmu dw\n", i);
 			return -ENOMEM;
+		}
+		if (!bm->config.enable_secure) {
+			codec_mm_memset(fbc->haddr_dw, 0, fbc->hsize_dw);
 		}
 	}
 

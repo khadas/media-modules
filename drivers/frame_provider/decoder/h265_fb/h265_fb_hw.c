@@ -994,6 +994,7 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//print_reg_flag = 1;
 		amhevc_start_b();
+		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));

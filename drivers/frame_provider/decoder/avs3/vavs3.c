@@ -7658,8 +7658,8 @@ decode_slice:
 			dec->has_i_frame = 1;
 		if (dec->m_ins_flag)
 			start_process_time(dec);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
-	vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
 		(dec_status == AVS3_HEAD_PIC_PB_READY)) {

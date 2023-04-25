@@ -7126,6 +7126,7 @@ decode_slice:
 
 		if (dec->m_ins_flag)
 			start_process_time(dec);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
 irq_handled_exit:
 	PRINT_LINE();

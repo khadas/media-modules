@@ -2975,6 +2975,15 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	snprintf(vdec->stream_rp, sizeof(vdec->stream_rp),
 			 "0.stream_rp-%d", vdec->id);
+	snprintf(vdec->decode_hw_front_time_name, sizeof(vdec->decode_hw_front_time_name),
+		"decode_%s_time-%d", is_support_dual_core()?"hw_front":"hw", vdec->id);
+	snprintf(vdec->decode_hw_back_time_name, sizeof(vdec->decode_hw_back_time_name),
+		"decode_hw_back_time-%d", vdec->id);
+
+	snprintf(vdec->decode_hw_front_spend_time_avg, sizeof(vdec->decode_hw_front_spend_time_avg),
+			"decode_%s_spend_time_avg-%d", is_support_dual_core()?"hw_front":"hw", vdec->id);
+	snprintf(vdec->decode_hw_back_spend_time_avg, sizeof(vdec->decode_hw_back_spend_time_avg),
+		"decode_hw_back_spend_time_avg-%d", vdec->id);
 
 	/*
 	 *todo: VFM patch control should be configurable,

@@ -1740,6 +1740,7 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 		WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_BE_DECODE_DATA);
 		WRITE_VREG(HEVC_SAO_CRC, 0);
 		amhevc_start_b();
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 	}
 }
 

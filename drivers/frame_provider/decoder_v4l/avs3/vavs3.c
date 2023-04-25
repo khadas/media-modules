@@ -67,6 +67,7 @@
 #include "../../decoder/utils/decoder_dma_alloc.h"
 #include "../../../common/media_utils/media_utils.h"
 #include "../../decoder/utils/aml_buf_helper.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 //#define TMP_DEBUG
 
@@ -6012,14 +6013,18 @@ irqreturn_t avs3_back_irq_cb(struct vdec_s *vdec, int irq)
 	struct AVS3Decoder_s *dec =
 		(struct AVS3Decoder_s *)vdec->private;
 	/*BackEnd_Handle()*/
+
+	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (dec->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
+
 	if (dec->front_back_mode != 1) {
 		avs3_print(dec, AVS3_DBG_IRQ_EVENT, "[BE] %s\n", __func__);
 		if (dec->front_back_mode == 3)
 			dec->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
 		return IRQ_WAKE_THREAD;
 	}
-
-	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 
 	if (READ_VREG(DEBUG_REG1_DBE)) {
 #ifdef USE_FRONT_ISR_HANDLE_FOR_BACK
@@ -7369,6 +7374,7 @@ decode_slice:
 			dec->has_i_frame = 1;
 		if (dec->m_ins_flag)
 			start_process_time(dec);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
 
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
@@ -7474,9 +7480,13 @@ static irqreturn_t vavs3_isr(int irq, void *data)
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
 	}
 #endif
-	WRITE_VREG(dec->ASSIST_MBOX0_CLR_REG, 1);
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
+	WRITE_VREG(dec->ASSIST_MBOX0_CLR_REG, 1);
 
 	if ((dec_status == AVS3_HEAD_PIC_I_READY) ||
 		(dec_status == AVS3_HEAD_PIC_PB_READY)) {

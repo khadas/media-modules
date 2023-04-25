@@ -64,6 +64,7 @@
 #include "../utils/decoder_dma_alloc.h"
 #include "avs2_global.h"
 #include "../../../common/media_utils/media_utils.h"
+#include "../../decoder/utils/vdec_profile.h"
 
 #define MEM_NAME "codec_avs2"
 
@@ -6221,7 +6222,12 @@ irqreturn_t avs2_back_irq_cb(struct vdec_s *vdec, int irq)
 {
 	struct AVS2Decoder_s *dec =
 		(struct AVS2Decoder_s *)vdec->private;
-	/*BackEnd_Handle()*/
+
+	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (dec->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
+		/*BackEnd_Handle()*/
 	if (dec->front_back_mode != 1) {
 		avs2_print(dec, AVS2_DBG_IRQ_EVENT,
 			"[BE] %s\n", __func__);
@@ -6229,7 +6235,6 @@ irqreturn_t avs2_back_irq_cb(struct vdec_s *vdec, int irq)
 			dec->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
 		return IRQ_WAKE_THREAD;
 	}
-	dec->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 
 	if (debug & AVS2_DBG_IRQ_EVENT)
 		avs2_print(dec, 0,
@@ -7173,6 +7178,7 @@ decode_slice:
 
 		if (dec->m_ins_flag)
 			start_process_time(dec);
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
 irq_handled_exit:
 	if ((dec_status == AVS2_HEAD_PIC_I_READY) ||
@@ -7193,6 +7199,11 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 	uint debug_tag;
 	int shiftbyte = 0;
 
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
 	WRITE_VREG(dec->ASSIST_MBOX0_CLR_REG, 1);
 
 	if ((debug & AVS2_DBG_BE_SIMULATE_IRQ)
@@ -7201,8 +7212,6 @@ static irqreturn_t vavs2_isr(int irq, void *data)
 		pr_info("Simulate BE irq\n");
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
 	}
-
-	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
 
 	if ((dec_status == AVS2_HEAD_PIC_I_READY) ||
 		(dec_status == AVS2_HEAD_PIC_PB_READY)) {

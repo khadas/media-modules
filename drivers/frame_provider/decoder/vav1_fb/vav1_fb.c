@@ -9600,6 +9600,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hw->work);
 		}
 	}
+	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -9612,11 +9613,15 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	//struct AV1_Common_s *const cm = &hw->common;
 	uint debug_tag;
 
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
+	if (dec_status == AOM_AV1_DEC_PIC_END ||
+		dec_status == AOM_NAL_DECODE_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+
 	if (hw->front_back_mode == 1) {
 		WRITE_VREG(hw->ASSIST_MBOX0_CLR_REG, 1);
 	}
-
-	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
 
 	if (dec_status == AOM_AV1_FRAME_HEAD_PARSER_DONE ||
 		dec_status == AOM_AV1_SEQ_HEAD_PARSER_DONE ||
@@ -11744,9 +11749,10 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	if (fb_ucode_debug == 1) {
 		amhevc_start();
 	} else {
-		if (hw->front_back_mode == 1)
+		if (hw->front_back_mode == 1) {
 			amhevc_start_b();
-
+			vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
+		}
 		if ((hw->front_back_mode == 2) || (hw->front_back_mode == 3)) {
 			WRITE_VREG(EE_ASSIST_MBOX0_IRQ_REG, 1);
 		}
@@ -11866,6 +11872,11 @@ irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 {
 	struct AV1HW_s *hw = (struct AV1HW_s *)vdec->private;
 
+	hw->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (hw->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
+
 	if (hw->front_back_mode == 1) {
 		WRITE_VREG(hw->backend_ASSIST_MBOX0_CLR_REG, 1);
 	}
@@ -11875,7 +11886,6 @@ irqreturn_t vav1_back_irq_cb(struct vdec_s *vdec, int irq)
 		return IRQ_WAKE_THREAD;
 	}
 
-	hw->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 	av1_print(hw, AV1_DEBUG_BUFMGR,
 		"[BE] av1 back isr (%d) back dec status  = 0x%x\n",
 		irq,hw->dec_status_back);

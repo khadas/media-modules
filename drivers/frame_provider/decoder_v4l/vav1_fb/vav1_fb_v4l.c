@@ -9281,6 +9281,7 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hw->work);
 		}
 	}
+	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -9292,6 +9293,12 @@ static irqreturn_t vav1_isr(int irq, void *data)
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
+
+	dec_status = READ_VREG(HEVC_DEC_STATUS_REG) & 0xff;
+	if (dec_status == AOM_AV1_DEC_PIC_END ||
+		dec_status == AOM_NAL_DECODE_DONE) {
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
 
 	if (hw->front_back_mode == 1) {
 		WRITE_VREG(hw->ASSIST_MBOX0_CLR_REG, 1);

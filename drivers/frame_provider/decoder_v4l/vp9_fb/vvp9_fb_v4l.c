@@ -4901,6 +4901,7 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_S5)
 			WRITE_VREG(HEVC_SAO_CRC, 0);
 		amhevc_start_b();
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 	}
 }
 
@@ -10996,6 +10997,11 @@ irqreturn_t vp9_back_irq_cb(struct vdec_s *vdec, int irq)
 	struct VP9Decoder_s *pbi =
 		(struct VP9Decoder_s *)vdec->private;
 
+	pbi->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
+	if (pbi->dec_status_back == HEVC_BE_DECODE_DATA_DONE) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC_BACK);
+	}
+
 	WRITE_VREG(pbi->backend_ASSIST_MBOX0_CLR_REG, 1);
 
 	if (pbi->front_back_mode != 1) {
@@ -11009,7 +11015,6 @@ irqreturn_t vp9_back_irq_cb(struct vdec_s *vdec, int irq)
 		READ_VREG(DEBUG_REG2_DBE));
 		WRITE_VREG(DEBUG_REG1_DBE, 0);
 	}
-	pbi->dec_status_back = READ_VREG(HEVC_DEC_STATUS_DBE);
 	if (pbi->dec_status_back == HEVC_DEC_IDLE) {
 		return IRQ_HANDLED;
 	}
@@ -11564,6 +11569,8 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 	if (pbi->m_ins_flag)
 		start_process_time(pbi);
 #endif
+
+	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	return IRQ_HANDLED;
 }
@@ -11575,8 +11582,11 @@ static irqreturn_t vvp9_isr(int irq, void *data)
 	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	unsigned int adapt_prob_status;
 
-	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	dec_status = READ_VREG(HEVC_DEC_STATUS_REG);
+	if (dec_status == HEVC_DECPIC_DATA_DONE) {
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_END, CORE_MASK_HEVC);
+	}
+	WRITE_VREG(HEVC_ASSIST_MBOX0_CLR_REG, 1);
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	if (dec_status == VP9_HEAD_PARSER_DONE) {
