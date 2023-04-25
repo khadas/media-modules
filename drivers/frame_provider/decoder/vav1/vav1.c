@@ -2075,296 +2075,128 @@ static u32 seg_map_size = 0x36000;
 
 static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	{ //8M bytes
-		.max_width = 1920,
-		.max_height = 1088,
-		.ipp = {
-			// IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
-			.buf_size = 0x1E00,
-		},
-		.sao_abv = {
-			.buf_size = 0x0, //0x30000,
-		},
-		.sao_vb = {
-			.buf_size = 0x0, //0x30000,
-		},
-		.short_term_rps = {
-			// SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
-			.buf_size = 0x800,
-		},
-		.vps = {
-			// VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
-			.buf_size = 0x800,
-		},
-		.seg_map = {
-			// SEGMENT MAP AREA(roundup 128) - 1920x1152/4/4 * 3 bits = 0xBF40 Bytes * 16 = 0xBF400
-			.buf_size = 0xCA800,
-		},
-		.daala_top = {
-			// DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256 = 0x2000
-			.buf_size = 0xf00,
-		},
-		.sao_up = {
-			// SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
-			.buf_size = 0x0, //0x2800,
-		},
-		.swap_buf = {
-			// 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
-			.buf_size = 0x800,
-		},
-		.cdf_buf = {
-			// for context store/load 1024x256 x16 = 512K bytes 16*0x8000
-			.buf_size = 0x80000,
-		},
-		.gmc_buf = {
-			// for gmc_parameter store/load 128 x 16 = 2K bytes 0x800
-			.buf_size = 0x800,
-		},
-		.scalelut = {
-			// support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
-			.buf_size = 0x0, //0x8000,
-		},
-		.dblk_para = {
-			// DBLK -> Max 256(4096/16) LCU, each para 1024bytes(total:0x40000), data 1024bytes(total:0x40000)
-			.buf_size = 0xd00, /*0xc40*/
-		},
-		.dblk_data = {
-			.buf_size = 0x49000,
-		},
-		.cdef_data = {
-			.buf_size = 0x22400,
-		},
-		.ups_data = {
-			.buf_size = 0x36000,
-		},
-		.fgs_table = {
-			.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS, // 512x128bits
-		},
+		.max_width		= 1920,  //2048
+		.max_height		= 1088,  //1152
+		.ipp			= {.buf_size = 0x1E00},  //- IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
+		.sao_abv		= {.buf_size = 0x0},  //0x30000
+		.sao_vb			= {.buf_size = 0x0},  //0x30000
+		.short_term_rps		= {.buf_size = 0x800},  // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
+		.vps			= {.buf_size = 0x800},  // VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
+		.seg_map		= {.buf_size = 0xD8000},  // SEGMENT MAP AREA(roundup 128) - 2048x1152/4/4*3bits=0xD800 Bytes*16=0xD8000
+		.daala_top		= {.buf_size = 0x1000},  // DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128 pixel. Total 2048/128*256=0x1000
+		.sao_up			= {.buf_size = 0x0},  //0x2800 // SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
+		.swap_buf		= {.buf_size = 0x800},  // 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
+		.cdf_buf		= {.buf_size = 0x80000},  // for context store/load 1024 x 256bits x 16 = 512K bytes x 16 = 0x80000
+		.gmc_buf		= {.buf_size = 0x800},  // for gmc_parameter store/load 128 bytes x 16 = 2K bytes = 0x800
+		.scalelut		= {.buf_size = 0x0}, //0x8000 // support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
+		.dblk_para		= {.buf_size = 0xd00}, //(ctu_numb_x+ctu_numb_y+2)*64 => (2048/64+1152/64+2)*64=0xd00
+		.dblk_data		= {.buf_size = 0x50800}, //addr_offset_lft(64)*4096+(ctu_numb_y+1)*2048 => 64*4096+(2048/64+1)*2048=0x50800
+		.cdef_data		= {.buf_size = 0x24200}, //1<<addr_offset_lft(17)+(ctu_numb_y+1)*512 => 1<<17+(2048/64+1)*512=0x24200
+		.ups_data		= {.buf_size = 0x63000},  //(ctu_numb_y+1)*12288 => (2048/64+1)*12288=0x63000
+		.fgs_table		= {.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS}, // 512x128bits per frame
 #ifdef AOM_AV1_MMU
-		.mmu_vbh = {
-			.buf_size = VBH_BUF_SIZE_1080P, //2*16*(more than 2304)/4, 4K
-		},
-		.cm_header = {
-	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
+		.mmu_vbh		= {.buf_size = VBH_BUF_SIZE_1080P}, //2*16*(more than 2304)/4, 4K
+		.cm_header		= {
+#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 			.buf_size = MMU_COMPRESS_HEADER_SIZE_1080P * FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
-	#else
+#else
 			.buf_size = 0,
-	#endif
+#endif
 		},
 #endif
 #ifdef AOM_AV1_MMU_DW
-		.mmu_vbh_dw = {
-			.buf_size = DW_VBH_BUF_SIZE_1080P, //2*16*(more than 2304)/4, 4K
-		},
-		.cm_header_dw = {
-	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
+		.mmu_vbh_dw		= {.buf_size = DW_VBH_BUF_SIZE_1080P}, //2*16*(more than 2304)/4, 4K
+		.cm_header_dw		= {
+#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 			.buf_size = MMU_COMPRESS_HEADER_SIZE_1080P*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
-	#else
+#else
 			.buf_size = 0,
-	#endif
+#endif
 		},
 #endif
-		.mpred_above = {
-			.buf_size = 0x2800, /*round from 0x2760*/ /* 2 * size of hw*/
-		},
+		.mpred_above		= {.buf_size = 0x2a00}, //(pic_width/64)*21*16 byte=2048/64*21*16=0x2a00
 #ifdef MV_USE_FIXED_BUF
-		.mpred_mv = {
-		   .buf_size = MAX_ONE_MV_BUFFER_SIZE_1080P_TM2REVB * FRAME_BUFFERS,/*round from 203A0*/ //1080p, 0x40000 per buffer
-		},
+		.mpred_mv		= {.buf_size = MAX_ONE_MV_BUFFER_SIZE_1080P_TM2REVB * FRAME_BUFFERS},/*round from 203A0*/ //1080p, 0x40000 per buffer
 #endif
-		.rpm = {
-		   .buf_size = 0x80*2,
-		},
-		.lmem = {
-			.buf_size = 0x400 * 2,
-		}
+		.rpm			= {.buf_size = 0x80 * 2},
+		.lmem			= {.buf_size = 0x400 * 2},
 	},
 	{
 #ifdef VPU_FILMGRAIN_DUMP
-		.max_width = 640,
-		.max_height = 480,
+		.max_width		= 640,
+		.max_height		= 480,
 #else
-		.max_width = 4096,
-		.max_height = 2304,
+		.max_width		= 4096,
+		.max_height		= 2304,
 #endif
-		.ipp = {
-			// IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
-			.buf_size = 0x4000,
-		},
-		.sao_abv = {
-			.buf_size = 0x0, //0x30000,
-		},
-		.sao_vb = {
-			.buf_size = 0x0, //0x30000,
-		},
-		.short_term_rps = {
-			// SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
-			.buf_size = 0x800,
-		},
-		.vps = {
-			// VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
-			.buf_size = 0x800,
-		},
-		.seg_map = {
-			// SEGMENT MAP AREA - 4096x2304/4/4 * 3 bits = 0x36000 Bytes * 16 = 0x360000
-			.buf_size = 0x360000,
-		},
-		.daala_top = {
-			// DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256 = 0x2000
-			.buf_size = 0x2000,
-		},
-		.sao_up = {
-			// SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
-			.buf_size = 0x0, //0x2800,
-		},
-		.swap_buf = {
-			// 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
-			.buf_size = 0x800,
-		},
-		.cdf_buf = {
-		// for context store/load 1024x256 x16 = 512K bytes 16*0x8000
-			.buf_size = 0x80000,
-		},
-		.gmc_buf = {
-		// for gmc_parameter store/load 128 x 16 = 2K bytes 0x800
-			.buf_size = 0x800,
-		},
-		.scalelut = {
-			// support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
-			.buf_size = 0x0, //0x8000,
-		},
-		.dblk_para = {
-			// DBLK -> Max 256(4096/16) LCU, each para 64bytes(total:0x4000)
-			//(ctu_numb_x + ctu_numb_y + 2) * 64
-			.buf_size = 0x1a00, /*0x1980*/
-		},
-		.dblk_data = {
-			//addr_offset_lft(64) * 4096 + (ctu_numb_y + 1) * 2048
-			.buf_size = 0x5d800,
-		},
-		.cdef_data = {
-			//1 << addr_offset_lft(17) + (ctu_numb_y + 1) * 512
-			.buf_size = 0x27600,
-		},
-		.ups_data = {
-			.buf_size = 0x6f000,
-		},
-		.fgs_table = {
-			.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS, // 512x128bits
-		},
+		.ipp			= {.buf_size = 0x4000}, // IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
+		.sao_abv		= {.buf_size = 0x0}, //0x30000,
+		.sao_vb			= {.buf_size = 0x0}, //0x30000,
+		.short_term_rps		= {.buf_size = 0x800}, // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
+		.vps			= {.buf_size = 0x800}, // VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
+		.seg_map		= {.buf_size = 0x360000}, // SEGMENT MAP AREA(roundup 128) - 4096x2304/4/4*3bits=0x36000Bytes*16=0x360000
+		.daala_top		= {.buf_size = 0x2000}, // DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256=0x2000
+		.sao_up			= {.buf_size = 0x0}, //0x2800, // SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
+		.swap_buf		= {.buf_size = 0x800},  // 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
+		.cdf_buf		= {.buf_size = 0x80000}, // for context store/load 1024 x 256bits x 16 = 512K bytes x 16 = 0x80000
+		.gmc_buf		= {.buf_size = 0x800}, // for gmc_parameter store/load 128 bytes x 16 = 2K bytes = 0x800
+		.scalelut		= {.buf_size = 0x0}, //0x8000, // support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
+		.dblk_para		= {.buf_size = 0x1a00}, //(ctu_numb_x+ctu_numb_y+2)*64 => (4096/64+2304/64+2)*64=0x1980
+		.dblk_data		= {.buf_size = 0x60800}, //addr_offset_lft(64)*4096+(ctu_numb_y+1)*2048 => 64*4096+(4096/64+1)*2048=0x60800
+		.cdef_data		= {.buf_size = 0x28200}, //1 << addr_offset_lft(17)+(ctu_numb_y+1)*512 => 1<<17+(4096/64+1)*512=0x28200
+		.ups_data		= {.buf_size = 0xc3000}, //(ctu_numb_y+1)*12288=>(4096/64+1)*12288=0xc3000
+		.fgs_table		= {.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS}, // 512x128bits per frame
 #ifdef AOM_AV1_MMU
-		.mmu_vbh = {
-			.buf_size = VBH_BUF_SIZE_4K, //2*16*(more than 2304)/4, 4K
-		},
-		.cm_header = {
-	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
+		.mmu_vbh		= {.buf_size = VBH_BUF_SIZE_4K}, //2*16*(more than 2304)/4, 4K
+		.cm_header		= {
+#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 			.buf_size = MMU_COMPRESS_HEADER_SIZE_4K*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
-	#else
+#else
 			.buf_size = 0,
-	#endif
+#endif
 		},
 #endif
 #ifdef AOM_AV1_MMU_DW
-		.mmu_vbh_dw = {
-			.buf_size = DW_VBH_BUF_SIZE_4K, //2*16*(more than 2304)/4, 4K
-		},
-		.cm_header_dw = {
-	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
+		.mmu_vbh_dw		= {.buf_size = DW_VBH_BUF_SIZE_4K}, //2*16*(more than 2304)/4, 4K
+		.cm_header_dw		= {
+#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 			.buf_size = MMU_COMPRESS_HEADER_SIZE_4K*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
-	#else
+#else
 			.buf_size = 0,
-	#endif
+#endif
 		},
 #endif
-		.mpred_above = {
-			.buf_size = 0x5400, /* 2 * size of hw*/
-		},
+		.mpred_above		= {.buf_size = 0x5400}, //(pic_width/64)*21*16 byte=4096/64*21*16=0x5400
 #ifdef MV_USE_FIXED_BUF
-		.mpred_mv = {
-		  /* .buf_size = 0x100000*16,
-		  //4k2k , 0x100000 per buffer */
-		  /* 4096x2304 , 0x120000 per buffer */
-		  .buf_size = MAX_ONE_MV_BUFFER_SIZE_4K_TM2REVB * FRAME_BUFFERS,
-		},
+		.mpred_mv		= {.buf_size = MAX_ONE_MV_BUFFER_SIZE_4K_TM2REVB * FRAME_BUFFERS}, // .buf_size = 0x100000*16, 4k2k => 0x100000 per buffer 4096x2304 =>0x120000 per buffer
 #endif
-		.rpm = {
-		   .buf_size = 0x80*2,
-		},
-		.lmem = {
-			.buf_size = 0x400 * 2,
-		}
-
+		.rpm 			= {.buf_size = 0x80 * 2},
+		.lmem			= {.buf_size = 0x400 * 2},
 	},
 	{
-		.max_width = 8192,
-		.max_height = 4608,
-		.ipp = {
-			// IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
-			.buf_size = 0x4000,
-		},
-		.sao_abv = {
-			.buf_size = 0x0, //0x30000,
-		},
-		.sao_vb = {
-			.buf_size = 0x0, //0x30000,
-		},
-		.short_term_rps = {
-			// SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
-			.buf_size = 0x800,
-		},
-		.vps = {
-			// VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
-			.buf_size = 0x800,
-		},
-		.seg_map = {
-			// SEGMENT MAP AREA - 4096x2304/4/4 * 3 bits = 0x36000 Bytes * 16 = 0x360000
-			.buf_size = 0xd80000,
-		},
-		.daala_top = {
-			// DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096/128*256 = 0x2000
-			.buf_size = 0x2000,
-		},
-		.sao_up = {
-			// SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
-			.buf_size = 0x0, //0x2800,
-		},
-		.swap_buf = {
-			// 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
-			.buf_size = 0x800,
-		},
-		.cdf_buf = {
-		// for context store/load 1024x256 x16 = 512K bytes 16*0x8000
-			.buf_size = 0x80000,
-		},
-		.gmc_buf = {
-		// for gmc_parameter store/load 128 x 16 = 2K bytes 0x800
-			.buf_size = 0x800,
-		},
-		.scalelut = {
-			// support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
-			.buf_size = 0x0, //0x8000,
-		},
-		.dblk_para = {
-			// DBLK -> Max 256(4096/16) LCU, each para 1024bytes(total:0x40000), data 1024bytes(total:0x40000)
-			.buf_size = 0x3300, /*0x32a0*/
-		},
-		.dblk_data = {
-			.buf_size = 0xa4800,
-		},
-		.cdef_data = {
-			.buf_size = 0x29200,
-		},
-		.ups_data = {
-			.buf_size = 0xdb000,
-		},
-		.fgs_table = {
-			.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS, // 512x128bits
-		},
+		.max_width		= 8192,
+		.max_height		= 4608,
+		.ipp			= {.buf_size = 0x4000}, // IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
+		.sao_abv		= {.buf_size = 0x0}, //0x30000,
+		.sao_vb			= {.buf_size = 0x0}, //0x30000,
+		.short_term_rps		= {.buf_size = 0x800}, // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
+		.vps			= {.buf_size = 0x800}, // VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
+		.seg_map		= {.buf_size = 0xd80000}, // SEGMENT MAP AREA - 8192x4608/4/4*3bits=0xd8000Bytes*16= 0xd80000
+		.daala_top		= {.buf_size = 0x2000}, // DAALA TOP STORE AREA - 224 Bytes (use 256 Bytes for LPDDR4) per 128. Total 4096*(Max)/128*256=0x2000
+		.sao_up			= {.buf_size = 0x0}, // SAO UP STORE AREA - Max 640(10240/16) LCU, each has 16 bytes total 0x2800 bytes
+		.swap_buf		= {.buf_size = 0x800}, // 256cyclex64bit = 2K bytes 0x800 (only 144 cycles valid)
+		.cdf_buf		= {.buf_size = 0x80000}, // for context store/load 1024 x 256bits x 16 = 512K bytes x 16 = 0x80000
+		.gmc_buf		= {.buf_size = 0x800}, // for gmc_parameter store/load 128 bytes x 16 = 2K bytes = 0x800
+		.scalelut		= {.buf_size = 0x0}, //0x8000  support up to 32 SCALELUT 1024x32 = 32Kbytes (0x8000)
+		.dblk_para		= {.buf_size = 0x3300}, //(ctu_numb_x+ctu_numb_y+2)*64 => (8192/64+4608/64+2)*64=0x3280
+		.dblk_data		= {.buf_size = 0xa4800}, //addr_offset_lft(64)*4096+(ctu_numb_y+1)*2048 => 64*4096+(8192/64+1)*2048=0x80800
+		.cdef_data		= {.buf_size = 0x30200}, //1<<addr_offset_lft(17)+(ctu_numb_y+1)*512 => 1<<17+(8192/64+1)*512=0x30200
+		.ups_data		= {.buf_size = 0x183000}, //(ctu_numb_y+1)*12288 => (8192/64+1)*12288=0x183000
+		.fgs_table		= {.buf_size = FGS_TABLE_SIZE * FRAME_BUFFERS}, // 512x128bits per frame
 #ifdef AOM_AV1_MMU
-		.mmu_vbh = {
-			.buf_size = VBH_BUF_SIZE_8K, //2*16*(more than 2304)/4, 4K
-		},
-		.cm_header = {
-	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
+		.mmu_vbh		= {.buf_size = VBH_BUF_SIZE_8K}, //2*16*(more than 2304)/4, 4K
+		.cm_header		= {
+#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 			.buf_size = MMU_COMPRESS_HEADER_SIZE_8K*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
 #else
 			.buf_size = 0,
@@ -2372,35 +2204,21 @@ static struct BuffInfo_s aom_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		},
 #endif
 #ifdef AOM_AV1_MMU_DW
-		.mmu_vbh_dw = {
-			.buf_size = DW_VBH_BUF_SIZE_8K, //2*16*(more than 2304)/4, 4K
-		},
-		.cm_header_dw = {
-	#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
+		.mmu_vbh_dw		= {.buf_size = DW_VBH_BUF_SIZE_8K}, //2*16*(more than 2304)/4, 4K
+		.cm_header_dw		= {
+#ifdef USE_SPEC_BUF_FOR_MMU_HEAD
 			.buf_size = MMU_COMPRESS_HEADER_SIZE_8K*FRAME_BUFFERS, // 0x44000 = ((1088*2*1024*4)/32/4)*(32/8)
-	#else
+#else
 			.buf_size = 0,
-	#endif
+#endif
 		},
 #endif
-		.mpred_above = {
-			.buf_size = 0xA800, /* 2 * size of hw*/
-		},
+		.mpred_above		= {.buf_size = 0xA800}, //(pic_width/64)*21*16 byte=8192/64*21*16=0xa800
 #ifdef MV_USE_FIXED_BUF
-		.mpred_mv = {
-		  /* .buf_size = 0x100000*16,
-		  //4k2k , 0x100000 per buffer */
-		  /* 4096x2304 , 0x120000 per buffer */
-		  .buf_size = MAX_ONE_MV_BUFFER_SIZE_8K_TM2REVB * FRAME_BUFFERS,
-		},
+		.mpred_mv		= {.buf_size = MAX_ONE_MV_BUFFER_SIZE_8K_TM2REVB * FRAME_BUFFERS}, //buf_size = 0x100000*16, 4k2k => 0x100000 per buffer  4096x2304 => 0x120000 per buffer
 #endif
-		.rpm = {
-		   .buf_size = 0x80*2,
-		},
-		.lmem = {
-			.buf_size = 0x400 * 2,
-		}
-
+		.rpm			= {.buf_size = 0x80 * 2},
+		.lmem			= {.buf_size = 0x400 * 2},
 	}
 };
 
