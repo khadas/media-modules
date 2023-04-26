@@ -12614,17 +12614,6 @@ static void vh265_check_timer_func(struct timer_list *timer)
 		return;
 	}
 #ifdef MULTI_INSTANCE_SUPPORT
-	if (hevc->m_ins_flag &&
-		(get_dbg_flag(hevc) &
-		H265_DEBUG_WAIT_DECODE_DONE_WHEN_STOP) == 0 &&
-		hw_to_vdec(hevc)->next_status ==
-		VDEC_STATUS_DISCONNECTED) {
-		hevc->dec_result = DEC_RESULT_FORCE_EXIT;
-		vdec_schedule_work(&hevc->work);
-		hevc_print(hevc,
-			0, "vdec requested to be disconnected\n");
-		return;
-	}
 
 	if (hevc->m_ins_flag) {
 		if (((get_dbg_flag(hevc) &
