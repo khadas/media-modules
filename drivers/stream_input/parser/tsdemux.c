@@ -415,9 +415,9 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 		if (kfifo_get(&video_frame,&dmx_video_frameinfo)) {
 			//queue videoframe to mediasync
 			s32 sSyncInsId;
-			if (!mediasync_vpts_set) {
-				mediasync_vpts_set = symbol_request(mediasync_ins_set_video_packets_info);
-			}
+			//if (!mediasync_vpts_set) {
+			//	mediasync_vpts_set = symbol_request(mediasync_ins_set_video_packets_info);
+			//}
 			if (mediasync_vpts_set) {
 				sSyncInsId = 0;
 				mediasync_vpts_set(sSyncInsId, dmx_video_frameinfo);
@@ -436,9 +436,9 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 		if (kfifo_get(&audio_frame,&dmx_audio_frameinfo)) {
 			//queue audioframe to mediasync
 			s32 sSyncInsId;
-			if (!mediasync_apts_set) {
-				mediasync_apts_set = symbol_request(mediasync_ins_set_audio_packets_info);
-			}
+			//if (!mediasync_apts_set) {
+			//	mediasync_apts_set = symbol_request(mediasync_ins_set_audio_packets_info);
+			//}
 			if (mediasync_apts_set) {
 				sSyncInsId = 0;
 				mediasync_apts_set(sSyncInsId, dmx_audio_frameinfo);
