@@ -651,7 +651,8 @@ static int video_port_init(struct port_priv_s *priv,
 
 	return 0;
 err:
-	vdec_release(vdec->slave);
+	if (vdec->slave)
+		vdec_release(vdec->slave);
 	vdec_release(vdec);
 	priv->vdec = NULL;
 

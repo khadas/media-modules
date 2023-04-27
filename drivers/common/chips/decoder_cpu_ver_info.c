@@ -354,6 +354,21 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_4K,	//unsupport avs2,av1
 	},
+
+	[AM_MESON_CPU_MAJOR_ID_S1A - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_S1A,
+		.reg_compat = NULL,
+		.max_vdec_clock  = 667,
+		.max_hevcf_clock = 500,
+		.max_hevcb_clock = 500,
+		.hevc_clk_combine_flag  = true,
+		.is_hw_parser_support   = false,
+		.is_vdec_canvas_support = false,
+		.is_support_h264_mmu    = false,
+		.is_support_dual_core = false,
+		.vdec_max_resolution = RESOLUTION_1080P,
+		.hevc_max_resolution = RESOLUTION_1080P,
+	},
 };
 
 /* sub id features */
@@ -520,6 +535,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-txhd2",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_TXHD2 - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-s1a",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_S1A - MAJOR_ID_START],
 	},
 	{},
 };

@@ -156,6 +156,81 @@ static void free_canvas_ex(int index, int id)
 	return;
 }
 
+static int get_canvas_ex_s1a(int type, int id)
+{
+	int i;
+	unsigned long flags;
+
+	flags = vdec_canvas_lock();
+
+	for (i = 0; i < CANVAS_MAX_SIZE_S1A; i++) {
+		if ((canvas_stat[i].type == type) &&
+			(canvas_stat[i].id & (1 << id)) == 0) {
+			canvas_stat[i].canvas_used_flag++;
+			canvas_stat[i].id |= (1 << id);
+			if (vdec_get_debug() & 4)
+				pr_debug("get used canvas %d\n", i);
+			vdec_canvas_unlock(flags);
+			return i;
+		}
+	}
+
+	for (i = 0; i < CANVAS_MAX_SIZE_S1A; i++) {
+		if (canvas_stat[i].type == 0) {
+			canvas_stat[i].type = type;
+			canvas_stat[i].canvas_used_flag = 1;
+			canvas_stat[i].id = (1 << id);
+			if (vdec_get_debug() & 4) {
+				pr_debug("get canvas %d\n", i);
+				pr_debug("canvas_used_flag %d\n",
+					canvas_stat[i].canvas_used_flag);
+				pr_debug("canvas_stat[i].id %d\n",
+					canvas_stat[i].id);
+			}
+			vdec_canvas_unlock(flags);
+			return i;
+		}
+	}
+	vdec_canvas_unlock(flags);
+
+	pr_info("cannot get canvas\n");
+
+	return -1;
+}
+
+static void free_canvas_ex_s1a(int index, int id)
+{
+	unsigned long flags;
+	int offset;
+
+	flags = vdec_canvas_lock();
+	if (index >= 0 && index < CANVAS_MAX_SIZE_S1A)
+		offset = index;
+	else {
+		vdec_canvas_unlock(flags);
+		return;
+	}
+
+	if ((canvas_stat[offset].canvas_used_flag > 0) &&
+		(canvas_stat[offset].id & (1 << id))) {
+		canvas_stat[offset].canvas_used_flag--;
+		canvas_stat[offset].id &= ~(1 << id);
+		if (canvas_stat[offset].canvas_used_flag == 0) {
+			canvas_stat[offset].type = 0;
+			canvas_stat[offset].id = 0;
+		}
+		if (vdec_get_debug() & 4) {
+			pr_debug("free index %d used_flag %d, type = %d, id = %d\n",
+				offset,
+				canvas_stat[offset].canvas_used_flag,
+				canvas_stat[offset].type,
+				canvas_stat[offset].id);
+		}
+	}
+	vdec_canvas_unlock(flags);
+
+	return;
+}
 
 static int get_internal_cav_lut(unsigned int index, unsigned int base)
 {
@@ -394,8 +469,13 @@ void vdec_canvas_port_register(struct vdec_s *vdec)
 		}
 	} else {
 		vdec->get_canvas = get_canvas;
-		vdec->get_canvas_ex = get_canvas_ex;
-		vdec->free_canvas_ex = free_canvas_ex;
+		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) {
+			vdec->get_canvas_ex = get_canvas_ex_s1a;
+			vdec->free_canvas_ex = free_canvas_ex_s1a;
+		} else {
+			vdec->get_canvas_ex = get_canvas_ex;
+			vdec->free_canvas_ex = free_canvas_ex;
+		}
 	}
 }
 EXPORT_SYMBOL(vdec_canvas_port_register);

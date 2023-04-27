@@ -1060,10 +1060,19 @@
 #define HEVC_CM_CORE_STATUS                 0x3640
 #define HEVC_SAO_MMU_RESET_CTRL             0x3641
 
+/* T3X triple write */
 #define HEVC_SAO_Y_START_ADDR3              0x3698
 #define HEVC_SAO_Y_LENGTH3                  0x3699
 #define HEVC_SAO_C_START_ADDR3              0x369a
 #define HEVC_SAO_C_LENGTH3                  0x369b
+
+//SAO EXT BUF config for S1A
+#define HEVC_SAO_Y2_START_ADDR              0x36a0
+#define HEVC_SAO_Y2_LENGTH                  0x36a1
+#define HEVC_SAO_C2_START_ADDR              0x36a2
+#define HEVC_SAO_C2_LENGTH                  0x36a3
+#define HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_EXTRA 0x3095
+#define HEVCD_MPP_ANC2AXI_TBL_DATA_EXTRA    0x3096
 
 #define HEVC_IQIT_CLK_RST_CTRL              0x3700
 #define HEVC_IQIT_DEQUANT_CTRL              0x3701

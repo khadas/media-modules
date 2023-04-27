@@ -801,6 +801,7 @@ static int hevc_back_clock_set(int clk)
 	if ((clk > 500 && clk != 667)) {
 		if (clock_real_clk[VDEC_HEVCB] == 648)
 		return 648;
+
 		clk = hevcb_max_clk_get();
 	}
 
@@ -847,6 +848,7 @@ static int hevc_clock_set(int clk)
 	if ((clk > 500 && clk != 667)) {
 		if (clock_real_clk[VDEC_HEVC] == 648)
 			return 648;
+
 		clk = hevcf_max_clk_get();
 	}
 
@@ -1058,6 +1060,7 @@ static int vdec_clock_get(enum vdec_type_e core)
 	AM_MESON_CPU_MAJOR_ID_T5M,\
 	AM_MESON_CPU_MAJOR_ID_T3X,\
 	AM_MESON_CPU_MAJOR_ID_TXHD2,\
+	AM_MESON_CPU_MAJOR_ID_S1A,\
 	0}
 #include "clk.h"
 

@@ -1065,7 +1065,8 @@ static int is_oversize(int w, int h)
 	int max = MAX_SIZE_4K;
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A))
 		max = MAX_SIZE_2K;
 
 	if (w < 0 || h < 0)

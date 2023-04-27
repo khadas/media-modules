@@ -199,8 +199,6 @@ static int enable_mvdec_info = 1;
 int decode_underflow = 0;
 u32 debug_meta;
 
-static int enable_stream_mode_multi_dec;
-
 st_userdata userdata;
 
 vdec_frame_rate_event_func frame_rate_notify = NULL;
@@ -384,9 +382,9 @@ bool is_support_interlace_avbc(void)
 
 	if (cpu_major_id < AM_MESON_CPU_MAJOR_ID_TM2)
 		return false;
-	if (cpu_major_id == AM_MESON_CPU_MAJOR_ID_T5D
-		|| cpu_major_id == AM_MESON_CPU_MAJOR_ID_GXLX3
-		|| cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2)
+	if (cpu_major_id == AM_MESON_CPU_MAJOR_ID_T5D ||
+		cpu_major_id == AM_MESON_CPU_MAJOR_ID_GXLX3 ||
+		cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2)
 		return false;
 
 	return true;
@@ -988,6 +986,9 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 				sts_reg_addr = TM2_REVB_DMC_CHAN_STS;
 			else
 				sts_reg_addr = DMC_CHAN_STS;
+			break;
+		case AM_MESON_CPU_MAJOR_ID_S1A:
+			sts_reg_addr = 0xb7;
 			break;
 		default:
 			sts_reg_addr = DMC_CHAN_STS;
@@ -7412,10 +7413,6 @@ MODULE_PARM_DESC(max_supported_di_instance,
 				"\n max_supported_di_instance\n");
 module_param(debug_vdetect, int, 0664);
 MODULE_PARM_DESC(debug_vdetect, "\n debug_vdetect\n");
-
-module_param(enable_stream_mode_multi_dec, int, 0664);
-MODULE_PARM_DESC(enable_stream_mode_multi_dec,
-	"\n enable multi-decoding on stream mode. \n");
 
 module_param(rdma_mode, int, 0664);
 MODULE_PARM_DESC(rdma_mode, "\n rdma_enable\n");
