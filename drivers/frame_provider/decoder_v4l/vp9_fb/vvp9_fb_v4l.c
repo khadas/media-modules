@@ -9796,6 +9796,11 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 					&pbi->common.buffer_pool->frame_bufs[pic_config->BUF_index].buf;
 				struct vdec_ge2d_info ge2d_info;
 
+#ifdef NEW_FB_CODE
+				if (pbi->front_back_mode)
+					dst_pic->back_done_mark = 1;
+#endif
+
 				ge2d_info.dst_vf = vf;
 				ge2d_info.src_canvas0Addr = ge2d_info.src_canvas1Addr = 0;
 				if (dst_pic->double_write_mode) {
