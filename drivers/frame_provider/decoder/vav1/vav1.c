@@ -889,6 +889,7 @@ struct AV1HW_s {
 	ulong prob_mem_handle;
 	ulong count_mem_handle;
 	ulong rdma_handle;
+	u32 aux_data_size;
 };
 
 static void av1_dump_state(struct vdec_s *vdec);
@@ -2288,15 +2289,11 @@ static void set_aux_data(struct AV1HW_s *hw,
 			hw->prefix_aux_size;
 	}
 	if (debug & AV1_DEBUG_BUFMGR_MORE) {
-		av1_print(hw, 0,
-			"%s:old size %d count %d,suf %d dv_flag %d\r\n",
-			__func__, *aux_data_size,
-			aux_count, suffix_flag, dv_meta_flag);
+		av1_print(hw, 0, "%s:old size %d count %d,suf %d dv_flag %d\r\n",
+			__func__, *aux_data_size, aux_count, suffix_flag, dv_meta_flag);
 	}
 	if (aux_size > 0 && aux_count > 0) {
 		int heads_size = 0;
-		int new_size;
-		char *new_buf;
 
 		for (i = 0; i < aux_count; i++) {
 			unsigned char tag = aux_adr[i] >> 8;
@@ -2309,21 +2306,14 @@ static void set_aux_data(struct AV1HW_s *hw,
 					heads_size += 8;
 			}
 		}
-		new_size = *aux_data_size + aux_count + heads_size;
-		new_buf = vmalloc(new_size);
-		if (new_buf) {
+
+		if (*aux_data_buf) {
 			unsigned char valid_tag = 0;
-			unsigned char *h =
-				new_buf +
-				*aux_data_size;
+			unsigned char *h = *aux_data_buf + *aux_data_size;
 			unsigned char *p = h + 8;
 			int len = 0;
 			int padding_len = 0;
-			if (*aux_data_buf) {
-				memcpy(new_buf, *aux_data_buf,  *aux_data_size);
-				vfree(*aux_data_buf);
-			}
-			*aux_data_buf = new_buf;
+
 			for (i = 0; i < aux_count; i += 4) {
 				int ii;
 				unsigned char tag = aux_adr[i + 3] >> 8;
@@ -2388,25 +2378,16 @@ static void set_aux_data(struct AV1HW_s *hw,
 				h[6] = (padding_len >> 8) & 0xff;
 				h[7] = (padding_len) & 0xff;
 			}
-			if (debug & AV1_DEBUG_BUFMGR_MORE) {
-				av1_print(hw, 0,
-					"aux: (size %d) suffix_flag %d\n",
+			if (debug & AOM_DEBUG_AUX_DATA) {
+				av1_print(hw, 0, "aux: (size %d) suffix_flag %d\n",
 					*aux_data_size, suffix_flag);
 				for (i = 0; i < *aux_data_size; i++) {
-					av1_print_cont(hw, 0,
-						"%02x ", (*aux_data_buf)[i]);
+					av1_print_cont(hw, 0, "%02x ", (*aux_data_buf)[i]);
 					if (((i + 1) & 0xf) == 0)
 						av1_print_cont(hw, 0, "\n");
 				}
 				av1_print_cont(hw, 0, "\n");
 			}
-
-		} else {
-			av1_print(hw, 0, "new buf alloc failed\n");
-			if (*aux_data_buf)
-				vfree(*aux_data_buf);
-			*aux_data_buf = NULL;
-			*aux_data_size = 0;
 		}
 	}
 
@@ -2416,7 +2397,6 @@ static void set_dv_data(struct AV1HW_s *hw)
 {
 	set_aux_data(hw, &hw->dv_data_buf,
 		&hw->dv_data_size, 0, 1);
-
 }
 
 static void set_pic_aux_data(struct AV1HW_s *hw,
@@ -2432,79 +2412,46 @@ static void set_pic_aux_data(struct AV1HW_s *hw,
 static void copy_dv_data(struct AV1HW_s *hw,
 	struct PIC_BUFFER_CONFIG_s *pic)
 {
-	char *new_buf;
-	int new_size;
-	new_size = pic->aux_data_size + hw->dv_data_size;
-	new_buf = vmalloc(new_size);
-	if (new_buf) {
+	if ((pic->aux_data_buf) &&
+		(pic->aux_data_size + hw->dv_data_size <= hw->aux_data_size) &&
+		(hw->dv_data_size > 0)) {
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
-			av1_print(hw, 0,
-				"%s: (size %d) pic index %d\n",
-				__func__,
-				hw->dv_data_size, pic->index);
+			av1_print(hw, 0, "%s: (size %d) pic index %d\n",
+				__func__, hw->dv_data_size, pic->index);
 		}
-		if (pic->aux_data_buf) {
-			memcpy(new_buf, pic->aux_data_buf,  pic->aux_data_size);
-			vfree(pic->aux_data_buf);
-		}
-		memcpy(new_buf + pic->aux_data_size, hw->dv_data_buf, hw->dv_data_size);
+		memcpy(pic->aux_data_buf + pic->aux_data_size, hw->dv_data_buf, hw->dv_data_size);
 		pic->aux_data_size += hw->dv_data_size;
-		pic->aux_data_buf = new_buf;
-		vfree(hw->dv_data_buf);
-		hw->dv_data_buf = NULL;
-		hw->dv_data_size = 0;
 	}
-
+	memset(hw->dv_data_buf, 0, hw->aux_data_size);
+	hw->dv_data_size = 0;
 }
 
 static void release_aux_data(struct AV1HW_s *hw,
 	struct PIC_BUFFER_CONFIG_s *pic)
 {
-	if (pic->aux_data_buf)
-		vfree(pic->aux_data_buf);
-	pic->aux_data_buf = NULL;
 	pic->aux_data_size = 0;
 }
 
 static void dump_aux_buf(struct AV1HW_s *hw)
 {
 	int i;
-	unsigned short *aux_adr =
-		(unsigned short *)
-		hw->aux_addr;
-	unsigned int aux_size =
-		(READ_VREG(HEVC_AUX_DATA_SIZE)
-		>> 16) << 4;
+	unsigned short *aux_adr = (unsigned short *)hw->aux_addr;
+	unsigned int aux_size = (READ_VREG(HEVC_AUX_DATA_SIZE) >> 16) << 4;
 
 	if (hw->prefix_aux_size > 0) {
-		av1_print(hw, 0,
-			"prefix aux: (size %d)\n",
-			aux_size);
-		for (i = 0; i <
-		(aux_size >> 1); i++) {
-			av1_print_cont(hw, 0,
-				"%04x ",
-				*(aux_adr + i));
-			if (((i + 1) & 0xf)
-				== 0)
-				av1_print_cont(hw,
-				0, "\n");
+		av1_print(hw, 0, "prefix aux: (size %d)\n", aux_size);
+		for (i = 0; i < (aux_size >> 1); i++) {
+			av1_print_cont(hw, 0, "%04x ", *(aux_adr + i));
+			if (((i + 1) & 0xf)== 0)
+				av1_print_cont(hw, 0, "\n");
 		}
 	}
 	if (hw->suffix_aux_size > 0) {
-		aux_adr = (unsigned short *)
-			(hw->aux_addr +
-			hw->prefix_aux_size);
-		aux_size =
-		(READ_VREG(HEVC_AUX_DATA_SIZE) & 0xffff)
-			<< 4;
-		av1_print(hw, 0,
-			"suffix aux: (size %d)\n",
-			aux_size);
-		for (i = 0; i <
-		(aux_size >> 1); i++) {
-			av1_print_cont(hw, 0,
-				"%04x ", *(aux_adr + i));
+		aux_adr = (unsigned short *)(hw->aux_addr + hw->prefix_aux_size);
+		aux_size = (READ_VREG(HEVC_AUX_DATA_SIZE) & 0xffff) << 4;
+		av1_print(hw, 0, "suffix aux: (size %d)\n", aux_size);
+		for (i = 0; i < (aux_size >> 1); i++) {
+			av1_print_cont(hw, 0, "%04x ", *(aux_adr + i));
 			if (((i + 1) & 0xf) == 0)
 				av1_print_cont(hw, 0, "\n");
 		}
@@ -2920,7 +2867,8 @@ static int config_pic(struct AV1HW_s *hw,
 	int pic_width = hw->init_pic_w;
 	int pic_height = hw->init_pic_h;
 	//int lcu_size = ((params->p.seq_flags >> 6) & 0x1) ? 128 : 64;
-    int lcu_size = hw->current_lcu_size;
+	int lcu_size = hw->current_lcu_size;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	int pic_width_64 = (pic_width + 63) & (~0x3f);
 	int pic_height_32 = (pic_height + 31) & (~0x1f);
@@ -3051,6 +2999,42 @@ static int config_pic(struct AV1HW_s *hw,
 				return ret;
 			}
 
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				int index = 0;
+				int j = 0;
+				struct vdec_data_buf_s data_buf;
+
+				data_buf.alloc_policy = ALLOC_AUX_BUF;
+				data_buf.aux_buf_size = SEI_BUF_SIZE;
+
+				data_buf.alloc_policy &= ALLOC_HDR10P_BUF;
+				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
+
+				if (pic_config->vdec_data_index == -1) {
+					index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
+					pic_config->vdec_data_index = index;
+					j = i;
+				} else {
+					index = pic_config->vdec_data_index;
+					j = i + hw->used_buf_num;
+				}
+
+				if (index >= 0) {
+					pic_config->aux_data_buf = vdec->vdata->data[index].aux_data_buf;
+					pic_config->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, j);
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[j].node);
+					decoder_bmmu_box_add_callback_func(hw->bmmu_box, VF_BUFFER_IDX(i),
+						(void *)&vdec->vdata->release_callback[j]);
+				} else {
+					av1_print(hw, 0, "vdec data is full\n");
+				}
+			}
+
 			if (pic_config->cma_alloc_addr) {
 				y_adr = pic_config->cma_alloc_addr;
 				if (!vdec_secure(hw_to_vdec(hw)))
@@ -3175,6 +3159,11 @@ static void init_pic_list(struct AV1HW_s *hw)
 
 #ifndef USE_SPEC_BUF_FOR_MMU_HEAD
 	u32 header_size;
+
+	for (i = 0; i < hw->used_buf_num; i++) {
+		pic_config = &cm->buffer_pool->frame_bufs[i].buf;
+		pic_config->vdec_data_index = -1;
+	}
 	if (hw->mmu_enable && ((hw->double_write_mode & 0x10) == 0)) {
 		header_size = vav1_mmu_compress_header_size(hw);
 		/*alloc AV1 compress header first*/
@@ -3192,6 +3181,38 @@ static void init_pic_list(struct AV1HW_s *hw)
 			}
 			if (!vdec_secure(hw_to_vdec(hw)))
 				codec_mm_memset(buf_addr, 0, header_size);
+
+			if (vdec->vdata == NULL) {
+				vdec->vdata = vdec_data_get();
+			}
+
+			if (vdec->vdata != NULL) {
+				int index = 0;
+				struct vdec_data_buf_s data_buf;
+
+				data_buf.alloc_policy = ALLOC_AUX_BUF;
+				data_buf.aux_buf_size = SEI_BUF_SIZE;
+
+				data_buf.alloc_policy &= ALLOC_HDR10P_BUF;
+				data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
+
+				index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
+
+				if (index >= 0) {
+					struct PIC_BUFFER_CONFIG_s *pic;
+					pic = &cm->buffer_pool->frame_bufs[i].buf;
+					pic->vdec_data_index = index;
+					pic_config->aux_data_buf = vdec->vdata->data[index].aux_data_buf;
+					pic_config->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
+					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
+					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
+					decoder_bmmu_box_add_callback_func(hw->bmmu_box, HEADER_BUFFER_IDX(i),
+						(void *)&vdec->vdata->release_callback[i]);
+				} else {
+					av1_print(hw, 0, "vdec data is full\n");
+				}
+			}
+
 #ifdef AOM_AV1_MMU_DW
 			if (hw->dw_mmu_enable) {
 				if (decoder_bmmu_box_alloc_buf_phy
@@ -5944,10 +5965,17 @@ static void set_canvas(struct AV1HW_s *hw,
 	}
 }
 
+#define OBU_METADATA_TYPE_HDR_CLL 1
+#define OBU_METADATA_TYPE_HDR_MDCV 2
 #define OBU_METADATA_TYPE_ITUT_T35 4
 
 void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_CONFIG_s *pic)
 {
+	int i, j, count;
+	char *p_sei;
+	struct vframe_master_display_colour_s *vf_dp
+		= &hw->vf_dp;
+
 	if (pic->aux_data_buf && pic->aux_data_size) {
 		u32 size = 0, type = 0;
 		char *p = pic->aux_data_buf;
@@ -5964,7 +5992,8 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 			type = (type << 8) | *p++;
 			if (p + size <= pic->aux_data_buf + pic->aux_data_size) {
 				char metadata_type = ((type >> 24) & 0xff) - 0x10;
-
+				av1_print(hw, AV1_DEBUG_SEI_DETAIL, "metadata_type:%d, size:%d\n",
+					metadata_type, size);
 				switch (metadata_type) {
 				case OBU_METADATA_TYPE_ITUT_T35:
 					if ((p + 5 < pic->aux_data_buf + pic->aux_data_size) &&
@@ -5976,7 +6005,85 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 						data = data | (0x30<<8);
 						hw->video_signal_type = data;
 						vf->discard_dv_data = true;
+						if ((size > 0) && (size <= HDR10P_BUF_SIZE) &&
+							(pic->hdr10p_data_buf != NULL)) {
+							memcpy(pic->hdr10p_data_buf, p, size);
+							pic->hdr10p_data_size = size;
+							count = 0;
+							for (i = pic->hdr10p_data_size - 1; i >= 0; i--) {
+								count++;
+								if (pic->hdr10p_data_buf[i] == 0x80) //termination character
+									break;
+							}
+							pic->hdr10p_data_size -= count;
+							if (debug & AV1_DEBUG_SEI_DETAIL) {
+								av1_print(hw, 0,
+									"hdr10p data: (size %d)\n", pic->hdr10p_data_size);
+								for (i = 0; i < pic->hdr10p_data_size; i++) {
+									av1_print_cont(hw, 0,
+										"%02x ", pic->hdr10p_data_buf[i]);
+									if (((i + 1) & 0xf) == 0)
+										av1_print_cont(hw, 0, "\n");
+								}
+								av1_print_cont(hw, 0, "\n");
+							}
+						} else {
+							av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+								"hdr10p data size(%d)\n", size);
+							pic->hdr10p_data_size = 0;
+						}
 					}
+					break;
+				case OBU_METADATA_TYPE_HDR_CLL:
+					p_sei = p;
+					/* content_light_level */
+					vf_dp->content_light_level.max_content
+						= (*p_sei << 8) | *(p_sei + 1);
+					p_sei += 2;
+					vf_dp->content_light_level.max_pic_average
+						= (*p_sei << 8) | *(p_sei + 1);
+					p_sei += 2;
+					vf_dp->content_light_level.present_flag = 1;
+
+					av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+						"\tmax cll = %04x, max_pa_cll = %04x\n",
+						vf_dp->content_light_level.max_content,
+						vf_dp->content_light_level.max_pic_average);
+					break;
+				case OBU_METADATA_TYPE_HDR_MDCV:
+					p_sei = p;
+					/* master_display_colour */
+					for (i = 0; i < 3; i++) {
+						for (j = 0; j < 2; j++) {
+							vf_dp->primaries[i][j]
+								= (*p_sei << 8)
+								| *(p_sei + 1);
+							p_sei += 2;
+						}
+					}
+					av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+						"\tprimaries0 = (%04x, %04x), primaries1 = (%04x, %04x) primaries2 = (%04x, %04x)\n",
+						vf_dp->primaries[0][0], vf_dp->primaries[0][1], vf_dp->primaries[1][0], vf_dp->primaries[1][1],
+						vf_dp->primaries[2][0], vf_dp->primaries[2][1]);
+
+					for (i = 0; i < 2; i++) {
+						vf_dp->white_point[i]
+							= (*p_sei << 8)
+							| *(p_sei + 1);
+						p_sei += 2;
+					}
+					for (i = 0; i < 2; i++) {
+						vf_dp->luminance[i]
+							= (*p_sei << 24)
+							| (*(p_sei + 1) << 16)
+							| (*(p_sei + 2) << 8)
+							| *(p_sei + 3);
+						p_sei += 4;
+					}
+					vf_dp->present_flag = 1;
+					av1_print(hw, AV1_DEBUG_SEI_DETAIL,
+						"\twhite_point = (%04x, %04x), luminance_max = %04x luminance_min = %04x\n",
+						vf_dp->white_point[0], vf_dp->white_point[1], vf_dp->luminance[0], vf_dp->luminance[1]);
 					break;
 				default:
 					break;
@@ -6015,6 +6122,9 @@ static void set_frame_info(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_B
 		hdr.color_parms = hw->vf_dp;
 		vdec_v4l_set_hdr_infos(ctx, &hdr);
 	}
+
+	vf->hdr10p_data_size = pic->hdr10p_data_size;
+	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 
 	vf->sidebind_type = hw->sidebind_type;
 	vf->sidebind_channel_id = hw->sidebind_channel_id;
@@ -7529,6 +7639,7 @@ int av1_continue_decoding(struct AV1HW_s *hw, int obu_type)
 		if (debug &
 			AV1_DEBUG_BUFMGR_MORE)
 			dump_aux_buf(hw);
+		set_pic_aux_data(hw, cur_pic_config, 0, 0);
 		set_dv_data(hw);
 		if (cm->show_frame &&
 			hw->dv_data_buf != NULL)
@@ -11239,6 +11350,12 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 	hw->show_frame_num = 0;
 	hw->run_ready_min_buf_num = run_ready_min_buf_num;
 
+	hw->aux_data_size = AUX_BUF_ALIGN(prefix_aux_buf_size) +
+		AUX_BUF_ALIGN(suffix_aux_buf_size);
+	if (hw->aux_data_size > 0)
+		hw->dv_data_buf = vmalloc(hw->aux_data_size);
+	hw->dv_data_size = 0;
+
 	if (debug) {
 		av1_print(hw, AOM_DEBUG_HW_MORE, "===AV1 decoder mem resource 0x%lx size 0x%x\n",
 			   hw->buf_start,
@@ -11285,6 +11402,11 @@ static int ammvdec_av1_remove(struct platform_device *pdev)
 #ifdef AUX_DATA_CRC
 	vdec_aux_data_check_exit(vdec);
 #endif
+
+	if (hw->dv_data_buf != NULL) {
+		vfree(hw->dv_data_buf);
+		hw->dv_data_buf = NULL;
+	}
 
 	vmav1_stop(hw);
 

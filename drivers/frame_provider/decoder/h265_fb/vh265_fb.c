@@ -2204,6 +2204,7 @@ struct hevc_state_s {
 	unsigned char realloc_buff;
 	char *aux_data_buf[BUF_POOL_SIZE];
 	struct mutex slice_header_lock;
+	char *hdr10p_data_buf[BUF_POOL_SIZE];
 	int crop_w;
 	int crop_h;
 #ifdef OW_TRIPLE_WRITE
@@ -4090,9 +4091,13 @@ static int alloc_buf(struct hevc_state_s *hevc)
 					data_buf.alloc_policy = ALLOC_AUX_BUF;
 					data_buf.aux_buf_size = AUX_DATA_SIZE1;
 
+					data_buf.alloc_policy &= ALLOC_HDR10P_BUF;
+					data_buf.hdr10p_buf_size = HDR10P_BUF_SIZE;
+
 					index = vdec_data_get_index((ulong)vdec->vdata, &data_buf);
 					if (index >= 0) {
 						hevc->aux_data_buf[i] = vdec->vdata->data[index].aux_data_buf;
+						hevc->hdr10p_data_buf[i] = vdec->vdata->data[index].hdr10p_data_buf;
 						vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
 						INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
 						decoder_bmmu_box_add_callback_func(hevc->bmmu_box, VF_BUFFER_IDX(i), (void *)&vdec->vdata->release_callback[i]);
@@ -4259,11 +4264,13 @@ static int config_pic(struct hevc_state_s *hevc, struct PIC_s *pic)
 		}
 	}
 
-	if (vdec->vdata != NULL)
-		pic->aux_data_buf = hevc->aux_data_buf[i];
-
 	if (i >= BUF_POOL_SIZE)
 		return -1;
+
+	if (vdec->vdata != NULL) {
+		pic->hdr10p_data_buf = hevc->hdr10p_data_buf[i];
+		pic->aux_data_buf = hevc->aux_data_buf[i];
+	}
 
 	if (hevc->mmu_enable) {
 		pic->header_adr = hevc->m_BUF[i].start_adr;
@@ -9066,18 +9073,25 @@ static int parse_sei(struct hevc_state_s *hevc,
 					&& p_sei[3] == 0x00
 					&& p_sei[4] == 0x01
 					&& p_sei[5] == 0x04) {
-					char *new_buf;
 					hevc->sei_present_flag |= SEI_HDR10PLUS_MASK;
-					new_buf = vzalloc(payload_size);
-					if (new_buf) {
-						memcpy(new_buf, p_sei, payload_size);
-						pic->hdr10p_data_buf = new_buf;
+					if ((payload_size > 0) && (payload_size <= HDR10P_BUF_SIZE) &&
+						(pic->hdr10p_data_buf != NULL)) {
+						memcpy(pic->hdr10p_data_buf, p_sei, payload_size);
 						pic->hdr10p_data_size = payload_size;
+						if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
+							hevc_print(hevc, 0,
+								"hdr10p data: (size %d)\n", pic->hdr10p_data_size);
+							for (i = 0; i < pic->hdr10p_data_size; i++) {
+								hevc_print_cont(hevc, 0,
+									"%02x ", pic->hdr10p_data_buf[i]);
+								if (((i + 1) & 0xf) == 0)
+									hevc_print_cont(hevc, 0, "\n");
+							}
+							hevc_print_cont(hevc, 0, "\n");
+						}
 					} else {
-						hevc_print(hevc, 0,
-							"%s:hdr10p data vzalloc size(%d) fail\n",
-							__func__, payload_size);
-						pic->hdr10p_data_buf = NULL;
+						hevc_print(hevc, H265_DEBUG_PRINT_SEI,
+							"hdr10p data size(%d)\n", payload_size);
 						pic->hdr10p_data_size = 0;
 					}
 				} else if (p_sei[0] == 0x26
@@ -9277,42 +9291,8 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	} else
 		vf_dp->content_light_level.present_flag = 0;
 
-	if ((hevc->sei_present_flag & SEI_HDR10PLUS_MASK) && (pic->hdr10p_data_buf != NULL)
-		&& (pic->hdr10p_data_size != 0)) {
-		if (pic->hdr10p_data_size <= 128) {
-			char *new_buf;
-			new_buf = kzalloc(pic->hdr10p_data_size, GFP_ATOMIC);
-
-			if (new_buf) {
-				memcpy(new_buf, pic->hdr10p_data_buf, pic->hdr10p_data_size);
-				if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
-					hevc_print(hevc, 0,
-						"hdr10p data: (size %d)\n",
-						pic->hdr10p_data_size);
-					for (i = 0; i < pic->hdr10p_data_size; i++) {
-						hevc_print_cont(hevc, 0,
-							"%02x ", pic->hdr10p_data_buf[i]);
-						if (((i + 1) & 0xf) == 0)
-							hevc_print_cont(hevc, 0, "\n");
-					}
-					hevc_print_cont(hevc, 0, "\n");
-				}
-
-				vf->hdr10p_data_size = pic->hdr10p_data_size;
-				vf->hdr10p_data_buf = new_buf;
-			} else {
-				hevc_print(hevc, 0,
-					"%s:hdr10p data vzalloc size(%d) fail\n",
-					__func__, pic->hdr10p_data_size);
-				vf->hdr10p_data_buf = NULL;
-				vf->hdr10p_data_size = 0;
-			}
-		}
-
-		vfree(pic->hdr10p_data_buf);
-		pic->hdr10p_data_buf = NULL;
-		pic->hdr10p_data_size = 0;
-	}
+	vf->hdr10p_data_size = pic->hdr10p_data_size;
+	vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 
 	vf->sidebind_type = hevc->sidebind_type;
 	vf->sidebind_channel_id = hevc->sidebind_channel_id;
@@ -9580,12 +9560,6 @@ static void vh265_vf_put(struct vframe_s *vf, void *op_arg)
 	if (hevc->enable_fence && vf->fence) {
 		vdec_fence_put(vf->fence);
 		vf->fence = NULL;
-	}
-
-	if (vf->hdr10p_data_buf) {
-		kfree(vf->hdr10p_data_buf);
-		vf->hdr10p_data_buf = NULL;
-		vf->hdr10p_data_size = 0;
 	}
 
 	if (index_top != 0xff
@@ -15028,28 +15002,11 @@ static unsigned long check_input_data(struct vdec_s *vdec, unsigned long mask)
 	if (fbdebug_flag & 0x1)
 		return 0;
 
-	if (hevc->timeout_processing_back &&
-		(work_pending(&hevc->work_back) ||
-		work_busy(&hevc->work_back) ||
-		work_busy(&hevc->timeout_work_back) ||
-		work_pending(&hevc->timeout_work_back))) {
-		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-				"h265 work back pending,not ready for run.\n");
+	if (((hevc->fb_wr_pos != hevc->fb_rd_pos) || hevc->wait_working_buf) &&
+		(hevc->front_back_mode))
+		return mask;
+	else
 		return 0;
-	}
-	hevc->timeout_processing_back = 0;
-	if (hevc->front_back_mode == 1) {
-		if (((hevc->fb_wr_pos != hevc->fb_rd_pos) || hevc->wait_working_buf))
-			return mask;
-		else
-			return 0;
-	} else if (hevc->front_back_mode) {
-		if ((hevc->fb_wr_pos != hevc->fb_rd_pos) || hevc->wait_working_buf)
-			return mask;
-		else
-			return 0;
-	}
-	return 0;
 	/*
 	if (hevc->pic_wr_count > hevc->pic_rd_count)
 		return mask;

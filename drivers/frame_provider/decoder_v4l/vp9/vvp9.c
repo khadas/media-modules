@@ -6728,6 +6728,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 		} else {
 			vp9_print(pbi, 0, "bind_hdr10p_buffer fail\n");
 		}
+	} else {
+		vf->hdr10p_data_buf = NULL;
+		vf->hdr10p_data_size = 0;
 	}
 
 	vf->sidebind_type = pbi->sidebind_type;

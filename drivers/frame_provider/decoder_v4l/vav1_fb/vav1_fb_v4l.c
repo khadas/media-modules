@@ -2665,9 +2665,7 @@ static void set_aux_data(struct AV1HW_s *hw,
 
 		if (*aux_data_buf) {
 			unsigned char valid_tag = 0;
-			unsigned char *h =
-				*aux_data_buf +
-				*aux_data_size;
+			unsigned char *h = *aux_data_buf + *aux_data_size;
 			unsigned char *p = h + 8;
 			int len = 0;
 			int padding_len = 0;
@@ -2770,16 +2768,18 @@ static void set_pic_aux_data(struct AV1HW_s *hw,
 static void copy_dv_data(struct AV1HW_s *hw,
 	struct PIC_BUFFER_CONFIG_s *pic)
 {
-	if (pic->aux_data_buf) {
+	if ((pic->aux_data_buf) &&
+		(pic->aux_data_size + hw->dv_data_size <= hw->aux_data_size) &&
+		(hw->dv_data_size > 0)) {
 		if (debug & AV1_DEBUG_BUFMGR_MORE) {
 			av1_print(hw, 0, "%s: (size %d) pic index %d\n",
 				__func__, hw->dv_data_size, pic->index);
 		}
 		memcpy(pic->aux_data_buf + pic->aux_data_size, hw->dv_data_buf, hw->dv_data_size);
 		pic->aux_data_size += hw->dv_data_size;
-		memset(hw->dv_data_buf, 0, hw->aux_data_size);
-		hw->dv_data_size = 0;
 	}
+	memset(hw->dv_data_buf, 0, hw->aux_data_size);
+	hw->dv_data_size = 0;
 }
 
 static void release_aux_data(struct AV1HW_s *hw,
@@ -5963,30 +5963,27 @@ void parse_metadata(struct AV1HW_s *hw, struct vframe_s *vf, struct PIC_BUFFER_C
 						data = data | (0x30<<8);
 						hw->video_signal_type = data;
 						vf->discard_dv_data = true;
-						if ((size > 0) && (size <= HDR10P_BUF_SIZE)) {
-							if (pic->hdr10p_data_buf != NULL) {
-								memcpy(pic->hdr10p_data_buf, p, size);
-								pic->hdr10p_data_size = size;
-								count = 0;
-								for (i = pic->hdr10p_data_size-1; i >= 0; i--) {
-									count++;
-									if (pic->hdr10p_data_buf[i] == 0x80)
-										break;
+						if ((size > 0) && (size <= HDR10P_BUF_SIZE) &&
+							(pic->hdr10p_data_buf != NULL)) {
+							memcpy(pic->hdr10p_data_buf, p, size);
+							pic->hdr10p_data_size = size;
+							count = 0;
+							for (i = pic->hdr10p_data_size - 1; i >= 0; i--) {
+								count++;
+								if (pic->hdr10p_data_buf[i] == 0x80) //termination character
+									break;
+							}
+							pic->hdr10p_data_size -= count;
+							if (debug & AV1_DEBUG_SEI_DETAIL) {
+								av1_print(hw, 0,
+									"hdr10p data: (size %d)\n", pic->hdr10p_data_size);
+								for (i = 0; i < pic->hdr10p_data_size; i++) {
+									av1_print_cont(hw, 0,
+										"%02x ", pic->hdr10p_data_buf[i]);
+									if (((i + 1) & 0xf) == 0)
+										av1_print_cont(hw, 0, "\n");
 								}
-								pic->hdr10p_data_size -= count;
-								if (debug & AV1_DEBUG_SEI_DETAIL) {
-									av1_print(hw, 0,
-										"hdr10p data: (size %d)\n", pic->hdr10p_data_size);
-									for (i = 0; i < pic->hdr10p_data_size; i++) {
-										av1_print_cont(hw, 0,
-											"%02x ", pic->hdr10p_data_buf[i]);
-										if (((i + 1) & 0xf) == 0)
-											av1_print_cont(hw, 0, "\n");
-									}
-									av1_print_cont(hw, 0, "\n");
-								}
-							} else {
-								av1_print(hw, 0, "bind_hdr10p_buffer fail\n");
+								av1_print_cont(hw, 0, "\n");
 							}
 						} else {
 							av1_print(hw, AV1_DEBUG_SEI_DETAIL,
@@ -6701,7 +6698,7 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 		}
 
 		if (hw->no_need_aux_data) {
-			v4l2_ctx->aux_infos.free_buffer(v4l2_ctx, DV_TYPE);
+			v4l2_ctx->aux_infos.free_buffer(v4l2_ctx, DV_TYPE | HDR10P_TYPE);
 			v4l2_ctx->aux_infos.free_one_sei_buffer(v4l2_ctx,
 				&pic_config->aux_data_buf,
 				&pic_config->aux_data_size,
@@ -12433,9 +12430,9 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 		ctx->aux_infos.alloc_buffer(ctx, SEI_TYPE | DV_TYPE | HDR10P_TYPE);
 	}
 
-	hw->aux_data_size = AUX_BUF_ALIGN(prefix_aux_buf_size) +
-		AUX_BUF_ALIGN(suffix_aux_buf_size);
-	hw->dv_data_buf = vmalloc(hw->aux_data_size);
+	hw->aux_data_size = AUX_BUF_ALIGN(prefix_aux_buf_size) + AUX_BUF_ALIGN(suffix_aux_buf_size);
+	if (hw->aux_data_size > 0)
+		hw->dv_data_buf = vmalloc(hw->aux_data_size);
 	hw->dv_data_size = 0;
 
 	if (debug) {

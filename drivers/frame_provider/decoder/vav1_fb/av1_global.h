@@ -1411,6 +1411,10 @@ typedef struct PIC_BUFFER_CONFIG_s {
 	int order_hint_bits_minus_1;
 	uint32_t show_frame;
 	uint32_t showable_frame;
+	/* hdr10 plus data */
+	u32 hdr10p_data_size;
+	char *hdr10p_data_buf;
+	int vdec_data_index;
 #endif
 #ifdef OW_TRIPLE_WRITE
 	unsigned int tw_y_adr;

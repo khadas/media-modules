@@ -7671,7 +7671,7 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 	}
 
 	if ((pbi->chunk != NULL) && (pbi->chunk->hdr10p_data_buf != NULL) && (pbi->chunk->hdr10p_data_size > 0) &&
-		(pbi->chunk->hdr10p_data_size < HDR10P_BUF_SIZE )) {
+		(pbi->chunk->hdr10p_data_size < HDR10P_BUF_SIZE) && (pic->hdr10p_data_buf != NULL)) {
 		memcpy(pic->hdr10p_data_buf, pbi->chunk->hdr10p_data_buf,
 			pbi->chunk->hdr10p_data_size);
 		pic->hdr10p_data_size = pbi->chunk->hdr10p_data_size;
@@ -7690,6 +7690,9 @@ static void set_frame_info(struct VP9Decoder_s *pbi, struct vframe_s *vf, struct
 		}
 		vf->hdr10p_data_buf = pic->hdr10p_data_buf;
 		vf->hdr10p_data_size = pic->hdr10p_data_size;
+	} else {
+		vf->hdr10p_data_buf = NULL;
+		vf->hdr10p_data_size = 0;
 	}
 
 	vf->sidebind_type = pbi->sidebind_type;

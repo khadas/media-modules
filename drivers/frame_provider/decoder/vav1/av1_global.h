@@ -1321,6 +1321,10 @@ typedef struct PIC_BUFFER_CONFIG_s {
   u64 timestamp;
   u32 hw_decode_time;
   u32 frame_size2; // For frame base mode
+  /* hdr10 plus data */
+  u32 hdr10p_data_size;
+  char *hdr10p_data_buf;
+  int vdec_data_index;
 } PIC_BUFFER_CONFIG;
 
 /*
