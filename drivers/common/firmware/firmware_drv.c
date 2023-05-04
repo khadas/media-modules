@@ -119,7 +119,7 @@ void fw_get_format_from_dtb(void)
 			return;
 		}
 	}
-	ret = of_property_read_u64(pnode, "format", &g_fw_mask);
+	ret = of_property_read_u64(pnode, "ucode_format", &g_fw_mask);
 	if (ret) {
 		pr_info("read format in dts failed, ret = %d\n", ret);
 		return;

@@ -3387,7 +3387,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 			snprintf(vdec->vfm_map_chain,
 				 VDEC_MAP_NAME_SIZE, "%s %s",
 				 vdec->vf_provider_name,
+#ifdef CONFIG_AMLOGIC_V4L_VIDEO
 				 "amlvideo deinterlace amvideo");
+#else
+				 "deinterlace amvideo");
+#endif
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path ==

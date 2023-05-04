@@ -44,6 +44,10 @@ CONFIGS_BUILD := -Wno-parentheses-equality -Wno-pointer-bool-conversion \
 
 KBUILD_CFLAGS_MODULE += $(GKI_EXT_MODULE_PREDEFINE)
 
+ifeq ($(strip $(CONFIG_AMLOGIC_ZAPPER_CUT)),)
+        CONFIGS += CONFIG_AMLOGIC_MEDIA_V4L_DEC=y
+endif
+
 ifeq (${VERSION},5)
 ifeq (${PATCHLEVEL},15)
 	CONFIGS += CONFIG_AMLOGIC_MEDIA_MULTI_DEC=y

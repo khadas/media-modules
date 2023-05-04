@@ -39,8 +39,6 @@ static struct vcodec_feature feature[SUPPORT_VDEC_NUM];
 
 static int vcodec_feature_idx;
 static ulong last_time;
-u8 buf[4096];
-
 
 static const char * const format_name[] = {
 	"ammvdec_mpeg12",
