@@ -10825,6 +10825,9 @@ static bool is_available_buffer(struct AV1HW_s *hw)
 		vdec_v4l_get_pic_info(ctx, &pic);
 		hw->used_buf_num = pic.dpb_frames + pic.dpb_margin;
 
+		if (hw->used_buf_num > MAX_BUF_NUM)
+			hw->used_buf_num = MAX_BUF_NUM;
+
 		if (hw->used_buf_num == 0)
 			return false;
 	}
