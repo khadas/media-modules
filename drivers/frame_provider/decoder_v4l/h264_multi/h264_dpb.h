@@ -860,6 +860,7 @@ struct DecodedPictureBuffer {
 	unsigned int used_size_il;
 	int          layer_id;
 
+	bool         need_put_ref;
 	/* DPB related function; */
 };
 

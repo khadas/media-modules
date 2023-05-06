@@ -2247,6 +2247,7 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 	struct buffer_spec_s *pic = NULL;
 	int i, idx = INVALID_IDX;
 	ulong flags;
+	p_H264_Dpb->cur_idx = INVALID_IDX;
 
 	spin_lock_irqsave(&hw->bufspec_lock, flags);
 	for (i = 0; i < hw->dpb.mDPB.size; i++) {
@@ -6645,7 +6646,7 @@ static void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	if (dec_picture && (vdec_frame_based(vdec) ||
-		(vdec_stream_based(vdec) && !p_Dpb->last_picture))) {
+		(vdec_stream_based(vdec) && p_Dpb->need_put_ref))) {
 		int buf_spec_num = hw->dpb.cur_idx;
 		int pic_struct = dec_picture->pic_struct;
 		struct aml_buf *aml_buf;
@@ -6923,17 +6924,12 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						p_H264_Dpb->mVideo.dec_picture->colocated_buf_index = -1;
 					}
 				}
+
+				buf_ref_process_for_exception(hw);
 				release_cur_decoding_buf(hw);
 			}
 		}
 
-		if (hw->error_proc_policy & 0x10000) {
-			if (hw->multi_slice_pic_flag == 0 && (first_mb_in_slice == 0 && decode_mb_count > 0) &&
-				(hw->cur_picture_slice_count > 1 &&
-				(hw->cur_picture_slice_count > hw->last_picture_slice_count))) {
-				vh264_pic_done_proc(vdec);
-			}
-		}
 
 #endif
 
@@ -9616,7 +9612,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		u32 param4 = READ_VREG(AV_SCRATCH_B);
 		u8 *trans_data_buf = (u8 *)hw->aux_addr;
 
-		if (input_frame_based(vdec)) {
+		if (input_frame_based(vdec) || input_stream_based(vdec)) {
 			int mb_width = 0;
 			int mb_total = 0;
 			int mb_height = 0;
@@ -10011,8 +10007,8 @@ result_done:
 	}
 
 	if (p_H264_Dpb->mVideo.dec_picture) {
-		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s, release decoded picture\n", __func__);
+		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "%s, release decoded picture\n", __func__);
+		buf_ref_process_for_exception(hw);
 		release_cur_decoding_buf(hw);
 	}
 

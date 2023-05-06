@@ -1121,6 +1121,7 @@ static void init_dpb(struct h264_dpb_stru *p_H264_Dpb, int type)
 
 	p_Dpb->used_size = 0;
 	p_Dpb->last_picture = NULL;
+	p_Dpb->need_put_ref = 0;
 
 	p_Dpb->ref_frames_in_buffer = 0;
 	p_Dpb->ltref_frames_in_buffer = 0;
@@ -3260,6 +3261,7 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 						update_ltref_list(p_Dpb);
 						dump_dpb(p_Dpb, 0);
 						p_Dpb->last_picture = NULL;
+						p_Dpb->need_put_ref = 1;
 
 						if (p_H264_Dpb->first_insert_frame == FirstInsertFrm_IDLE) {
 							while (output_frames(p_H264_Dpb, 0))
@@ -3340,10 +3342,13 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	if (p->idr_flag)
 		p_Vid->earlier_missing_poc = 0;
 
-	if (p->structure != FRAME)
+	if (p->structure != FRAME) {
 		p_Dpb->last_picture = p_Dpb->fs[p_Dpb->used_size];
-	else
+		p_Dpb->need_put_ref = 0;
+	} else {
 		p_Dpb->last_picture = NULL;
+		p_Dpb->need_put_ref = 1;
+	}
 
 	p_Dpb->used_size++;
 
@@ -5300,11 +5305,12 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 				if (p_H264_Dpb->mVideo.dec_picture->buf_spec_num
 					< 0) {
 					p_H264_Dpb->buf_alloc_fail = 1;
-					p_H264_Dpb->mVideo.dec_picture->
-						buf_spec_is_alloced = 0;
-				} else
-					p_H264_Dpb->mVideo.dec_picture->
-						buf_spec_is_alloced = 1;
+					p_H264_Dpb->mVideo.dec_picture->buf_spec_is_alloced = 0;
+					p_Dpb->need_put_ref = 0;
+				} else {
+					p_H264_Dpb->mVideo.dec_picture->buf_spec_is_alloced = 1;
+					p_Dpb->need_put_ref = 1;
+				}
 
 				if (p_H264_Dpb->mVideo.dec_picture->
 					used_for_reference) {
