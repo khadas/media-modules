@@ -1585,7 +1585,7 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 	aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 
-	hw->eos = false;
+	hw->eos = true;
 
 	pr_info("[%d] mjpeg EOS notify.\n", ctx->id);
 
