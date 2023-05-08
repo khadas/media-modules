@@ -4212,9 +4212,8 @@ unsigned long vdec_ready_to_run(struct vdec_s *vdec, unsigned long mask)
 	}
 
 	if (debug & 0x8)
-		pr_info("%s:%d ready_mask = 0x%lx, mask = 0x%lx\n",
-			__func__, vdec->id, ready_mask, mask);
-
+		pr_info("%s:%d ready_mask = 0x%lx, mask = 0x%lx, check_run_ready %d\n",
+			__func__, vdec->id, ready_mask, mask, check_run_ready);
 
 	/*step_mode &= ~0xff; not work for id of 0, removed*/
 

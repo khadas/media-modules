@@ -6796,11 +6796,13 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		hevc->lcu_size =
 			1 << (rpm_param->p.log2_min_coding_block_size_minus3 +
 					3 + rpm_param->p.log2_diff_max_min_coding_block_size);
-		if (hevc->lcu_size == 0) {
+		if ((hevc->lcu_size == 0) || (hevc->lcu_size > 64)) {
 			hevc_print(hevc, 0,
-				"Error, lcu_size = 0 (%d,%d)\n",
+				"Error, lcu_size = %d (%d,%d), w %d, h %d\n",
+				hevc->lcu_size,
 				rpm_param->p.log2_min_coding_block_size_minus3,
-				rpm_param->p.log2_diff_max_min_coding_block_size);
+				rpm_param->p.log2_diff_max_min_coding_block_size,
+				hevc->pic_w, hevc->pic_h);
 			return 3;
 		}
 		hevc->lcu_size_log2 = log2i(hevc->lcu_size);
@@ -13433,14 +13435,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 			run_ready_display_q_num)
 			ret = 0;
 
-		/*avoid more buffers consumed when
-		switching resolution*/
-		if (!hevc->try_parsing && run_ready_max_buf_num == 0xff &&
-			get_used_buf_count(hevc) >=
-			get_work_pic_num(hevc)) {
-			ret = 0;
-		}
-		else if (run_ready_max_buf_num &&
+		if (run_ready_max_buf_num &&
 			get_used_buf_count(hevc) >=
 			run_ready_max_buf_num)
 			ret = 0;
