@@ -9040,6 +9040,8 @@ static int parse_sei(struct hevc_state_s *hevc,
 	&& (nal_unit_type != NAL_UNIT_SEI_SUFFIX))
 		return 0;
 	while (p+4 <= sei_buf+size) {
+		payload_type = 0;
+		payload_size = 0;
 		while (*p == 0xff) {
 			payload_type += *p++;
 		}
@@ -9049,6 +9051,8 @@ static int parse_sei(struct hevc_state_s *hevc,
 			payload_size += *p++;
 		}
 		payload_size += *p++;
+		if (payload_size == 0)
+			break;
 
 		if (p+payload_size <= sei_buf+size) {
 			switch (payload_type) {
