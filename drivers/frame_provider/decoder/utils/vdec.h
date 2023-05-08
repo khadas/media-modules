@@ -194,6 +194,7 @@ enum e_trace_work_status {
 #define META_DATA_SIZE	(256)
 #define HDR10P_BUF_SIZE	(128)
 #define SEI_ITU_DATA_SIZE		(5*1024)
+#define AUX_DATA_SIZE1 (16 * 1024)
 
 #define SEI_TYPE	(1)
 #define DV_TYPE		(2)
