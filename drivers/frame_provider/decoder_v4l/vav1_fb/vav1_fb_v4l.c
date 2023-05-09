@@ -1930,6 +1930,7 @@ static int v4l_get_free_fb(struct AV1HW_s *hw)
 		v4l->aux_infos.bind_sei_buffer(v4l, &free_pic->aux_data_buf,
 			&free_pic->aux_data_size, &free_pic->ctx_buf_idx);
 		v4l->aux_infos.bind_hdr10p_buffer(v4l, &free_pic->hdr10p_data_buf);
+		free_pic->hdr10p_data_size = 0;
 	}
 
 	if (debug & AV1_DEBUG_BUFMGR) {
