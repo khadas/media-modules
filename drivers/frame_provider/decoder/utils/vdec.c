@@ -7207,7 +7207,9 @@ static void check_rdma_result(int num)
 
 int is_rdma_enable(void)
 {
-	if (rdma_mode && (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3))
+	if (rdma_mode &&
+		((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X)))
 		return 1;
 	else
 		return 0;
