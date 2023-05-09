@@ -34,6 +34,7 @@
 #define PTSSERVER_DEVICE_NAME   "ptsserver"
 static struct device *ptsserver_dev;
 
+static u32 ptsserver_support_es_splice_mode = 1;
 typedef struct pspriv_s {
 	s32 mPtsServerInsId;
 	ptsserver_ins *pServerIns;
@@ -82,6 +83,7 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 	last_checkin_pts mLastCheckinPts = {0};
 	last_checkout_pts mLastCheckOutPts = {0};
 	s32 mTrickMode = 0;
+	s32 mEsSpliceMode = 0;
 	switch (cmd) {
 		case PTSSERVER_IOC_INSTANCE_ALLOC:
 			if (copy_from_user ((void *)&allocparm,
@@ -224,6 +226,14 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			}
 			ret = ptsserver_set_trick_mode(priv->mPtsServerInsId,mTrickMode);
 		break;
+		case PTSSERVER_IOC_GET_ES_SPLICE_MODE:
+
+			mEsSpliceMode = ptsserver_support_es_splice_mode;
+			if (copy_to_user((void *)arg,
+						&mEsSpliceMode,
+						sizeof(mEsSpliceMode)))
+			return -EFAULT;
+		break;
 		default:
 			pr_info("invalid cmd:%d\n", cmd);
 		break;
@@ -246,6 +256,7 @@ static long ptsserver_compat_ioctl(struct file *file, unsigned int cmd, ulong ar
 		case PTSSERVER_IOC_GET_LAST_CHECKOUT_PTS:
 		case PTSSERVER_IOC_RELEASE:
 		case PTSSERVER_IOC_SET_TRICK_MODE:
+		case PTSSERVER_IOC_GET_ES_SPLICE_MODE:
 			return ptsserver_ioctl(file, cmd, arg);
 		default:
 			return -EINVAL;

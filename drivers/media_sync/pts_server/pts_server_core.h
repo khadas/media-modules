@@ -31,6 +31,8 @@ typedef struct ptsnode {
 	u32 offset;
 	u32 pts;
 	u64 pts_64;
+	u32 expired_count;
+	u64 duration_count;
 } pts_node;
 
 typedef struct psinstance {
@@ -69,6 +71,17 @@ typedef struct psinstance {
 	pts_node* all_free_ptn;
 	bool setC2Mode;
 	s32 mTrickMode;
+	bool mOffsetMode;
+	//for piece checkin decode
+	u32 mLastCheckinPiecePts;
+	u64 mLastCheckinPiecePts64;
+	u32 mLastCheckinPieceOffset;
+	u32 mLastCheckinPieceSize;
+	u32 mLastCheckoutIndex;
+	u64 mLastCheckinDurationCount;
+	u64 mLastCheckoutDurationCount;
+	u32 mLastShotBound;
+	u32 mStickyWrapFlag;
 } ptsserver_ins;
 
 

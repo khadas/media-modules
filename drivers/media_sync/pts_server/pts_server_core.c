@@ -38,7 +38,12 @@
 
 static u32 ptsserver_debuglevel = 0;
 
-#define MAX_INSTANCE_NUM 10
+#define MAX_INSTANCE_NUM (10)
+#define MAX_EXPIRED_COUNT (300)
+#define MAX_CHECKOUT_RETRY_COUNT (5)
+#define MAX_CHECKOUT_MIN_PTS_THRESHOLD (5)
+#define MAX_CHECKOUT_BOUND_VALUE (5)
+
 PtsServerManage vPtsServerInsList[MAX_INSTANCE_NUM];
 
 long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* allocParm) {
@@ -86,6 +91,18 @@ long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* 
 	pInstance->mDecoderDuration = 0;
 	pInstance->mListSize = 0;
 	pInstance->mLastCheckoutCurOffset = 0;
+	pInstance->mLastCheckinPiecePts = 0;
+	pInstance->mLastCheckinPiecePts64 = 0;
+	pInstance->mLastCheckinPieceOffset = 0;
+	pInstance->mLastCheckinPieceSize = 0;
+	pInstance->mLastCheckoutIndex = 0;
+	pInstance->mLastCheckinDurationCount = 0;
+	pInstance->mLastCheckoutDurationCount = 0;
+	pInstance->mLastShotBound = 0;
+	pInstance->mTrickMode = 0;
+	pInstance->setC2Mode = false;
+	pInstance->mOffsetMode = 0;
+	pInstance->mStickyWrapFlag = false;
 	mutex_init(&pInstance->mPtsListLock);
 	INIT_LIST_HEAD(&pInstance->pts_list);
 	INIT_LIST_HEAD(&pInstance->pts_free_list);
@@ -167,6 +184,10 @@ void ptsserver_set_mode(s32 pServerInsId, bool set_mode) {
 		return;
 	}
 	pInstance->setC2Mode = set_mode;
+	// If set trickmode we set mOffsetMode default
+	if (set_mode) {
+		pInstance->mOffsetMode = 1;
+	}
 
 	return;
 }
@@ -190,6 +211,7 @@ long ptsserver_set_first_checkin_offset(s32 pServerInsId,start_offset* mStartOff
 						mStartOffset->mBaseOffset,
 						mStartOffset->mAlignmentOffset);
 	pInstance->mLastCheckinOffset = mStartOffset->mBaseOffset;
+	pInstance->mLastCheckinPieceOffset = mStartOffset->mBaseOffset;
 	pInstance->mAlignmentOffset = mStartOffset->mAlignmentOffset;
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
@@ -205,6 +227,8 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 	pts_node* del_ptn = NULL;
 	s32 index = pServerInsId;
 	s32 level = 0;
+	bool checkinHeadNode = false;
+	bool checkinSpliceNode = false;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
@@ -228,41 +252,103 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 		pInstance->mListSize--;
 	}
 
-	if (!list_empty(&pInstance->pts_free_list)) {	//dequeue empty buffer
-		ptn = list_first_entry(&pInstance->pts_free_list, struct ptsnode, node);
-		list_del(&ptn->node);
+	//record every checkin offset in mLastCheckinPieceOffset
+	pInstance->mLastCheckinPieceOffset = pInstance->mLastCheckinPieceOffset + pInstance->mLastCheckinPieceSize;
+
+	if (mCheckinPtsSize->pts == 0) {//checkin piece node in splice mode
+		if (pInstance->mListSize != 0) {
+			ptn = list_last_entry(&pInstance->pts_list, struct ptsnode, node);
+
+			if (ptn == NULL) {
+				if (ptsserver_debuglevel >= 1) {
+					pts_pr_info(index,"ptn is null return \n");
+				}
+				mutex_unlock(&vPtsServerIns->mListLock);
+				return -1;
+			}
+		} else {
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"list is empty and head node not exist,just record info\n");
+			}
+			//for piece checkin record
+			pInstance->mLastCheckinPieceSize = mCheckinPtsSize->size;
+			pInstance->mLastCheckinPiecePts = mCheckinPtsSize->pts;
+			pInstance->mLastCheckinPiecePts64 = mCheckinPtsSize->pts_64;
+
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"[SpliceNode] [hasNoHead] Checkin Size(%d) 0x%x pts(32:0x%x 64:%lld)\n",
+									pInstance->mLastCheckinPieceSize,
+									pInstance->mLastCheckinPieceOffset,
+									pInstance->mLastCheckinPiecePts,
+									pInstance->mLastCheckinPiecePts64);
+			}
+
+			mutex_unlock(&vPtsServerIns->mListLock);
+			return 0;
+		}
+		checkinSpliceNode = true;
+	}  else {//checkin head node
+		checkinHeadNode = true;
+		if (!list_empty(&pInstance->pts_free_list)) {	//dequeue empty buffer
+			ptn = list_first_entry(&pInstance->pts_free_list, struct ptsnode, node);
+			list_del(&ptn->node);
+		}
+
 		if (ptn != NULL) {
+			pInstance->mLastCheckinSize = pInstance->mLastCheckinPieceOffset - pInstance->mLastCheckinOffset;
 			ptn->offset = pInstance->mLastCheckinOffset + pInstance->mLastCheckinSize;
 			ptn->pts = mCheckinPtsSize->pts;
 			ptn->pts_64 = mCheckinPtsSize->pts_64;
+			pInstance->mLastCheckinPts = ptn->pts;
+			pInstance->mLastCheckinPts64 = ptn->pts_64;
+			ptn->expired_count = MAX_EXPIRED_COUNT;
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"-->dequeue empty ptn:%px offset:0x%x pts(32:0x%x 64:%lld)\n",
-									ptn,ptn->offset,ptn->pts,
-									ptn->pts_64);
+					pts_pr_info(index,"-->dequeue empty ptn:%px offset:0x%x pts(32:0x%x 64:%lld)\n",
+										ptn,ptn->offset,ptn->pts,
+										ptn->pts_64);
+				}
+		} else {
+			if (ptsserver_debuglevel >= 1) {
+				pts_pr_info(index,"ptn is null return \n");
 			}
+			mutex_unlock(&vPtsServerIns->mListLock);
+			return -1;
 		}
-	}
-	if (ptn == NULL) {
-		if (ptsserver_debuglevel >= 1) {
-			pts_pr_info(index,"ptn is null return \n");
+
+		if (pInstance->setC2Mode) {
+			list_for_each_entry_safe(ptn_cur,ptn_tmp,&pInstance->pts_list, node) {
+				if (ptn_cur != NULL) {
+					if (ptn_cur->pts_64 >= ptn->pts_64)
+						break;
+				}
+			}
+			list_add_tail(&ptn->node, &ptn_cur->node);
+		} else {
+			// sort pts_list by pts if pts invalid sort by offset,
+			// so pts_list is amlost list by order
+			list_for_each_entry_safe(ptn_cur, ptn_tmp, &pInstance->pts_list, node) {
+				if (ptn_cur != NULL) {
+					if (ptn->pts_64 != -1) {
+						if (ptn->pts_64 <= ptn_cur->pts_64)
+							break;
+					} else {
+						if (ptn->offset >= ptn_cur->offset)
+							break;
+					}
+				}
+			}
+			list_add_tail(&ptn->node, &ptn_cur->node);
 		}
-		mutex_unlock(&vPtsServerIns->mListLock);
-		return -1;
+
+		if (ptn == list_first_entry(&pInstance->pts_list, struct ptsnode, node)) {
+			ptn->duration_count = pInstance->mLastCheckinDurationCount++;
+		} else {
+			ptn->duration_count = pInstance->mLastCheckinDurationCount;
+		}
+
+		pInstance->mListSize++;
 	}
 
-	if (pInstance->setC2Mode) {
-		list_for_each_entry_safe(ptn_cur,ptn_tmp,&pInstance->pts_list, node) {
-			if (ptn_cur != NULL) {
-				if (ptn_cur->pts_64 >= ptn->pts_64)
-					break;
-			}
-		}
-		list_add_tail(&ptn->node, &ptn_cur->node);
-	} else {
-		list_add_tail(&ptn->node, &pInstance ->pts_list);
-	}
-
-	pInstance->mListSize++;
 	if (!pInstance->mPtsCheckinStarted) {
 		pts_pr_info(index,"-->Checkin(First) ListSize:%d CheckinPtsSize(%d)-> offset:0x%x pts(32:0x%x 64:%llu)\n",
 							pInstance->mListSize,
@@ -276,13 +362,21 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 		pInstance->mPtsCheckinStarted = 1;
 	}
 
-	if (ptsserver_debuglevel >= 1) {
+	if (pInstance->mAlignmentOffset != 0) {
+		pInstance->mLastCheckinOffset = pInstance->mAlignmentOffset;
+		pInstance->mLastCheckinPieceOffset = pInstance->mAlignmentOffset;
+		pInstance->mAlignmentOffset = 0;
+	} else {
+		pInstance->mLastCheckinOffset = ptn->offset;
+	}
+
+	if (ptsserver_debuglevel >= 1 && checkinHeadNode == true) {
 		level = ptn->offset - pInstance->mLastCheckoutCurOffset;
-		pts_pr_info(index,"Checkin ListCount:%d LastCheckinOffset:0x%x LastCheckinSize:0x%x\n",
+		pts_pr_info(index,"[HeadNode] Checkin ListCount:%d LastCheckinOffset:0x%x LastCheckinSize:0x%x\n",
 								pInstance->mListSize,
 								pInstance->mLastCheckinOffset,
 								pInstance->mLastCheckinSize);
-		pts_pr_info(index,"Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%x 64:%llu) ptn:%px\n",
+		pts_pr_info(index,"[HeadNode] Checkin Size(%d) %s:0x%x (%s:%d) pts(32:0x%x 64:%lld) duration_count:%lld\n",
 							mCheckinPtsSize->size,
 							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
 							ptn->offset,
@@ -290,43 +384,57 @@ long ptsserver_checkin_pts_size(s32 pServerInsId,checkin_pts_size* mCheckinPtsSi
 							level,
 							ptn->pts,
 							ptn->pts_64,
+							ptn->duration_count);
+	}
+
+	//for piece checkin record
+	pInstance->mLastCheckinPieceSize = mCheckinPtsSize->size;
+	pInstance->mLastCheckinPiecePts = mCheckinPtsSize->pts;
+	pInstance->mLastCheckinPiecePts64 = mCheckinPtsSize->pts_64;
+
+	if (ptsserver_debuglevel >= 1 && checkinSpliceNode == true) {
+	pts_pr_info(index,"[SpliceNode] Checkin Size(%d) %s 0x%x pts(32:0x%x 64:%lld) ptn:%px\n",
+							pInstance->mLastCheckinPieceSize,
+							ptn->offset < pInstance->mLastCheckinOffset?"rest offset":"offset",
+							pInstance->mLastCheckinPieceOffset,
+							pInstance->mLastCheckinPiecePts,
+							pInstance->mLastCheckinPiecePts64,
 							ptn);
 	}
-
-	if (pInstance->mAlignmentOffset != 0) {
-		pInstance->mLastCheckinOffset = pInstance->mAlignmentOffset;
-		pInstance->mAlignmentOffset = 0;
-	} else {
-		pInstance->mLastCheckinOffset = ptn->offset;
-	}
-
-	pInstance->mLastCheckinSize = mCheckinPtsSize->size;
-	pInstance->mLastCheckinPts = mCheckinPtsSize->pts;
-	pInstance->mLastCheckinPts64 = mCheckinPtsSize->pts_64;
 
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
 EXPORT_SYMBOL(ptsserver_checkin_pts_size);
 
-long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPtsOffset) {
+long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheckoutPtsOffset) {
 	PtsServerManage* vPtsServerIns = NULL;
 	ptsserver_ins* pInstance = NULL;
 	s32 index = pServerInsId;
 	pts_node* ptn = NULL;
 	pts_node* find_ptn = NULL;
+	pts_node* fit_offset_ptn = NULL;
+	pts_node* fit_pts_ptn = NULL;
 	pts_node* ptn_tmp = NULL;
 
 	u32 cur_offset = 0xFFFFFFFF & mCheckoutPtsOffset->offset;
 	s32 cur_duration = (mCheckoutPtsOffset->offset >> 32) & 0x3FFFFFFF;
 
-	u32 offsetDiff = 2500;
+	u32 expected_offset_diff = 2500;
+	u32 expected_pts = 0;
 	s32 find_frame_num = 0;
 	s32 find = 0;
+	s32 invalid_mode = 0;
 	u32 offsetAbs = 0;
 	u32 FrameDur = 0;
 	u64 FrameDur64 = 0;
-	s32 number = -1;
+	s32 find_index = -1;
+	s32 fit_offset_number = -1;
+	s32 fit_pts_number = -1;
+	s32 must_have_fit = 0;
+	s32 retryCount = MAX_CHECKOUT_RETRY_COUNT;
+	s32 lastCheckoutPts = 0;
+	s32 shot_bound = MAX_CHECKOUT_BOUND_VALUE;// show the credibility of the current pts
 	s32 i = 0;
 
 	if (index < 0 || index >= MAX_INSTANCE_NUM) {
@@ -341,8 +449,8 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 		return -1;
 	}
 
-
-	offsetDiff = pInstance->mLookupThreshold;
+	expected_offset_diff = pInstance->mLookupThreshold;
+	expected_pts = pInstance->mLastCheckoutPts;
 
 	if (!pInstance->mPtsCheckoutStarted) {
 		pts_pr_info(index,"Checkout(First) ListSize:%d offset:0x%x duration:%d\n",
@@ -352,19 +460,16 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	}
 
 	if (ptsserver_debuglevel >= 1) {
-		pts_pr_info(index,"checkout ListCount:%d offset:%lld cur_offset:0x%x cur_duration:%d\n",
+		pts_pr_info(index,"checkout ListCount:%d offset:%llx cur_offset:0x%x cur_duration:%d\n",
 							pInstance->mListSize,
 							mCheckoutPtsOffset->offset,
 							cur_offset,
 							cur_duration);
 	}
-/*
-	if (list_empty(&pInstance->pts_list)) {
-		pts_pr_info(index,"checkout list_empty \n");
-		mutex_unlock(&vPtsServerIns->mListLock);
-		return -1;
-	}
-*/
+
+	// Normal Case: Pull pts from list if decoder send offset with value.
+	// 1.stream mode with normal offset
+	// 2.v4l2 pileline es mode, pts must checkout from checkin node
 	if (cur_offset != 0xFFFFFFFF &&
 		!list_empty(&pInstance->pts_list)) {
 		find_frame_num = 0;
@@ -373,51 +478,175 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 
 			if (ptn != NULL) {
 				offsetAbs = abs(cur_offset - ptn->offset);
-				if (ptsserver_debuglevel > 1) {
-					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x)\n",i,offsetAbs,ptn->offset,cur_offset);
+
+				// Only if ptn node is deadly expired, we increase the drop count.
+				if (ptn->offset == 0xFFFFFFFF || ptn->offset <= pInstance->mLastCheckoutCurOffset) {
+					if ((ptn->pts < pInstance->mLastCheckoutPts) || (ptn->pts == -1)) {
+						ptn->expired_count --;
+					}
 				}
 
-				if (offsetAbs <=  pInstance->mLookupThreshold) {
-					if (offsetAbs <= offsetDiff && cur_offset > ptn->offset) {
-						offsetDiff = offsetAbs;
-						find = 1;
-						number = i;
-						find_ptn = ptn;
+				// Print all ptn base info
+				if (ptsserver_debuglevel > 1) {
+					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x pts:0x%x pts_64:%llu expired_count:%d dur_count:%lld) expected_pts:0x%x\n",
+									i, offsetAbs, ptn->offset, cur_offset, ptn->pts, ptn->pts_64, ptn->expired_count, ptn->duration_count, expected_pts);
+				}
+
+				//record the first fit pts minimum ptn node to record,this node is the key one normally even without
+				// check offset,this can double check if the key one right or not in some specially case.
+				if (fit_pts_ptn == NULL && pInstance->mLastCheckoutPts > 0) {
+					if (ptn->pts >= pInstance->mLastCheckoutPts || ptn->pts_64 >= pInstance->mLastCheckoutPts64) {
+						fit_pts_ptn = ptn;
+						fit_pts_number = i;
+						if (ptsserver_debuglevel >= 1) {
+							pts_pr_info(index, "record fit in minimum pts case. find_index:%d, pts:0x%x, pts_64:%llu\n",
+									fit_pts_number, fit_pts_ptn->pts, fit_pts_ptn->pts_64);
+						}
 					}
-				} else if (/*cur_offset > ptn->offset && */offsetAbs > 251658240) {
+				}
+
+				// If shot the threshold, there must be one ptn node be selected.
+				// So trust mLookupThreshold,if not shot in mLookupThreshold, ignore them all.
+				// Otherwise mLookupThreshold is not right,need adjust it.
+				if (offsetAbs <=  pInstance->mLookupThreshold) {
+
+					// Record the minimum offset as anchors, if any case need to reset pts, use this node fit_offset_ptn.
+					// If in mLookupThreshold,any ptn fit in offset, we mark must_have_fit,
+					// which means we can pull one ptn in list for sure, no matter where it is.
+					if ((offsetAbs <= expected_offset_diff && cur_offset > ptn->offset)) {
+						fit_offset_ptn = ptn;
+						fit_offset_number = i;
+						expected_offset_diff = offsetAbs;
+						// cause we consider fit pts as find one, so it is we can find key one even in mLookupThreshold,
+						// But if in mLookupThreshold,we can pull one for sure so we mark must_have_fit to find ptn not in mLookupThreshold.
+						must_have_fit = 1;
+						if (ptsserver_debuglevel >= 1) {
+							pts_pr_info(index, "Record fit in minimum offset case. find_index:%d\n", fit_offset_number);
+						}
+						// Deal with invalid pts == -1 case,
+						// If first node is invalid case, set it as found node
+						// If there is other node found, we can only compare offset, and set invalid flag
+						if (ptn->pts == -1) {
+							pInstance->mOffsetMode = 1;
+							find = 1;// Here to set find to avoid retryCount count wrong
+							if (ptsserver_debuglevel >= 1) {
+								pts_pr_info(index, "Found invalid pts. in invalid mode\n");
+							}
+						}
+					}
+
+					// Compare pts as first Strategy, expect the first ptn in mLookupThreshold will be the key one
+					// any node in mLookupThreshold has invalid pts we not compare pts, just conmare offset
+					if (ptn->pts >= pInstance->mLastCheckoutPts && !pInstance->mOffsetMode && cur_offset > ptn->offset) {
+						if (ptn->pts <= expected_pts || expected_pts == pInstance->mLastCheckoutPts) {
+							find = 1;
+							find_index = i;
+							find_ptn = ptn;
+							expected_pts = ptn->pts;
+						}
+					}
+
+
+				}
+
+				// Drop Node Strategy
+				// <Out of Buffer Size>
+				// <expired count == 0>
+				if (/*cur_offset > ptn->offset && */offsetAbs > 251658240 || ptn->expired_count <= 0) {
 					// > 240M (15M*16)
 					if (ptsserver_debuglevel >= 1) {
-						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%llu\n",
+						pts_pr_info(index,"Checkout delete(%d) diff:%d offset:0x%x pts:0x%x pts_64:%llu,drop reason map:<%d %d>\n",
 											i,
 											offsetAbs,
 											ptn->offset,
 											ptn->pts,
-											ptn->pts_64);
+											ptn->pts_64,
+											offsetAbs > 251658240,
+											ptn->expired_count <= 0);
 					}
 					list_del(&ptn->node);
 					list_add_tail(&ptn->node, &pInstance ->pts_free_list);
 					pInstance->mListSize--;
-				} else if (find_frame_num > 5) {
-					break;
+
 				}
+
 				if (find) {
+					// Deal with the case pts rewind and insert the first node in pts_list,
+					// and offset is also within correct threshhold.But the key on is at the end of pts_list,
+					// and we can`t find within just in MAX_CHECKOUT_RETRY_COUNT,we need retry all list
+					if (find_index == 0 && pInstance->mLastCheckoutIndex > 0) {
+						retryCount = pInstance->mListSize;
+					}
 					find_frame_num++;
+				}
+
+				if (find_frame_num >= retryCount) {
+					break;
 				}
 			}
 			i++;
 		}
+
+		if (pInstance->mOffsetMode) {
+			if (fit_offset_ptn) {
+				find = 1;
+				find_ptn = fit_offset_ptn;
+				find_index = fit_offset_number;
+				shot_bound --;
+				pInstance->mStickyWrapFlag = false;
+				if (find_ptn->pts == -1) {
+					invalid_mode = 1;
+					if (ptsserver_debuglevel >= 1) {
+						pts_pr_info(index, "Checkout invalid pts case find_index:%d\n", find_index);
+					}
+				}
+			}
+		} else {
+			// to see if the key one within offset the same as the minimum pts diff one,
+			// if not fit, we choose to trust pts fit.
+			if (must_have_fit) {
+				find = 1;
+				if (pInstance->mPtsCheckoutStarted
+					&& fit_pts_ptn && find_ptn != fit_pts_ptn
+					&& fit_pts_ptn->duration_count == pInstance->mLastCheckoutDurationCount
+					&& !pInstance->mStickyWrapFlag) {
+					find_ptn = fit_pts_ptn;
+					find_index = fit_pts_number;
+					shot_bound --;
+					pInstance->mStickyWrapFlag = true;
+					if (ptsserver_debuglevel > 1) {
+						pts_pr_info(index, "Checkout pts fit not the same as key one case find_index:%d, bound value:%d\n", find_index, shot_bound);
+					}
+					// if find by pts not found but can be found by offset, need reset by offset,usually seen in pts rewind case
+				} else if ((fit_offset_ptn && !find_ptn) || !pInstance->mPtsCheckoutStarted) {
+					find_ptn = fit_offset_ptn;
+					find_index = fit_offset_number;
+					shot_bound --;
+					pInstance->mStickyWrapFlag = false;
+					if (ptsserver_debuglevel >= 1) {
+						pts_pr_info(index, "Checkout Might occure discontinue case number:%d, need reset by offset\n", find_index);
+					}
+				} else if (find_ptn) {
+					pInstance->mStickyWrapFlag = false;
+					if (ptsserver_debuglevel > 1) {
+						pts_pr_info(index, "Perfect case %d\n", find_index);
+					}
+				}
+			}
+		}
+
 		if (!find && pInstance->mTrickMode == 1) {//i_only, not found pts, need retry!
 			i = 0;
 			find_frame_num = 0;
-			offsetDiff = 10000;
+			expected_offset_diff = 10000;
 			list_for_each_entry_safe(ptn,ptn_tmp,&pInstance->pts_list, node) {
 				if (ptn != NULL) {
 					offsetAbs = abs(cur_offset - ptn->offset);
 				}
-				if (offsetAbs <= offsetDiff && cur_offset > ptn->offset) {
-					offsetDiff = offsetAbs;
+				if (offsetAbs <= expected_offset_diff && cur_offset > ptn->offset) {
+					expected_offset_diff = offsetAbs;
 					find = 1;
-					number = i;
+					find_index = i;
 					find_ptn = ptn;
 				} else if (find_frame_num > 5) {
 					break;
@@ -428,20 +657,8 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				i++;
 			}
 		}
-		if (find) {
-			mCheckoutPtsOffset->pts = find_ptn->pts;
-			mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
-			if (ptsserver_debuglevel >= 1 ||
-				!pInstance->mPtsCheckoutStarted) {
-				pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
-									pInstance->mListSize,number,offsetDiff,
-									find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
-			}
 
-			list_del(&find_ptn->node);
-			list_add_tail(&find_ptn->node, &pInstance ->pts_free_list);
-			pInstance->mListSize--;
-		} else if(pInstance->setC2Mode) {
+		if (!find && pInstance->setC2Mode == 1) {
 			if (cur_offset != 0xFFFFFFFF) {
 				u32 min_offsetAbs = 0xFFFFFFFF;
 
@@ -470,7 +687,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 					cur_offset = find_ptn->offset;
 					if (ptsserver_debuglevel >= 1 || !pInstance->mPtsCheckoutStarted)
 						pts_pr_info(index,"Checkout second ok ListCount:%d find:%d offset(diff:%d L:0x%x) pts(32:0x%x 64:%llu)\n",
-							pInstance->mListSize,number,offsetDiff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
+							pInstance->mListSize,find_index,expected_offset_diff, find_ptn->offset,find_ptn->pts,find_ptn->pts_64);
 				} else {
 					if (!pInstance->mPtsCheckoutStarted && !list_empty(&pInstance->pts_list)) {
 						find_ptn = list_first_entry(&pInstance->pts_list, struct ptsnode, node);
@@ -490,12 +707,53 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 				find = 1;
 			}
 		}
+
+		pInstance->mLastCheckoutIndex = find_index;
+
+		// Deal with all the key ptn
+		if (find) {
+			if (!invalid_mode) {
+				mCheckoutPtsOffset->pts = find_ptn->pts;
+				mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
+				pInstance->mLastCheckoutDurationCount = find_ptn->duration_count;
+				if (ptsserver_debuglevel >= 1 ||
+					!pInstance->mPtsCheckoutStarted) {
+					pts_pr_info(index,"Checkout ok ListCount:%d find:%d offset(diff:%d L:0x%x C:%x) pts(32:0x%x 64:%lld) l_Checkoutpts:%x, dur_count:%lld, shot_bound:%d\n",
+									pInstance->mListSize,find_index,abs(cur_offset - find_ptn->offset),
+									find_ptn->offset,cur_offset,find_ptn->pts,find_ptn->pts_64, pInstance->mLastCheckoutPts, pInstance->mLastCheckoutDurationCount, shot_bound);
+				}
+			}
+
+			list_del(&find_ptn->node);
+			list_add_tail(&find_ptn->node, &pInstance ->pts_free_list);
+			pInstance->mListSize--;
+		}
 	}
-	if (find == 1 && (s64)mCheckoutPtsOffset->pts_64 == -1) {
-		find = 0; //invalid pts
-	}
-	if (!find) {
+
+	// Unnormal Case: Calculate pts with duration.
+	// 1.cant find node in ptslist within threshold
+	// 2.one package with multi-frame,this case has no offset
+	// 3.pts == -1 case, pts has error value
+	if (!find || invalid_mode) {
+		lastCheckoutPts = pInstance->mLastCheckoutPts;
 		pInstance->mPtsCheckoutFailCount++;
+
+		// If cur_offset smaller than last offset means sticky package from codec
+		if (cur_offset < pInstance->mLastCheckoutCurOffset) {
+			pInstance->mStickyWrapFlag = false;
+			if (ptsserver_debuglevel > 1) {
+				pts_pr_info(index, "Clean Sticky Flag in PtsCheckoutFail\n");
+			}
+		} else {
+			if (ptsserver_debuglevel > 1) {
+				pts_pr_info(index, "Checkout Might occure discontinue case in PtsCheckoutFail, need reset by offset\n");
+			}
+		}
+
+		shot_bound = 3;
+		if (invalid_mode && find_ptn) {
+			pInstance->mLastCheckoutDurationCount = find_ptn->duration_count;
+		}
 		if (ptsserver_debuglevel >= 1 || pInstance->mPtsCheckoutFailCount % 30 == 0) {
 			pts_pr_info(index,"Checkout fail mPtsCheckoutFailCount:%d level:%d \n",
 				pInstance->mPtsCheckoutFailCount,pInstance->mLastCheckinOffset - cur_offset);
@@ -504,10 +762,12 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			pInstance->mLastCheckoutPts = pInstance->mLastCheckoutPts + pInstance->mDecoderDuration;
 			pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mDecoderDuration * 1000 / 96;
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkout fail mDecoderDuration:%d pts(32:%d 64:%llu)\n",
+				pts_pr_info(index,"Checkout fail Calculate by mDecoderDuration:%d pts(32:%x 64:%lld) lastCheckoutpts:%x, shot_bound:%d\n",
 									pInstance->mDecoderDuration,
 									pInstance->mLastCheckoutPts,
-									pInstance->mLastCheckoutPts64);
+									pInstance->mLastCheckoutPts64,
+									lastCheckoutPts,
+									shot_bound);
 			}
 		} else {
 			if (pInstance->mFrameDuration != 0) {
@@ -518,17 +778,19 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			}
 			if (pInstance->mPtsCheckoutStarted == 0) {
 
-				pts_pr_info(index,"first Checkout fail cur_offset:0x%x offsetDiff:0x%x\n",cur_offset,offsetDiff);
+				pts_pr_info(index,"first Checkout fail cur_offset:0x%x expected_offset_diff:0x%x\n",cur_offset,expected_offset_diff);
 				pInstance->mLastCheckoutPts = -1;
 				pInstance->mLastCheckoutPts64 = -1;
 
 			}
 			if (ptsserver_debuglevel >= 1) {
-				pts_pr_info(index,"Checkout fail FrameDuration(32:%d 64:%lld) pts(32:%d 64:%llu)\n",
+				pts_pr_info(index,"Checkout fail Calculate by FrameDuration(32:%d 64:%lld) pts(32:%x 64:%lld) lastCheckoutpts:%x, shot_bound:%d\n",
 									pInstance->mFrameDuration,
 									pInstance->mFrameDuration64,
 									pInstance->mLastCheckoutPts,
-									pInstance->mLastCheckoutPts64);
+									pInstance->mLastCheckoutPts64,
+									lastCheckoutPts,
+									shot_bound);
 			}
 
 		}
@@ -539,6 +801,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 		return 0;
 	}
 
+	// Calculate duration if checkout first time
 	if (pInstance->mPtsCheckoutStarted) {
 		if (pInstance->mFrameDuration == 0 && pInstance->mFrameDuration64 == 0) {
 
@@ -565,12 +828,12 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 									pInstance->mPtsCheckoutFailCount + 1);
 
 			if (ptsserver_debuglevel > 1) {
-				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%llu)\n",
+				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%x 64:%llu)\n",
 									FrameDur,
 									FrameDur64,
 									pInstance->mDoubleCheckFrameDuration,
 									pInstance->mDoubleCheckFrameDuration64);
-				pts_pr_info(index,"checkout LastDoubleCheckoutPts(32:%d 64:%lld) pts(32:%d 64:%lld) PtsCheckoutFailCount:%d\n",
+				pts_pr_info(index,"checkout LastDoubleCheckoutPts(32:%d 64:%lld) pts(32:%x 64:%lld) PtsCheckoutFailCount:%d\n",
 									pInstance->mLastDoubleCheckoutPts,
 									pInstance->mLastDoubleCheckoutPts64,
 									mCheckoutPtsOffset->pts,
@@ -589,7 +852,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 			}
 			if (pInstance->mDoubleCheckFrameDurationCount > pInstance->kDoubleCheckThreshold) {
 				if (ptsserver_debuglevel > 1) {
-					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%llu)\n",
+					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%x 64:%llu)\n",
 										pInstance->mDoubleCheckFrameDurationCount,
 										pInstance->mDoubleCheckFrameDuration,
 										pInstance->mDoubleCheckFrameDuration64);
@@ -611,6 +874,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId,checkout_pts_offset* mChecko
 	pInstance->mLastDoubleCheckoutPts64 = mCheckoutPtsOffset->pts_64;
 	pInstance->mDecoderDuration = cur_duration;
 	pInstance->mLastCheckoutCurOffset = cur_offset;
+	pInstance->mLastShotBound = shot_bound;
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
@@ -625,12 +889,12 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 	u32 cur_offset = 0xFFFFFFFF & mCheckoutPtsOffset->offset;
 	//s32 cur_duration = (mCheckoutPtsOffset->offset >>= 32) & 0xFFFFFFFF;
 
-	u32 offsetDiff = 2500;
-	s32 find_framenum = 0;
+	u32 expected_offset_diff = 2500;
+	s32 find_frame_num = 0;
 	s32 find = 0;
 	s32 offsetTmp = 0;
 
-	s32 number = -1;
+	s32 find_index = -1;
 	s32 i = 0;
 	u32 mCalculateLastCheckoutPts = 0;
 	u64 mCalculateLastCheckoutPts64 = 0;
@@ -655,23 +919,23 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 */
 	if (cur_offset != 0xFFFFFFFF &&
 		!list_empty(&pInstance->pts_list)) {
-		find_framenum = 0;
+		find_frame_num = 0;
 		find = 0;
 		list_for_each_entry(ptn, &pInstance->pts_list, node) {
 			if (ptn != NULL) {
 				offsetTmp = abs(ptn->offset - cur_offset);
 				if (offsetTmp <=  pInstance->mLookupThreshold) {
-					if (offsetTmp <= offsetDiff && cur_offset > ptn->offset) {
-						offsetDiff = offsetTmp;
+					if (offsetTmp <= expected_offset_diff && cur_offset > ptn->offset) {
+						expected_offset_diff = offsetTmp;
 						find = 1;
-						number = i;
+						find_index = i;
 						find_ptn = ptn;
 					}
-				} else if (find_framenum > 5) {
+				} else if (find_frame_num > 5) {
 					break;
 				}
 				if (find) {
-					find_framenum++;
+					find_frame_num++;
 				}
 			}
 			i++;
@@ -682,7 +946,7 @@ long ptsserver_peek_pts_offset(s32 pServerInsId,checkout_pts_offset* mCheckoutPt
 
 			if (ptsserver_debuglevel >= 1) {
 				pts_pr_info(index,"peek ok ListSize:%d find:%d offset(diff:%d L:0x%x C:0x%x) pts(32:0x%x 64:%llu)\n",
-									pInstance->mListSize,number,offsetDiff,
+									pInstance->mListSize,find_index,expected_offset_diff,
 									find_ptn->offset ,cur_offset,find_ptn->pts, find_ptn->pts_64);
 			}
 		}
@@ -818,6 +1082,8 @@ long ptsserver_set_trick_mode(s32 pServerInsId, s32 mode) {
 		return -1;
 	}
 	pInstance->mTrickMode = mode;
+	// If set trickmode we set mOffsetMode default
+	pInstance->mOffsetMode = mode;
 	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
