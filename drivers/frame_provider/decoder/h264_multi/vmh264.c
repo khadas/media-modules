@@ -3257,6 +3257,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int vf_count = 1;
 	int i;
 	struct buffer_spec_s *pic = &hw->buffer_spec[buffer_index];
+	u32 slice_type = 0;
 
 	/* swap uv */
 	if (hw->is_used_v4l) {
@@ -3394,14 +3395,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				get_double_write_ratio(hw->double_write_mode);
 		}
 
-		if (frame->slice_type == I_SLICE) {
-			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
-		} else if (frame->slice_type == P_SLICE) {
-			vf->frame_type |= V4L2_BUF_FLAG_PFRAME;
-		} else if (frame->slice_type == B_SLICE) {
-			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
-		}
-
 		vf->flag = 0;
 		if (frame->data_flag & I_FLAG)
 			vf->flag |= VFRAME_FLAG_SYNCFRAME;
@@ -3500,15 +3493,38 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			}
 		}
 
+		if ((vf->type && VIDTYPE_INTERLACE != 0) &&
+			(frame->bottom_field != NULL) &&
+			(frame->top_field != NULL)) {
+			if ((vf->type & VIDTYPE_INTERLACE_BOTTOM) == VIDTYPE_INTERLACE_BOTTOM)
+				slice_type = frame->bottom_field->slice_type;
+			else
+				slice_type = frame->top_field->slice_type;
+		} else {
+			slice_type = frame->slice_type;
+		}
+
+		if (slice_type == I_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
+		} else if (slice_type == P_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_PFRAME;
+		} else if (slice_type == B_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
+		}
+
+		dpb_print(DECODE_ID(hw), 0,
+			"%s %d slice_type = %d\n", __func__, __LINE__, slice_type);
+
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
 		if (!vdec->vbuf.use_ptsserv && vdec_stream_based(vdec)) {
 			/* offset for tsplayer pts lookup */
 			u64 frame_type = 0;
-			if (frame->slice_type == I_SLICE)
+
+			if (slice_type == I_SLICE)
 				frame_type = KEYFRAME_FLAG;
-			else if (frame->slice_type == P_SLICE)
+			else if (slice_type == P_SLICE)
 				frame_type = PFRAME_FLAG;
 			else
 				frame_type = BFRAME_FLAG;

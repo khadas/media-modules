@@ -2998,6 +2998,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int bForceInterlace = 0;
 	int vf_count = 1;
 	int i;
+	u32 slice_type = 0;
 
 	/* swap uv */
 	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -3166,14 +3167,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				get_double_write_ratio(hw->double_write_mode);
 		}
 
-		if (frame->slice_type == I_SLICE) {
-			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
-		} else if (frame->slice_type == P_SLICE) {
-			vf->frame_type |= V4L2_BUF_FLAG_PFRAME;
-		} else if (frame->slice_type == B_SLICE) {
-			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
-		}
-
 		vf->flag = 0;
 		if (frame->data_flag & I_FLAG)
 			vf->flag |= VFRAME_FLAG_SYNCFRAME;
@@ -3271,6 +3264,25 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				vf->type |= VIDTYPE_INTERLACE_BOTTOM;
 				vf->duration = vf->duration/2;
 			}
+		}
+
+		if ((vf->type && VIDTYPE_INTERLACE != 0) &&
+			(frame->bottom_field != NULL) &&
+			(frame->top_field != NULL)) {
+			if ((vf->type & VIDTYPE_INTERLACE_BOTTOM) == VIDTYPE_INTERLACE_BOTTOM)
+				slice_type = frame->bottom_field->slice_type;
+			else
+				slice_type = frame->top_field->slice_type;
+		} else {
+			slice_type = frame->slice_type;
+		}
+
+		if (slice_type == I_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_KEYFRAME;
+		} else if (slice_type == P_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_PFRAME;
+		} else if (slice_type == B_SLICE) {
+			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
 		}
 
 		vf->sar_width = hw->width_aspect_ratio;
