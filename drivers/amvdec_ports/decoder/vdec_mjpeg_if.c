@@ -506,14 +506,14 @@ static int vdec_mjpeg_get_param(unsigned long h_vdec,
 	case GET_PARAM_DW_MODE:
 	{
 		unsigned int* mode = out;
-		*mode = VDEC_DW_NO_AFBC;
+		*mode = DM_YUV_ONLY;
 		break;
 	}
 
 	case GET_PARAM_TW_MODE:
 	{
-		u32 *mode = out;
-		*mode = VDEC_TW_INVALID;
+		unsigned int* mode = out;
+		*mode = DM_INVALID;
 		break;
 	}
 

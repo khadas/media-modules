@@ -1021,7 +1021,7 @@ static int vdec_h264_get_param(unsigned long h_vdec,
 	case GET_PARAM_TW_MODE:
 	{
 		unsigned int* mode = out;
-		*mode = VDEC_TW_INVALID;
+		*mode = DM_INVALID;
 		break;
 	}
 

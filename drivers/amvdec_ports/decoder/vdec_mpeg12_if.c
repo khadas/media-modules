@@ -529,14 +529,14 @@ static int vdec_mpeg12_get_param(unsigned long h_vdec,
 	case GET_PARAM_DW_MODE:
 	{
 		unsigned int* mode = out;
-		*mode = VDEC_DW_NO_AFBC;
+		*mode = DM_YUV_ONLY;
 		break;
 	}
 
 	case GET_PARAM_TW_MODE:
 	{
 		unsigned int* mode = out;
-		*mode = VDEC_TW_INVALID;
+		*mode = DM_INVALID;
 		break;
 	}
 

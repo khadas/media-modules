@@ -458,12 +458,11 @@ struct BUF_s {
 	u32 luma_size;
 	ulong chroma_addr;
 	u32 chroma_size;
-
-	ulong start_adr_ex;
-	u32 size_ex;
-	u32 luma_size_ex;
-	ulong chroma_addr_ex;
-	u32 chroma_size_ex;
+	ulong start_adr_tw;
+	u32 size_tw;
+	u32 luma_size_tw;
+	ulong chroma_addr_tw;
+	u32 chroma_size_tw;
 } /*BUF_t */;
 
 struct MVBUF_s {
@@ -1277,6 +1276,11 @@ static __inline__ bool is_tw_p010(struct AVS3Decoder_s *dec)
 	tw = out;
 
 	return (tw & 0x10000) ? 1 : 0;
+}
+
+static bool is_p010_mode(struct AVS3Decoder_s *dec)
+{
+	return is_dw_p010(dec) || is_tw_p010(dec);
 }
 
 #if 0
@@ -2831,6 +2835,17 @@ static void init_pic_list_hw(struct AVS3Decoder_s *dec)
 	}
 }
 
+static int vdec_parms_setup_and_sanity_check(struct AVS3Decoder_s *dec)
+{
+	/* Collect and check configurations before playback. */
+
+	dec->endian = is_p010_mode(dec) ?
+		HEVC_CONFIG_P010_LE :
+		HEVC_CONFIG_LITTLE_ENDIAN;
+
+	return 0;
+}
+
 static int calc_luc_quantity(int lcu_size, u32 w, u32 h)
 {
 	int pic_width_64 = (w + 63) & (~0x3f);
@@ -2905,14 +2920,16 @@ static int v4l_alloc_and_config_pic(struct AVS3Decoder_s *dec,
 			pic->chroma_size = aml_buf->planes[0].length - aml_buf->planes[0].offset;
 		}
 		if (tw_mode) {
-			dec->m_BUF[i].start_adr_ex = aml_buf->planes_ex[0].addr;
-			dec->m_BUF[i].luma_size_ex = aml_buf->planes_ex[0].offset;
-			dec->m_BUF[i].size_ex = aml_buf->planes_ex[0].length;
-			aml_buf->planes_ex[0].bytes_used = aml_buf->planes_ex[0].length;
-			pic->tw_y_adr = dec->m_BUF[i].start_adr_ex;
-			pic->tw_u_v_adr = pic->tw_y_adr + dec->m_BUF[i].luma_size_ex;
-			pic->luma_size_ex = aml_buf->planes_ex[0].offset;
-			pic->chroma_size_ex = aml_buf->planes_ex[0].length - aml_buf->planes_ex[0].offset;
+			dec->m_BUF[i].start_adr_tw = aml_buf->planes_tw[0].addr;
+			dec->m_BUF[i].luma_size_tw = aml_buf->planes_tw[0].offset;
+			dec->m_BUF[i].size_tw = aml_buf->planes_tw[0].length;
+			aml_buf->planes_tw[0].bytes_used = aml_buf->planes_tw[0].length;
+			pic->tw_y_adr = dec->m_BUF[i].start_adr_tw;
+			pic->tw_u_v_adr = pic->tw_y_adr + dec->m_BUF[i].luma_size_tw;
+			pic->luma_size_tw = aml_buf->planes_tw[0].offset;
+			pic->chroma_size_tw = aml_buf->planes_tw[0].length - aml_buf->planes_tw[0].offset;
+
+			pic->cma_alloc_addr = aml_buf->planes_tw[0].addr;
 		}
 	} else if (aml_buf->num_planes == 2) {
 		if (dw_mode) {
@@ -2929,17 +2946,19 @@ static int v4l_alloc_and_config_pic(struct AVS3Decoder_s *dec,
 		}
 		/* Triple write buffer configure. */
 		if (tw_mode) {
-			dec->m_BUF[i].start_adr_ex = aml_buf->planes_ex[0].addr;
-			dec->m_BUF[i].luma_size_ex = aml_buf->planes_ex[0].length;
-			dec->m_BUF[i].chroma_addr_ex = aml_buf->planes_ex[1].addr;
-			dec->m_BUF[i].chroma_size_ex = aml_buf->planes_ex[1].length;
-			dec->m_BUF[i].size_ex = aml_buf->planes_ex[0].length + aml_buf->planes_ex[1].length;
-			aml_buf->planes_ex[0].bytes_used = aml_buf->planes_ex[0].length;
-			aml_buf->planes_ex[1].bytes_used = aml_buf->planes_ex[1].length;
-			pic->tw_y_adr = dec->m_BUF[i].start_adr_ex;
-			pic->tw_u_v_adr = dec->m_BUF[i].chroma_addr_ex;
-			pic->luma_size_ex = aml_buf->planes_ex[0].length;
-			pic->chroma_size_ex = aml_buf->planes_ex[1].length;
+			dec->m_BUF[i].start_adr_tw = aml_buf->planes_tw[0].addr;
+			dec->m_BUF[i].luma_size_tw = aml_buf->planes_tw[0].length;
+			dec->m_BUF[i].chroma_addr_tw = aml_buf->planes_tw[1].addr;
+			dec->m_BUF[i].chroma_size_tw = aml_buf->planes_tw[1].length;
+			dec->m_BUF[i].size_tw = aml_buf->planes_tw[0].length + aml_buf->planes_tw[1].length;
+			aml_buf->planes_tw[0].bytes_used = aml_buf->planes_tw[0].length;
+			aml_buf->planes_tw[1].bytes_used = aml_buf->planes_tw[1].length;
+			pic->tw_y_adr = dec->m_BUF[i].start_adr_tw;
+			pic->tw_u_v_adr = dec->m_BUF[i].chroma_addr_tw;
+			pic->luma_size_tw = aml_buf->planes_tw[0].length;
+			pic->chroma_size_tw = aml_buf->planes_tw[1].length;
+
+			pic->cma_alloc_addr = aml_buf->planes_tw[0].addr;
 		}
 	}
 
@@ -2970,8 +2989,18 @@ static int v4l_alloc_and_config_pic(struct AVS3Decoder_s *dec,
 		__func__, pic->index, pic->BUF_index);
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "comp_body_size %x comp_buf_size %x ",
 		pic->comp_body_size, pic->buf_size);
-	avs3_print(dec, AVS3_DBG_BUFMGR_MORE, "dw_y_adr %d, pic_config->dw_u_v_adr =%d\n",
-		pic->dw_y_adr, pic->dw_u_v_adr);
+	avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
+		"DW(%x), Y(%lx, %u), C(%lx, %u), %dbit\n",
+		dw_mode,
+		pic->dw_y_adr, pic->luma_size,
+		pic->dw_u_v_adr, pic->chroma_size,
+		is_dw_p010(dec) ? 10 : 8);
+	avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
+		"TW(%x), Y(%lx, %u), C(%lx, %u), %dbit\n",
+		tw_mode,
+		pic->tw_y_adr, pic->luma_size_tw,
+		pic->tw_u_v_adr, pic->chroma_size_tw,
+		is_tw_p010(dec) ? 10 : 8);
 
 	return 0;
 }
@@ -3352,6 +3381,10 @@ static void config_dw(struct AVS3Decoder_s *dec, struct avs3_frame_s *pic,
 		data32 &= ~(1 << 8); /* NV21 */
 	else
 		data32 |= (1 << 8); /* NV12 */
+
+	if (is_dw_p010(dec))
+		data32 |= (1 << 8);
+
 	/*
 	*  [31:24] ar_fifo1_axi_thred
 	*  [23:16] ar_fifo0_axi_thred
@@ -4717,15 +4750,15 @@ static void set_canvas(struct AVS3Decoder_s *dec,
 		pic->tw_canvas_config[0].width = canvas_w;
 		pic->tw_canvas_config[0].height = canvas_h;
 		pic->tw_canvas_config[0].block_mode = blkmode;
-		pic->tw_canvas_config[0].endian = 0;
-		pic->tw_canvas_config[0].bit_depth = is_tw_p010(dec);
+		pic->tw_canvas_config[0].endian     = 0;
+		pic->tw_canvas_config[0].bit_depth   = is_tw_p010(dec);
 
 		pic->tw_canvas_config[1].phy_addr = pic->tw_u_v_adr;
 		pic->tw_canvas_config[1].width = canvas_w;
 		pic->tw_canvas_config[1].height = canvas_h;
 		pic->tw_canvas_config[1].block_mode = blkmode;
-		pic->tw_canvas_config[1].endian = 0;
-		pic->tw_canvas_config[1].bit_depth = is_tw_p010(dec);
+		pic->tw_canvas_config[1].endian     = 0;
+		pic->tw_canvas_config[1].bit_depth   = is_tw_p010(dec);
 	}
 }
 
@@ -5147,8 +5180,8 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 		"%s index = %d\r\n",
 		__func__, pic->index);
 
-	if ((pic->triple_write_mode) ||
-		(pic->double_write_mode && (pic->double_write_mode & 0x20) == 0))
+	if ((pic->double_write_mode && (pic->double_write_mode & 0x20) == 0) ||
+		pic->triple_write_mode)
 		set_canvas(dec, pic);
 
 	display_frame_count[dec->index]++;
@@ -5366,7 +5399,13 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 	}
 
 	if (!pic->double_write_mode && pic->triple_write_mode) {
-		vf->type |= VIDTYPE_VIU_NV21;		//nv12 flag
+		vf->type |= nv_order;
+		vf->type |= VIDTYPE_PROGRESSIVE |
+			VIDTYPE_VIU_FIELD |
+			VIDTYPE_COMPRESS |
+			VIDTYPE_SCATTER;
+		vf->plane_num = 2;
+		vf->canvas0Addr = vf->canvas1Addr = -1;
 		vf->canvas0_config[0] = pic->tw_canvas_config[0];
 		vf->canvas0_config[1] = pic->tw_canvas_config[1];
 		vf->canvas1_config[0] = pic->tw_canvas_config[0];
@@ -5375,8 +5414,10 @@ static void set_vframe(struct AVS3Decoder_s *dec,
 			get_double_write_ratio(pic->triple_write_mode & 0xf);	//tw same ratio defined with dw
 		vf->height = pic->height /
 			get_double_write_ratio(pic->triple_write_mode & 0xf);
-		avs3_print(dec, 0, "output triple write w %d, h %d, bitdepth %s\n",
-				vf->width, vf->height, vf->canvas0_config[0].bit_depth?"10":"8");
+		avs3_print(dec, AVS3_DBG_BUFMGR,
+			"output triple write w %d, h %d, bitdepth %s\n",
+			vf->width, vf->height,
+			vf->canvas0_config[0].bit_depth?"10":"8");
 	}
 
 	if (force_fps & 0x100) {
@@ -7244,6 +7285,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 						dec->avs3_dec.max_pb_size = MAX_BUF_NUM;
 					if (dec->avs3_dec.max_pb_size > FRAME_BUFFERS)
 						dec->avs3_dec.max_pb_size = FRAME_BUFFERS;
+
+					vdec_parms_setup_and_sanity_check(dec);
 				}
 			} else {
 				dec->process_busy = 0;

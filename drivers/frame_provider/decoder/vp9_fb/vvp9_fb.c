@@ -8719,6 +8719,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) {
 		data32 = READ_VREG(HEVC_SAO_CTRL3);
 		if (is_dw_p010(pbi)) {
+			WRITE_VREG_BITS(HEVC_SAO_CTRL8, 0x8, 24, 4);  /*[24:27] set 4'b1000, shift 10bit data to MSB*/
 			data32 |= (1 << 1);
 			WRITE_VREG(HEVC_SAO_CTRL3, data32);
 		} else {
@@ -8754,6 +8755,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 		data32 |= (1 << 2);
 #ifdef P010_ENABLE
 		if (is_tw_p010(pbi)) {
+			WRITE_VREG_BITS(HEVC_SAO_CTRL8, 0x8, 28, 4);  /*[28:31] set 4'b1000, shift 10bit data to MSB*/
 			data32 |= (1 << 3);
 		} else {
 			data32 &= ~(1 << 3);

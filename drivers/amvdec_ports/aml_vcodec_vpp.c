@@ -1312,7 +1312,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 	in_buf->di_buf.vf = &in_buf->vf;
 	in_buf->di_buf.flag = 0;
 	if (vf->type & VIDTYPE_V4L_EOS) {
-		u32 dw_mode = VDEC_DW_NO_AFBC;
+		u32 dw_mode = DM_YUV_ONLY;
 
 		in_buf->di_buf.flag |= DI_FLAG_EOS;
 
@@ -1323,7 +1323,7 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 			VIDTYPE_PROGRESSIVE :
 			VIDTYPE_INTERLACE;
 
-		if (dw_mode != VDEC_DW_NO_AFBC)
+		if (dw_mode != DM_YUV_ONLY)
 			vf->type |= VIDTYPE_COMPRESS;
 	}
 
@@ -1355,14 +1355,14 @@ static int aml_v4l2_vpp_push_vframe(struct aml_v4l2_vpp* vpp, struct vframe_s *v
 		aml_buf->index, vf, vf->index, vf->type, vf->timestamp, vf->flag);
 
 	do {
-		unsigned int dw_mode = VDEC_DW_NO_AFBC;
+		unsigned int dw_mode = DM_YUV_ONLY;
 		struct file *fp;
 		char file_name[64] = {0};
 		if (!dump_vpp_input || vpp->ctx->is_drm_mode)
 			break;
 		if (vdec_if_get_param(vpp->ctx, GET_PARAM_DW_MODE, &dw_mode))
 			break;
-		if (dw_mode == VDEC_DW_AFBC_ONLY)
+		if (dw_mode == DM_AVBC_ONLY)
 			break;
 
 		snprintf(file_name, 64, "%s/dec_dump_vpp_input_%ux%u.raw", dump_path, vf->width, vf->height);

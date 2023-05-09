@@ -912,7 +912,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 	in_buf->vf = vf;
 
 	do {
-		unsigned int dw_mode = VDEC_DW_NO_AFBC;
+		unsigned int dw_mode = DM_YUV_ONLY;
 		struct file *fp;
 		char file_name[64] = {0};
 
@@ -922,7 +922,7 @@ static int aml_v4l2_ge2d_push_vframe(struct aml_v4l2_ge2d* ge2d, struct vframe_s
 		if (vdec_if_get_param(ge2d->ctx, GET_PARAM_DW_MODE, &dw_mode))
 			break;
 
-		if (dw_mode == VDEC_DW_AFBC_ONLY)
+		if (dw_mode == DM_AVBC_ONLY)
 			break;
 
 		snprintf(file_name, 64, "%s/dec_dump_ge2d_input_%ux%u.raw", dump_path, vf->width, vf->height);

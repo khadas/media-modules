@@ -29,6 +29,7 @@
 #include "aml_buf_mgr.h"
 #include "aml_vcodec_util.h"
 #include "vdec_drv_if.h"
+#include "utils/common.h"
 
 static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1, void **bmmu) {
 	struct aml_buf_fbc_info fbc_info;
@@ -41,10 +42,10 @@ static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1,
 
 	/* init mmu box */
 	*mmu = decoder_mmu_box_alloc_box(bm->bc.name,
-	   bm->bc.id,
-	   BUF_FBC_NUM_MAX,
-	   fbc_info.max_size * SZ_1M,
-	   mmu_flag);
+		bm->bc.id,
+		BUF_FBC_NUM_MAX,
+		fbc_info.max_size * SZ_1M,
+		mmu_flag);
 	if (!(*mmu)) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
 			"fail to create mmu box\n");
@@ -69,10 +70,10 @@ static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1,
 	/* init bmmu box */
 	bmmu_flag |= (CODEC_MM_FLAGS_CMA_CLEAR | CODEC_MM_FLAGS_FOR_VDECODER);
 	*bmmu = decoder_bmmu_box_alloc_box(bm->bc.name,
-	     bm->bc.id,
-	     BUF_FBC_NUM_MAX,
-	     4 + PAGE_SHIFT,
-	     bmmu_flag, BMMU_ALLOC_FLAGS_WAIT);
+		bm->bc.id,
+		BUF_FBC_NUM_MAX,
+		4 + PAGE_SHIFT,
+		bmmu_flag, BMMU_ALLOC_FLAGS_WAIT);
 	if (!(*bmmu)) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
 			"fail to create bmmu box\n");
@@ -94,10 +95,11 @@ free_mmubox:
 
 static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 {
-	u32 dw_mode = VDEC_DW_NO_AFBC;
+	u32 dw_mode = DM_YUV_ONLY;
 	struct aml_vcodec_ctx *ctx = container_of(bm,
 		struct aml_vcodec_ctx, bm);
 	bool buff_alloc_done = false;
+
 	if (!bm->mmu || !bm->bmmu) {
 		bm->fbc_array = vzalloc(sizeof(*bm->fbc_array) * BUF_FBC_NUM_MAX);
 		if (!bm->fbc_array)
@@ -114,7 +116,7 @@ static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
 			return -EINVAL;
 		}
-		if (dw_mode & 0x20) {
+		if (dw_mode & VDEC_MODE_MMU_DW_MASK) {
 			if (aml_buf_box_alloc(bm, &bm->mmu_dw, &bm->mmu_dw_1, &bm->bmmu_dw)) {
 				return -EINVAL;
 			}
@@ -380,12 +382,17 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 		aml_buf->planes[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
 		aml_buf->planes[i].dbuf	= vb->planes[i].dbuf;
 
+		/* Make a fake used size for DW/TW:(0, 0). */
+		if (!cfg->dw_mode)
+			aml_buf->planes[i].bytes_used = 1;
+
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-			"idx: %u, %c:(0x%lx, %d)\n",
+			"Buffer info, id:%x, %c:(0x%lx, %d), DW:%x\n",
 			vb->index,
 			plane_n[i],
 			aml_buf->planes[i].addr,
-			aml_buf->planes[i].length);
+			aml_buf->planes[i].length,
+			cfg->dw_mode);
 	}
 
 	if (cfg->tw_mode) {
@@ -393,40 +400,41 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 			if (i == 0) {
 				//Y
 				if (vb->num_planes == 1) {
-					aml_buf->planes_ex[0].length	= cfg->luma_length_ex + cfg->chroma_length_ex;
-					aml_buf->planes_ex[0].offset	= cfg->luma_length_ex;
+					aml_buf->planes_tw[0].length	= cfg->luma_length_tw + cfg->chroma_length_tw;
+					aml_buf->planes_tw[0].offset	= cfg->luma_length_tw;
 				} else {
-					aml_buf->planes_ex[0].length	= cfg->luma_length_ex;
-					aml_buf->planes_ex[0].offset	= 0;
+					aml_buf->planes_tw[0].length	= cfg->luma_length_tw;
+					aml_buf->planes_tw[0].offset	= 0;
 				}
 			} else {
 				if (vb->num_planes == 2) {
 					//UV
-					aml_buf->planes_ex[1].length	= cfg->chroma_length_ex;
-					aml_buf->planes_ex[1].offset	= cfg->chroma_length_ex >> 1;
+					aml_buf->planes_tw[1].length	= cfg->chroma_length_tw;
+					aml_buf->planes_tw[1].offset	= cfg->chroma_length_tw >> 1;
 				} else {
-					aml_buf->planes_ex[i].length	= cfg->chroma_length_ex >> 1;
-					aml_buf->planes_ex[i].offset	= 0;
+					aml_buf->planes_tw[i].length	= cfg->chroma_length_tw >> 1;
+					aml_buf->planes_tw[i].offset	= 0;
 				}
 			}
 
-			aml_buf->planes_ex[i].addr = (cfg->dw_mode == VDEC_DW_AFBC_ONLY) ?
+			aml_buf->planes_tw[i].addr = (cfg->dw_mode == DM_AVBC_ONLY) ?
 							vb2_dma_contig_plane_dma_addr(vb, i):
 							codec_mm_alloc_for_dma_ex("tw_buf",
-								(cfg->luma_length_ex +
-								cfg->chroma_length_ex) / PAGE_SIZE,
+								(cfg->luma_length_tw +
+								cfg->chroma_length_tw) / PAGE_SIZE,
 								4,
 								CODEC_MM_FLAGS_FOR_VDECODER,
 								bm->bc.id,
 								i);
-			aml_buf->planes_ex[i].dbuf = vb->planes[i].dbuf;
+			aml_buf->planes_tw[i].dbuf = vb->planes[i].dbuf;
 
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-				"idx: %u, %c:(0x%lx, %d) ex\n",
+				"Buffer info, id:%x, %c:(0x%lx, %d), TW:%x\n",
 				vb->index,
 				plane_n[i],
-				aml_buf->planes_ex[i].addr,
-				aml_buf->planes_ex[i].length);
+				aml_buf->planes_tw[i].addr,
+				aml_buf->planes_tw[i].length,
+				cfg->tw_mode);
 		}
 	}
 }
@@ -543,10 +551,11 @@ static void aml_buf_free(struct buf_core_mgr_s *bc,
 	task_chain_release(buf->task);
 
 	/* free triple write buffer. */
-	if ((bm->config.dw_mode != VDEC_DW_AFBC_ONLY) && bm->config.tw_mode) {
+	if (bm->config.tw_mode &&
+		(bm->config.dw_mode != DM_AVBC_ONLY)) {
 		for (i = 0 ; i < buf->num_planes ; i++) {
-			if (buf->planes_ex[i].addr)
-				codec_mm_free_for_dma("tw_buf", buf->planes_ex[i].addr);
+			if (buf->planes_tw[i].addr)
+				codec_mm_free_for_dma("tw_buf", buf->planes_tw[i].addr);
 		}
 	}
 

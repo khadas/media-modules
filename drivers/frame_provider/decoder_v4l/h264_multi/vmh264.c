@@ -9492,7 +9492,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		V4L2_FIELD_INTERLACED : ps->field;
 
 	/* open mmu if progressive and double_write is 0x10*/
-	if ((hw->double_write_mode != VDEC_DW_NO_AFBC) && (!hw->dw_para_set_flag)) {
+	if ((hw->double_write_mode != DM_YUV_ONLY) && (!hw->dw_para_set_flag)) {
 		if (ps->field == V4L2_FIELD_NONE) {
 			if (set_mmu_config(hw, vdec)) {
 				dpb_print(DECODE_ID(hw), 0, "h264 set mmu config fail\n");
@@ -9501,10 +9501,10 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			dpb_print(DECODE_ID(hw), 0, "h264 set mmu config ok\n");
 		} else {
 			struct aml_vdec_cfg_infos cfg_info = { 0 };
-			hw->double_write_mode = VDEC_DW_NO_AFBC;
+			hw->double_write_mode = DM_YUV_ONLY;
 			dpb_print(DECODE_ID(hw), 0, "h264 interlace video force to change dw as 0x10\n");
 			vdec_v4l_get_cfg_infos(ctx, &cfg_info);
-			cfg_info.double_write_mode = VDEC_DW_NO_AFBC;
+			cfg_info.double_write_mode = DM_YUV_ONLY;
 			vdec_v4l_set_cfg_infos(ctx, &cfg_info);
 		}
 		hw->dw_para_set_flag = true;

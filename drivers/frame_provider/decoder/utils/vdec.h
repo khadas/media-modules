@@ -44,6 +44,7 @@
 #include "vdec_sync.h"
 #include "vdec_canvas_utils.h"
 #include "../../../media_sync/pts_server/pts_server_core.h"
+#include "../../../amvdec_ports/utils/common.h"
 
 #define NEW_FB_CODE
 #define FB_DEBUG_ON_OLD_CHIP

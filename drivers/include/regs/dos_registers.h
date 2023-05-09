@@ -1040,6 +1040,11 @@
 #define HEVC_SAO_CTRL5                      0x3623
 #define HEVC_SAO_CTRL6                      0x3624
 #define HEVC_SAO_CTRL7                      0x3625
+#define HEVC_SAO_CTRL8                      0x362c
+//axi_idle_thred=sao_ctrl8[15:0]
+#define HEVC_SAO_CTRL9                      0x362d
+
+
 #define HEVC_SAO_CTRL26                     0x3677
 #define HEVC_SAO_DBG_DATA_0                 0x3630
 #define HEVC_SAO_DBG_DATA_1                 0x3631
@@ -1258,6 +1263,7 @@
 #define HEVC_SAO_VERSION_DBE1                      (0x3b00 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CTRL0_DBE1                        (0x3b01 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_CTRL1_DBE1                        (0x3b02 | MASK_S5_NEW_REGS)
+
 #define HEVC_SAO_INT_EN_DBE1                       (0x3b03 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_INT_STATUS_DBE1                   (0x3b04 | MASK_S5_NEW_REGS)
 #define HEVC_SAO_PIC_SIZE_DBE1                     (0x3b05 | MASK_S5_NEW_REGS)

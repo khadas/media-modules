@@ -153,6 +153,31 @@ enum AVColorTransferCharacteristic {
 };
 #endif
 
+#define VDEC_MODE_MMU_DW_MASK	(0x20)
+#define VDEC_MODE_10BIT_MASK	(0x10000)
+#define VDEC_MODE_DW_MASK	(0xffff)
+
+enum vdec_dec_mode {
+	DM_INVALID		= 0,
+	DM_AVBC_ONLY		= 0,
+	DM_YUV_1_1_AVBC		= 1,
+	DM_YUV_1_4_AVBC_A	= 2,
+	DM_YUV_1_4_AVBC_B	= 3,
+	DM_YUV_1_2_AVBC		= 4,
+	DM_YUV_1_8_AVBC		= 8,
+	DM_YUV_ONLY		= 0x10,
+	DM_AVBC_1_1		= 0x21,
+	DM_AVBC_1_4		= 0x22,
+	DM_AVBC_1_2		= 0x24,
+	DM_YUV_AUTO_1_2_AVBC	= 0x100,
+	DM_YUV_AUTO_1_4_AVBC	= 0x200,
+	DM_YUV_AUTO_1_2_AVBC_B	= 0x300,
+	DM_YUV_1_1_10BIT_AVBC	= 0x10001,
+	DM_YUV_1_4_10BIT_AVBC	= 0x10003,
+	DM_YUV_1_2_10BIT_AVBC	= 0x10004,
+	DM_YUV_1_8_10BIT_AVBC	= 0x10008,
+};
+
 //fmt
 const char *av_color_space_name(enum AVColorSpace space);
 const char *av_color_primaries_name(enum AVColorPrimaries primaries);
@@ -172,4 +197,12 @@ void print_hex_debug(u8 *data, u32 len, int max);
 bool is_over_size(int w, int h, int size);
 
 u8 *aml_yuv_dump(struct file *fp, u8 *start_addr, u32 real_width, u32 real_height, u32 align);
+
+bool is_output_p010(u32 dec_mode);
+
+int vdec_get_size_ratio(int dec_mode);
+
+int vdec_get_dec_mode(u32 w, u32 h, int dec_mode);
+
+u32 vdec_get_plane_size(u32 w, u32 h, int dec_mode, int align);
 #endif

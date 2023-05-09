@@ -54,8 +54,8 @@ struct aml_buf_config {
 	int	planes;
 	u32	luma_length;
 	u32	chroma_length;
-	u32	luma_length_ex;
-	u32	chroma_length_ex;
+	u32	luma_length_tw;
+	u32	chroma_length_tw;
 	u32	dw_mode;
 	u32	tw_mode;
 };
@@ -138,7 +138,7 @@ struct aml_buf_fbc {
  * @state	: Indicates the usage status of the aml_buf.
  * @num_planes	: The number of planes used.
  * @planes	: Buffer plane information.
- * @planes_ex	: Used for another buffer planes storage.
+ * @planes_tw	: Used for another buffer planes storage.
  * @fbc		: AFBC buffer information.
  * @entry	: Buffer entity embedded in aml_buf.
  * @task	: The context of task chain.
@@ -152,7 +152,7 @@ struct aml_buf {
 	u32			num_planes;
 	u64			timestamp;
 	struct aml_buf_plane	planes[BUF_MAX_PLANES];
-	struct aml_buf_plane	planes_ex[BUF_MAX_PLANES];
+	struct aml_buf_plane	planes_tw[BUF_MAX_PLANES];
 	struct aml_buf_fbc	*fbc;
 	struct buf_core_entry	entry;
 

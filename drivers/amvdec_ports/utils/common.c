@@ -267,3 +267,97 @@ u8 *aml_yuv_dump(struct file *fp, u8 *start_addr, u32 real_width, u32 real_heigh
 
 	return (start_addr + coded_width * coded_height);
 }
+
+bool is_output_p010(u32 dec_mode)
+{
+	return !!(dec_mode & VDEC_MODE_10BIT_MASK);
+}
+
+int vdec_get_size_ratio(int dec_mode)
+{
+	int ratio = 1;
+
+	u32 dm = dec_mode & VDEC_MODE_DW_MASK;
+
+	switch (dm) {
+	case DM_YUV_1_4_AVBC_A:
+	case DM_YUV_1_4_AVBC_B:
+		ratio = 4;
+		break;
+	case DM_YUV_1_2_AVBC:
+		ratio = 2;
+		break;
+	case DM_YUV_1_8_AVBC:
+		ratio = 8;
+		break;
+	default:
+		break;
+	}
+
+	return ratio;
+}
+
+int vdec_get_dec_mode(u32 w, u32 h, int dec_mode)
+{
+	u32 dm = dec_mode & VDEC_MODE_DW_MASK;
+
+	switch (dm) {
+	case DM_YUV_AUTO_1_2_AVBC:
+		if (is_over_size(w, h, 1920 * 1088))
+			dm = 0x4; /*1:2*/
+		break;
+	case DM_YUV_AUTO_1_4_AVBC:
+		if (is_over_size(w, h, 1920 * 1088))
+			dm = 0x2; /*1:4*/
+		break;
+	case DM_YUV_AUTO_1_2_AVBC_B:
+		if (is_over_size(w, h, 1280 * 768))
+			dm = 0x4; /*1:2*/
+		break;
+	default:
+		break;
+	}
+
+	return (dec_mode & VDEC_MODE_10BIT_MASK) | dm;
+}
+
+static int vdec_size_scale(int length, int dec_mode)
+{
+	int ret = 64;
+	u32 dm = dec_mode & VDEC_MODE_DW_MASK;
+
+	switch (dm) {
+	case DM_AVBC_ONLY: /* only afbc, output afbc */
+		ret = 64;
+		break;
+	case DM_YUV_1_1_AVBC: /* afbc and (w x h), output YUV420 */
+		ret = length;
+		break;
+	case DM_YUV_1_4_AVBC_A: /* afbc and (w/4 x h/4), output YUV420 */
+	case DM_YUV_1_4_AVBC_B: /* afbc and (w/4 x h/4), output afbc and YUV420 */
+		ret = length >> 2;
+		break;
+	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */
+		ret = length >> 1;
+		break;
+	case 0x8: /* afbc and (w/8 x h/8), output YUV420 */
+		ret = length >> 3;
+		break;
+	case 0x10: /* (w x h), output YUV420-8bit) */
+	default:
+		ret = length;
+		break;
+	}
+
+	return ret;
+}
+
+u32 vdec_get_plane_size(u32 w, u32 h, int dec_mode, int align)
+{
+	u32 dm = vdec_get_dec_mode(w, h, dec_mode);
+	u32 len = ALIGN(vdec_size_scale(w, dm), align) *
+		ALIGN(vdec_size_scale(h, dm), align);
+
+	return len << is_output_p010(dec_mode);
+}
+

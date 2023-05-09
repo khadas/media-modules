@@ -755,13 +755,13 @@ struct avs2_frame_s {
 	int lcu_total;
 	int comp_body_size;
 
-	uint32_t dw_y_adr;
-	uint32_t dw_u_v_adr;
+	ulong dw_y_adr;
+	ulong dw_u_v_adr;
 
-	u32 tw_y_adr;
-	u32 tw_u_v_adr;
-	u32 luma_size_ex;
-	u32 chroma_size_ex;
+	ulong tw_y_adr;
+	ulong tw_u_v_adr;
+	u32 luma_size_tw;
+	u32 chroma_size_tw;
 
 	int y_canvas_index;
 	int uv_canvas_index;

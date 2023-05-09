@@ -140,10 +140,6 @@ static void get_pic_info(struct vdec_vp9_inst *inst,
 		"pic(%d, %d), buf(%d, %d)\n",
 		 pic->visible_width, pic->visible_height,
 		 pic->coded_width, pic->coded_height);
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_EXINFO,
-		"Y(%d, %d), C(%d, %d)\n",
-		pic->y_bs_sz, pic->y_len_sz,
-		pic->c_bs_sz, pic->c_len_sz);
 }
 
 static void get_crop_info(struct vdec_vp9_inst *inst, struct v4l2_rect *cr)
@@ -264,6 +260,7 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 
 	inst->vdec.config	= ctx->config;
 	inst->parms.cfg		= ctx->config.parm.dec.cfg;
+
 	inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_CFGINFO;
 }
 
@@ -344,104 +341,6 @@ static int refer_buffer_num(int level_idc, int poc_cnt,
 }
 #endif
 
-static int vdec_get_dw_mode(struct vdec_vp9_inst *inst, int dw_mode)
-{
-	u32 valid_dw_mode = inst->parms.cfg.double_write_mode;
-	int w = inst->vsi->pic.coded_width;
-	int h = inst->vsi->pic.coded_height;
-	u32 dw = 0x1; /*1:1*/
-
-	switch (valid_dw_mode) {
-	case 0x100:
-		if (is_over_size(w, h, 1920 * 1088))
-			dw = 0x4; /*1:2*/
-		break;
-	case 0x200:
-		if (is_over_size(w, h, 1920 * 1088))
-			dw = 0x2; /*1:4*/
-		break;
-	case 0x300:
-		if (is_over_size(w, h, 1280 * 768))
-			dw = 0x4; /*1:2*/
-		break;
-	default:
-		dw = valid_dw_mode;
-		break;
-	}
-
-	return dw;
-}
-
-static int vdec_pic_scale(struct vdec_vp9_inst *inst, int length, int dw_mode)
-{
-	int ret = 64;
-
-	switch (vdec_get_dw_mode(inst, dw_mode)) {
-	case 0x0: /* only afbc, output afbc */
-		ret = 64;
-		break;
-	case 0x1: /* afbc and (w x h), output YUV420 */
-		ret = length;
-		break;
-	case 0x2: /* afbc and (w/4 x h/4), output YUV420 */
-	case 0x3: /* afbc and (w/4 x h/4), output afbc and YUV420 */
-		ret = length >> 2;
-		break;
-	case 0x4: /* afbc and (w/2 x h/2), output YUV420 */
-		ret = length >> 1;
-		break;
-	case 0x10: /* (w x h), output YUV420-8bit) */
-	default:
-		ret = length;
-		break;
-	}
-
-	return ret;
-}
-
-static void fill_vdec_params(struct vdec_vp9_inst *inst,
-	struct VP9Context *vp9_ctx)
-{
-	struct vdec_pic_info *pic = &inst->vsi->pic;
-	struct vdec_vp9_dec_info *dec = &inst->vsi->dec;
-	struct v4l2_rect *rect = &inst->vsi->crop;
-	int dw = inst->parms.cfg.double_write_mode;
-	int margin = inst->parms.cfg.ref_buf_margin;
-
-	/* fill visible area size that be used for EGL. */
-	pic->visible_width	= vdec_pic_scale(inst, vp9_ctx->render_width, dw);
-	pic->visible_height	= vdec_pic_scale(inst, vp9_ctx->render_height, dw);
-
-	/* calc visible ares. */
-	rect->left		= 0;
-	rect->top		= 0;
-	rect->width		= pic->visible_width;
-	rect->height		= pic->visible_height;
-
-	/* config canvas size that be used for decoder. */
-	pic->coded_width	= vdec_pic_scale(inst, ALIGN(vp9_ctx->width, 32), dw);
-	pic->coded_height	= vdec_pic_scale(inst, ALIGN(vp9_ctx->height, 32), dw);
-
-	pic->y_len_sz		= pic->coded_width * pic->coded_height;
-	pic->c_len_sz		= pic->y_len_sz >> 1;
-
-	/* calc DPB size */
-	dec->dpb_sz = 5 + margin;//refer_buffer_num(sps->level_idc, poc_cnt, mb_w, mb_h);
-
-	inst->parms.ps.visible_width	= pic->visible_width;
-	inst->parms.ps.visible_height	= pic->visible_height;
-	inst->parms.ps.coded_width	= pic->coded_width;
-	inst->parms.ps.coded_height	= pic->coded_height;
-	inst->parms.ps.dpb_size		= dec->dpb_sz;
-	inst->parms.parms_status	|= V4L2_CONFIG_PARM_DECODE_PSINFO;
-
-	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
-		"The stream infos, dw: %d, coded:(%d x %d), visible:(%d x %d), DPB: %d, margin: %d\n",
-		dw, pic->coded_width, pic->coded_height,
-		pic->visible_width, pic->visible_height,
-		dec->dpb_sz - margin, margin);
-}
-
 static int parse_stream_ucode(struct vdec_vp9_inst *inst, u8 *buf,
 		u32 size, u64 timestamp, ulong meta_ptr)
 {
@@ -500,7 +399,7 @@ static int parse_stream_cpu(struct vdec_vp9_inst *inst, u8 *buf, u32 size)
 	}
 
 	if (ps->head_parsed)
-		fill_vdec_params(inst, &ps->ctx);
+		//fill_vdec_params(inst, &ps->ctx);
 
 	ret = ps->head_parsed ? 0 : -1;
 out:
@@ -902,19 +801,16 @@ static int vdec_vp9_get_param(unsigned long h_vdec,
 		break;
 
 	case GET_PARAM_DW_MODE:
-	{
-		u32 *mode = out;
-		u32 m = inst->ctx->config.parm.dec.cfg.double_write_mode;
-		if (m <= 16)
-			*mode = inst->ctx->config.parm.dec.cfg.double_write_mode;
-		else
-			*mode = vdec_get_dw_mode(inst, 0);
-		break;
-	}
 	case GET_PARAM_TW_MODE:
 	{
 		u32 *mode = out;
-		*mode = inst->ctx->config.parm.dec.cfg.triple_write_mode;
+		u32 m = (type == GET_PARAM_DW_MODE) ?
+			inst->parms.cfg.double_write_mode :
+			inst->parms.cfg.triple_write_mode;
+		int w = inst->vsi->pic.coded_width;
+		int h = inst->vsi->pic.coded_height;
+
+		*mode = vdec_get_dec_mode(w, h, m);
 		break;
 	}
 
@@ -959,9 +855,7 @@ static void set_param_ps_info(struct vdec_vp9_inst *inst,
 	pic->coded_width	= ps->coded_width;
 	pic->coded_height	= ps->coded_height;
 
-	pic->y_len_sz		= ALIGN(vdec_pic_scale(inst, pic->coded_width, dw), 64) *
-				  ALIGN(vdec_pic_scale(inst, pic->coded_height, dw), 64);
-	pic->y_len_sz		= pic->y_len_sz << is_output_p010(dw);
+	pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw, 64);
 	pic->c_len_sz		= pic->y_len_sz >> 1;
 
 	/* calc DPB size */
@@ -970,13 +864,11 @@ static void set_param_ps_info(struct vdec_vp9_inst *inst,
 	pic->vpp_margin		= ps->dpb_margin;
 	dec->dpb_sz		= ps->dpb_size;
 	pic->field		= ps->field;
-	pic->bitdepth           = ps->bitdepth;
+	pic->bitdepth		= ps->bitdepth;
 
 	if (tw) {
-		pic->y_len_sz_ex	= ALIGN(vdec_pic_scale(inst, pic->coded_width, tw), 64) *
-					  ALIGN(vdec_pic_scale(inst, pic->coded_height, tw), 64);
-		pic->y_len_sz_ex	= pic->y_len_sz_ex << is_output_p010(tw);
-		pic->c_len_sz_ex	= pic->y_len_sz_ex >> 1;
+		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw, 64);
+		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
 	}
 
 	inst->parms.ps 	= *ps;
@@ -987,9 +879,9 @@ static void set_param_ps_info(struct vdec_vp9_inst *inst,
 	complete(&inst->comp);
 
 	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Parse from ucode, visible(%d x %d), coded(%d x %d), bitdepth(%d)\n",
+		"Parse from ucode, visible(%d x %d), coded(%d x %d), bitdepth(%d), DW/TW(%x, %x)\n",
 		pic->visible_width, pic->visible_height,
-		pic->coded_width, pic->coded_height, ps->bitdepth);
+		pic->coded_width, pic->coded_height, ps->bitdepth, dw, tw);
 }
 
 static void set_param_comp_buf_info(struct vdec_vp9_inst *inst,
@@ -1024,6 +916,38 @@ static void set_pic_info(struct vdec_vp9_inst *inst,
 	struct vdec_pic_info *pic)
 {
 	inst->vsi->pic = *pic;
+}
+
+static void set_cfg_info(struct vdec_vp9_inst *inst,
+	struct aml_vdec_cfg_infos *new_cfg)
+{
+	struct vdec_pic_info *pic = &inst->vsi->pic;
+	struct aml_vdec_cfg_infos *old_cfg = &inst->parms.cfg;
+	u32 dw_new = new_cfg->double_write_mode;
+	u32 tw_new = new_cfg->triple_write_mode;
+
+	if (!memcmp(old_cfg, new_cfg, sizeof(*old_cfg)))
+		return;
+
+	v4l_dbg(inst->ctx, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, DW:(%x -> %x), TW:(%x -> %x)\n",
+		__func__,
+		old_cfg->double_write_mode,
+		new_cfg->double_write_mode,
+		old_cfg->triple_write_mode,
+		new_cfg->triple_write_mode);
+
+	if (old_cfg->double_write_mode != dw_new) {
+		pic->y_len_sz		= vdec_get_plane_size(pic->coded_width, pic->coded_height, dw_new, 64);
+		pic->c_len_sz		= pic->y_len_sz >> 1;
+	}
+
+	if (old_cfg->triple_write_mode != tw_new) {
+		pic->y_len_sz_tw	= vdec_get_plane_size(pic->coded_width, pic->coded_height, tw_new, 64);
+		pic->c_len_sz_tw	= pic->y_len_sz_tw >> 1;
+	}
+
+	*old_cfg = *new_cfg;
 }
 
 static int vdec_vp9_set_param(unsigned long h_vdec,
@@ -1061,6 +985,10 @@ static int vdec_vp9_set_param(unsigned long h_vdec,
 
 	case SET_PARAM_PIC_INFO:
 		set_pic_info(inst, in);
+		break;
+
+	case SET_PARAM_CFG_INFO:
+		set_cfg_info(inst, in);
 		break;
 
 	default:

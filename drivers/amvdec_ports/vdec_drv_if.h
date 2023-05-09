@@ -65,25 +65,6 @@ enum vdec_fb_status {
 	FB_ST_FREE
 };
 
-enum vdec_dw_mode {
-	VDEC_DW_AFBC_ONLY = 0,
-	VDEC_DW_AFBC_1_1_DW = 1,
-	VDEC_DW_AFBC_1_4_DW = 2,
-	VDEC_DW_AFBC_x2_1_4_DW = 3,
-	VDEC_DW_AFBC_1_2_DW = 4,
-	VDEC_DW_NO_AFBC = 16,
-	VDEC_DW_AFBC_AUTO_1_2 = 0x100,
-	VDEC_DW_AFBC_AUTO_1_4 = 0x200,
-};
-
-enum vdec_tw_mode {
-	VDEC_TW_INVALID = 0,
-	VDEC_TW_AFBC_1_1_DW = 1,
-	VDEC_TW_AFBC_1_4_DW = 3,
-	VDEC_TW_AFBC_1_2_DW = 4,
-	VDEC_TW_AFBC_1_8_DW = 8
-};
-
 /*
  * the caller does not own the returned buffer. The buffer will not be
  *				released before vdec_if_deinit.

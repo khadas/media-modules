@@ -209,8 +209,8 @@ struct aml_q_data {
 	u32	bytesperline[AML_VCODEC_MAX_PLANES];
 	u32	sizeimage[AML_VCODEC_MAX_PLANES];
 
-	u32	bytesperline_ex[AML_VCODEC_MAX_PLANES];
-	u32	sizeimage_ex[AML_VCODEC_MAX_PLANES];
+	u32	bytesperline_tw[AML_VCODEC_MAX_PLANES];
+	u32	sizeimage_tw[AML_VCODEC_MAX_PLANES];
 
 	struct aml_video_fmt	*fmt;
 	bool resolution_changed;
@@ -280,8 +280,8 @@ struct vdec_pic_info {
 	u32 c_bs_sz;
 	u32 y_len_sz;
 	u32 c_len_sz;
-	u32 y_len_sz_ex;
-	u32 c_len_sz_ex;
+	u32 y_len_sz_tw;
+	u32 c_len_sz_tw;
 	int profile_idc;
 	enum v4l2_field field;
 	u32 dpb_frames;
@@ -323,6 +323,7 @@ struct aml_vdec_cfg_infos {
 	 * bit 11	: disable error policy.
 	 * bit 10	: dynamic bypass vpp.
 	 * bit 9	: disable ge2d wrapper.
+	 * bit 8	: disable vpp wrapper.
 	 * bit 1	: Non-standard dv flag.
 	 * bit 0	: dv two layer flag.
 	 */
@@ -605,6 +606,7 @@ struct aml_vpp_cfg_infos {
 	bool	is_vpp_reset;
 	bool	dynamic_bypass_vpp;
 	bool	early_release_flag;
+	bool	bypass;
 };
 
 struct aml_ge2d_cfg_infos {
@@ -939,10 +941,5 @@ void v4l2_m2m_job_resume(struct v4l2_m2m_dev *m2m_dev,
 #define V4L2_PIX_FMT_AVS      v4l2_fourcc('A', 'V', 'S', '0') /* avs */
 #define V4L2_PIX_FMT_AVS2     v4l2_fourcc('A', 'V', 'S', '2') /* avs2 */
 #define V4L2_PIX_FMT_AVS3     v4l2_fourcc('A', 'V', 'S', '3') /* avs3 */
-
-static inline bool is_output_p010(u32 dec_mode)
-{
-	return !!(dec_mode & 0x10000);
-}
 
 #endif /* _AML_VCODEC_DRV_H_ */
