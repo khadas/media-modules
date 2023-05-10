@@ -6492,19 +6492,6 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 					p_H264_Dpb->mSlice.slice_type,
 					hw->chunk->pts, 1);
 #endif
-			} else if (vdec_stream_based(vdec)) { // v4l2 streambase
-				struct StorablePicture *pic =
-					p_H264_Dpb->mVideo.dec_picture;
-				u32 offset = pic->offset_delimiter;
-				struct checkoutptsoffset pts_st;
-				u64 dur_offset = hw->frame_dur;
-				dur_offset = (dur_offset << 32) | offset;
-
-				if (!ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
-					p_H264_Dpb->mVideo.dec_picture->pts = pts_st.pts;
-					p_H264_Dpb->mVideo.dec_picture->pts64 = pts_st.pts_64;
-					p_H264_Dpb->mVideo.dec_picture->timestamp = pts_st.pts_64;
-				}
 				hw->curr_pic_offset += hw->chunk->size;
 				vdec_count_info(&hw->gvs, 0, hw->curr_pic_offset);
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
@@ -6526,9 +6513,10 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 				vdec_count_info(&hw->gvs, 0,offset);
 				pic->pic_size = (hw->start_bit_cnt - READ_VREG(VIFF_BIT_CNT)) >> 3;
-				if (ctx->pts_serves_ops->cal_offset(ctx->ptsserver_id, dur_offset, &pts_st)) {
+				if (ctx->pts_serves_ops->checkout(ctx->ptsserver_id, dur_offset, &pts_st)) {
 					pic->pts = 0;
 					pic->pts64 = 0;
+					pic->timestamp = 0;
 #ifdef MH264_USERDATA_ENABLE
 					vmh264_udc_fill_vpts(hw,
 						p_H264_Dpb->mSlice.slice_type,
@@ -6539,6 +6527,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 
 					pic->pts = pts_st.pts;
 					pic->pts64 = pts_st.pts_64;
+					pic->timestamp = pts_st.pts_64;
 
 					vmh264_udc_fill_vpts(hw,
 						p_H264_Dpb->mSlice.slice_type,
