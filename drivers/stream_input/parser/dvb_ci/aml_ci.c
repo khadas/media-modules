@@ -722,9 +722,6 @@ static int aml_ci_probe(struct platform_device *pdev)
 	if (!dvb_adapter) {
 		pr_dbg("aml_get_dvb_adapter is null\n");
 		return 0;
-	} else {
-		pr_dbg("load aml_get_dvb_adapter fail\n");
-		return 0;
 	}
 
 	pr_dbg("---Amlogic CI Init---[%p]\n", dvb_adapter);
