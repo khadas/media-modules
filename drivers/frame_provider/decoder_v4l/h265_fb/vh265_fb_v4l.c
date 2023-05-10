@@ -9834,9 +9834,16 @@ static void v4l_submit_vframe(struct vdec_s *vdec)
 			(!hevc->front_back_mode)) {
 #endif
 			set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
+
+			if (pic && pic->error_mark) {
+				vh265_vf_put(vh265_vf_get(vdec), vdec);
+				hevc_print(hevc, 0, "%s pic has error_mark, get err\n", __func__);
+				break;
+			}
 			//ATRACE_COUNTER("VC_OUT_DEC-submit", fb->buf_idx);
 			aml_buf_done(&ctx->bm, aml_buf, BUF_USER_DEC);
 			//fb->task->submit(fb->task, TASK_TYPE_DEC);
+
 			if (vf->type & VIDTYPE_V4L_EOS) {
 				pr_info("[%d] H265 EOS notify.\n", ctx->id);
 				break;
@@ -10741,6 +10748,9 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			ref_pic = pic->ref_pic[i];
 			if (ref_pic == NULL)
 				break;
+			if (ref_pic->error_mark) {
+				pic->error_mark = 1;
+			}
 			ref_pic->backend_ref--;
 		}
 
@@ -14289,14 +14299,6 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 		vdec_post_task(h265_wait_alloc_buf, hevc);
 		hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_ALLOCATING;
 	}
-#ifdef NEW_FB_CODE
-	if (!vdec->front_pic_done && (hevc->front_back_mode == 1)) {
-		fb_hw_status_clear(true);
-		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
-			"%s, clear front, status 0x%x, status_back 0x%x\n",
-			__func__, hevc->dec_status, hevc->dec_status_back);
-	}
-#endif
 
 	if (hevc->stat & STAT_VDEC_RUN) {
 #ifdef NEW_FB_CODE
@@ -14307,6 +14309,15 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 			amhevc_stop();
 		hevc->stat &= ~STAT_VDEC_RUN;
 	}
+
+#ifdef NEW_FB_CODE
+	//if (!vdec->front_pic_done && (hevc->front_back_mode == 1)) {
+		fb_hw_status_clear(true);
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+			"%s, clear front, status 0x%x, status_back 0x%x\n",
+			__func__, hevc->dec_status, hevc->dec_status_back);
+	//}
+#endif
 
 	if (hevc->stat & STAT_TIMER_ARM) {
 		del_timer_sync(&hevc->timer);
@@ -14438,12 +14449,14 @@ static void vh265_work_back_implement(struct hevc_state_s *hevc,
 		}
 	}
 
-	if (!vdec->back_pic_done && (hevc->front_back_mode == 1)) {
+	WRITE_VREG(HEVC_DEC_STATUS_DBE, HEVC_DEC_IDLE);
+	amhevc_stop_b();
+	//if (!vdec->back_pic_done && (hevc->front_back_mode == 1)) {
 		fb_hw_status_clear(false);
 		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 			"%s, clear back, status 0x%x, status_back 0x%x\n",
 			__func__, hevc->dec_status, hevc->dec_status_back);
-	}
+	//}
 
 	if (hevc->stat & STAT_TIMER_BACK_ARM) {
 		del_timer_sync(&hevc->timer_back);

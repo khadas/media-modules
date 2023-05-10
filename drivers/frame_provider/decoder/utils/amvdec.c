@@ -1216,7 +1216,8 @@ void amhevc_reset_b(void)
 		| (1<<8)  // dblk0
 		| (1<<19) // sao0
 		| (1<<6)|(1<<7)|(1<<9)|(1<<10)   // iqidct1 | ipp1 | dblk1 | sao1
-		| (1<<5) // vcpu1
+		| (1<<5)// vcpu1
+		| (1<<27)
 		// | fb_read reset // TODO
 		);
 

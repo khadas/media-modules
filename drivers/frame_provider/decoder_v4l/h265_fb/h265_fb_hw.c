@@ -981,11 +981,21 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
 	int ret;
 	struct aml_buf *aml_buf = NULL;
+	int i;
 
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d)\n",
 		hevc->backend_decoded_count, hevc->fb_wr_pos, hevc->fb_rd_pos);
 
+	mutex_lock(&hevc->fb_mutex);
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		if (pic->ref_pic[i]) {
+			if (pic->ref_pic[i]->error_mark) {
+				pic->error_mark = 1;
+			}
+		}
+	}
+	mutex_unlock(&hevc->fb_mutex);
 	if ((pic->error_mark) ||(hevc->front_back_mode != 1 &&
 		hevc->front_back_mode != 3)) {
 		copy_loopbufs_ptr(&hevc->bk, &hevc->next_bk[hevc->fb_rd_pos]);

@@ -980,11 +980,22 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 	PIC_t* pic = hevc->next_be_decode_pic[hevc->fb_rd_pos];
 	int ret;
 	int cur_mmu_4k_number;
+	int i;
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d)\n",
 		hevc->backend_decoded_count, hevc->fb_wr_pos, hevc->fb_rd_pos);
 
-	if ((pic->error_mark) ||
+	mutex_lock(&hevc->fb_mutex);
+	for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+		if (pic->ref_pic[i]) {
+			if (pic->ref_pic[i]->error_mark) {
+				pic->error_mark = 1;
+			}
+		}
+	}
+	mutex_unlock(&hevc->fb_mutex);
+
+	if ((pic->error_mark && (hevc->nal_skip_policy != 0)) ||
 		(hevc->front_back_mode != 1 && hevc->front_back_mode != 3)) {
 		copy_loopbufs_ptr(&hevc->bk, &hevc->next_bk[hevc->fb_rd_pos]);
 		print_loopbufs_ptr(hevc, "bk", &hevc->bk);
@@ -1044,6 +1055,7 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 #if 1 //def RESET_BACK_PER_PICTURE
 	if (hevc->front_back_mode == 1)
 		amhevc_reset_b();
+
 	hevc_hw_init(hevc, pic->depth, 0, 1);
 
 	if (hevc->front_back_mode == 3) {
@@ -1057,6 +1069,7 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		//pr_info("[BE] HEVC_MPC_E_DBE=0x%x\n", READ_VREG(HEVC_MPC_E_DBE));
 		//print_reg_flag = 1;
 		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_START);
+
 		amhevc_start_b();
 		ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_FW_END);
 		vdec_profile(hw_to_vdec(hevc), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
