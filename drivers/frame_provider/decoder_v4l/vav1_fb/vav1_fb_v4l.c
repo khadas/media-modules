@@ -6400,7 +6400,8 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 				pts_valid = 0;
 				pts_us64_valid = 0;
 			}
-			hw->curr_pic_offset += hw->chunk->size;
+			if (hw->chunk)  //no valid chunk when eos flush
+				hw->curr_pic_offset += hw->chunk->size;
 		} else {
 #endif
 			if (pts_lookup_offset_us64
