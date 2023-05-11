@@ -1,9 +1,11 @@
 Major_V=6
-Minor_V=5
-BaseChangeId=I15216ad047986988ed9dc71875009e25722c6311
+Minor_V=6
+BaseChangeId=Ib91c69023bac4a33bcb93c474c9a7bd3107d688e
 
 
 #history version
+#V6.5 Release Notes
+#Release_ChangeId_V6_5=I1fb4d74a26b20c810af5fabe70d11b30038f52cd
 #V6.4 Release Notes
 #Release_ChangeId_V6_4=I3e3ba6e50ff95c9bdee77ecf9b6a14054c7db016
 #V6.3 Release Notes
