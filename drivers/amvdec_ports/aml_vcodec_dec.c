@@ -3140,13 +3140,15 @@ static int vidioc_vdec_g_fmt(struct file *file, void *priv,
 	}
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(f->type)) {
-		pix_mp->field = ret ? V4L2_FIELD_NONE : ctx->picinfo.field;
+		pix_mp->field = ctx->force_report_interlace ? V4L2_FIELD_INTERLACED :
+			(ret ? V4L2_FIELD_NONE : ctx->picinfo.field);
 		pix_mp->colorspace = ctx->colorspace;
 		pix_mp->ycbcr_enc = ctx->ycbcr_enc;
 		pix_mp->quantization = ctx->quantization;
 		pix_mp->xfer_func = ctx->xfer_func;
 	} else {
-		pix->field = ret ? V4L2_FIELD_NONE : ctx->picinfo.field;
+		pix->field = ctx->force_report_interlace ? V4L2_FIELD_INTERLACED :
+			(ret ? V4L2_FIELD_NONE : ctx->picinfo.field);
 		pix->colorspace = ctx->colorspace;
 		pix->ycbcr_enc = ctx->ycbcr_enc;
 		pix->quantization = ctx->quantization;

@@ -715,6 +715,7 @@ struct cma_sys_size_info {
  * @task_chain_pool: used to store task chain inst.
  * @index_disp: the number of frames output.
  * @buffer manager context.
+ * @force_report_interlace: the flag for conversion field
  */
 struct aml_vcodec_ctx {
 	int				id;
@@ -853,6 +854,7 @@ struct aml_vcodec_ctx {
 	void (*fbc_transcode_and_set_vf)(struct aml_vcodec_ctx *,  struct aml_buf *,
 						  struct vframe_s *);
 	bool			no_fbc_output;
+	bool			force_report_interlace;
 	struct cma_sys_size_info mem_size_info;
 	struct aml_decoder_status_info	decoder_status_info;
 };

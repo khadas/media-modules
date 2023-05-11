@@ -9400,12 +9400,6 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	ps->field = check_force_interlace(hw, frame_width, frame_height) ?
 		V4L2_FIELD_INTERLACED : ps->field;
 
-	if ((ps->field == V4L2_FIELD_INTERLACED) &&
-		is_over_interlace_size(ps->coded_width, ps->coded_height, interlace_size)) {
-		ps->field = V4L2_FIELD_NONE;
-		dpb_print(DECODE_ID(hw), 0,"Force to set as progressive type\n");
-	}
-
 	/* open mmu if progressive and double_write is 0x10*/
 	if ((hw->double_write_mode != VDEC_DW_NO_AFBC) && (!hw->dw_para_set_flag)) {
 		if (ps->field == V4L2_FIELD_NONE) {
@@ -9423,6 +9417,20 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			vdec_v4l_set_cfg_infos(ctx, &cfg_info);
 		}
 		hw->dw_para_set_flag = true;
+	}
+
+	/*
+	 * 4K H264 interlace(MBAFF) streams require conversion field
+	 * VDEC use V4L2_FIELD_NONE
+	 * upper layer use V4L2_FIELD_INTERLACED
+	 */
+	ctx->force_report_interlace = false;
+	if (is_cpu_t7() && (ps->field == V4L2_FIELD_INTERLACED) &&
+		is_over_interlace_size(ps->coded_width, ps->coded_height, interlace_size)) {
+		ps->field = V4L2_FIELD_NONE;
+		ctx->force_report_interlace = true;
+		dpb_print(DECODE_ID(hw), 0,"%s force_report_interlace %d\n",
+			__func__, ctx->force_report_interlace);
 	}
 
 	dpb_print(DECODE_ID(hw), 0,
