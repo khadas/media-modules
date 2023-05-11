@@ -229,6 +229,7 @@ static int poc_error_limit = 30;
 
 static u32 dirty_again_threshold = 100;
 static u32 dirty_buffersize_threshold = 0x800000;
+static u32 save_buffer = 1;
 
 #define VIDEO_SIGNAL_TYPE_AVAILABLE_MASK	0x20000000
 
@@ -2050,6 +2051,8 @@ struct hevc_state_s {
 	u32 consume_byte;
 	u32 muti_frame_flag;
 	char *aux_data_buf[BUF_POOL_SIZE];
+	u8 head_pre_parsed;
+	u8 try_parsing;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -2413,20 +2416,22 @@ static void restore_decode_state(struct hevc_state_s *hevc)
 			READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff;
 		return;
 	}
-	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+	if (!save_buffer || !hevc->head_pre_parsed) {
+		hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 		"%s: discard pic index 0x%x\n",
 		__func__, hevc->decoding_pic ?
 		hevc->decoding_pic->index : 0xff);
-	if (hevc->decoding_pic) {
-		hevc->decoding_pic->error_mark = 0;
-		hevc->decoding_pic->output_ready = 0;
-		hevc->decoding_pic->show_frame = false;
-		hevc->decoding_pic->output_mark = 0;
-		hevc->decoding_pic->referenced = 0;
-		hevc->decoding_pic->POC = INVALID_POC;
-		put_mv_buf(hevc, hevc->decoding_pic);
-		release_aux_data(hevc, hevc->decoding_pic);
-		hevc->decoding_pic = NULL;
+		if (hevc->decoding_pic) {
+			hevc->decoding_pic->error_mark = 0;
+			hevc->decoding_pic->output_ready = 0;
+			hevc->decoding_pic->show_frame = false;
+			hevc->decoding_pic->output_mark = 0;
+			hevc->decoding_pic->referenced = 0;
+			hevc->decoding_pic->POC = INVALID_POC;
+			put_mv_buf(hevc, hevc->decoding_pic);
+			release_aux_data(hevc, hevc->decoding_pic);
+			hevc->decoding_pic = NULL;
+		}
 	}
 
 	hevc->decode_idx = hevc->decode_idx_bak;
@@ -3572,7 +3577,9 @@ static int get_work_pic_num(struct hevc_state_s *hevc)
 	   such as reference relation, when the next frame is decoded.
 	*/
 
-	used_buf_num += 2;
+	used_buf_num += 1;
+	if (!save_buffer)
+		used_buf_num += 1;
 
 	if (hevc->save_buffer_mode)
 		hevc_print(hevc, 0,
@@ -6899,6 +6906,12 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			if (hevc->cur_pic == NULL) {
 				if (get_dbg_flag(hevc) & H265_DEBUG_BUFMGR_MORE)
 					dump_pic_list(hevc);
+				if (save_buffer && hevc->try_parsing) {
+					hevc->head_pre_parsed = 1;
+					hevc->try_parsing = 0;
+					hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
+					"Try parsing done!run again!\n");
+				}
 				hevc->wait_buf = 1;
 				return -1;
 			}
@@ -10983,6 +10996,10 @@ force_output:
 			/* Interrupt Amrisc to execute */
 			WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
 		}
+		if (save_buffer) {
+			hevc->head_pre_parsed = 0;
+			hevc->try_parsing = 0;
+		}
 
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 	} else if (dec_status == HEVC_DECODE_OVER_SIZE) {
@@ -12329,6 +12346,14 @@ static unsigned char is_new_pic_available(struct hevc_state_s *hevc)
 		}
 	}
 	spin_unlock_irqrestore(&h265_lock, flags);
+	if (save_buffer && new_pic == NULL &&
+		!hevc->head_pre_parsed) {
+		hevc->try_parsing = 1;
+		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
+				"Try pre parse head!\n");
+		return 1;
+	}
+
 	return (new_pic != NULL) ? 1 : 0;
 }
 
@@ -13295,7 +13320,7 @@ static unsigned long run_ready(struct vdec_s *vdec, unsigned long mask)
 
 		/*avoid more buffers consumed when
 		switching resolution*/
-		if (run_ready_max_buf_num == 0xff &&
+		if (!hevc->try_parsing && run_ready_max_buf_num == 0xff &&
 			get_used_buf_count(hevc) >=
 			get_work_pic_num(hevc)) {
 			ret = 0;
@@ -14750,6 +14775,9 @@ MODULE_PARM_DESC(dump_nal, "\n dump_nal\n");
 
 module_param(dbg_skip_decode_index, uint, 0664);
 MODULE_PARM_DESC(dbg_skip_decode_index, "\n dbg_skip_decode_index\n");
+
+module_param(save_buffer, uint, 0664);
+MODULE_PARM_DESC(save_buffer, "\n save_buffer\n");
 
 module_param(endian, uint, 0664);
 MODULE_PARM_DESC(endian, "\n rval\n");
