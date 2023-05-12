@@ -356,38 +356,36 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 	aml_buf->num_planes	= vb->num_planes;
 	aml_vb->aml_buf		= aml_buf;
 
-	if (cfg->dw_mode != VDEC_DW_AFBC_ONLY) {
-		for (i = 0 ; i < vb->num_planes ; i++) {
-			if (i == 0) {
-				//Y
-				if (vb->num_planes == 1) {
-					aml_buf->planes[0].length	= cfg->luma_length + cfg->chroma_length;
-					aml_buf->planes[0].offset	= cfg->luma_length;
-				} else {
-					aml_buf->planes[0].length	= cfg->luma_length;
-					aml_buf->planes[0].offset	= 0;
-				}
+	for (i = 0 ; i < vb->num_planes ; i++) {
+		if (i == 0) {
+			//Y
+			if (vb->num_planes == 1) {
+				aml_buf->planes[0].length	= cfg->luma_length + cfg->chroma_length;
+				aml_buf->planes[0].offset	= cfg->luma_length;
 			} else {
-				if (vb->num_planes == 2) {
-					//UV
-					aml_buf->planes[1].length	= cfg->chroma_length;
-					aml_buf->planes[1].offset	= cfg->chroma_length >> 1;
-				} else {
-					aml_buf->planes[i].length	= cfg->chroma_length >> 1;
-					aml_buf->planes[i].offset	= 0;
-				}
+				aml_buf->planes[0].length	= cfg->luma_length;
+				aml_buf->planes[0].offset	= 0;
 			}
-
-			aml_buf->planes[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
-			aml_buf->planes[i].dbuf	= vb->planes[i].dbuf;
-
-			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-				"idx: %u, %c:(0x%lx, %d)\n",
-				vb->index,
-				plane_n[i],
-				aml_buf->planes[i].addr,
-				aml_buf->planes[i].length);
+		} else {
+			if (vb->num_planes == 2) {
+				//UV
+				aml_buf->planes[1].length	= cfg->chroma_length;
+				aml_buf->planes[1].offset	= cfg->chroma_length >> 1;
+			} else {
+				aml_buf->planes[i].length	= cfg->chroma_length >> 1;
+				aml_buf->planes[i].offset	= 0;
+			}
 		}
+
+		aml_buf->planes[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
+		aml_buf->planes[i].dbuf	= vb->planes[i].dbuf;
+
+		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+			"idx: %u, %c:(0x%lx, %d)\n",
+			vb->index,
+			plane_n[i],
+			aml_buf->planes[i].addr,
+			aml_buf->planes[i].length);
 	}
 
 	if (cfg->tw_mode) {

@@ -610,20 +610,31 @@ void aml_buf_configure_update(struct aml_vcodec_ctx *ctx)
 	struct aml_buf_config config = {0};
 	struct vb2_queue * que = v4l2_m2m_get_dst_vq(ctx->m2m_ctx);
 	u32 dw = VDEC_DW_NO_AFBC;
+	u32 tw = VDEC_TW_INVALID;
 
 	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
 		return;
 
 	}
+	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw)) {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid tw_mode\n");
+		return;
+
+	}
 
 	config.enable_extbuf	= true;
-	config.enable_fbc	= (dw != VDEC_DW_NO_AFBC) ? true : false;
+	config.enable_fbc	= ((dw != VDEC_DW_NO_AFBC) || tw) ? true : false;
 	config.enable_secure	= ctx->is_drm_mode;
 	config.memory_mode	= que->memory;
 	config.planes		= V4L2_TYPE_IS_MULTIPLANAR(que->type) ? 2 : 1;
 	config.luma_length	= ctx->picinfo.y_len_sz;
 	config.chroma_length	= ctx->picinfo.c_len_sz;
+	config.luma_length_ex	= ctx->picinfo.y_len_sz_ex;
+	config.chroma_length_ex	= ctx->picinfo.c_len_sz_ex;
+	config.dw_mode			= dw;
+	config.tw_mode			= tw;
+
 	aml_buf_configure(&ctx->bm, &config);
 }
 
@@ -647,7 +658,7 @@ void aml_vdec_pic_info_update(struct aml_vcodec_ctx *ctx)
 	}
 
 	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw)) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid tw_mode\n");
 		return;
 
 	}
@@ -3932,7 +3943,7 @@ static void vb2ops_vdec_buf_queue(struct vb2_buffer *vb)
 	}
 
 	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw)) {
-		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid dw_mode\n");
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR, "invalid tw_mode\n");
 		return;
 
 	}
