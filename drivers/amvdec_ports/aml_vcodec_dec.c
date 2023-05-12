@@ -3238,6 +3238,8 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 
 			if (!V4L2_TYPE_IS_OUTPUT(vq->type))
 				alloc_devs[i] = v4l_get_dev_from_codec_mm();
+			else if (vq->memory == VB2_MEMORY_MMAP)
+				dma_coerce_mask_and_coherent(alloc_devs[i], DMA_BIT_MASK(64));
 		}
 	} else {
 		int dw_mode = VDEC_DW_NO_AFBC;
@@ -3265,6 +3267,8 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 
 			if (!V4L2_TYPE_IS_OUTPUT(vq->type))
 				alloc_devs[i] = v4l_get_dev_from_codec_mm();
+			else if (vq->memory == VB2_MEMORY_MMAP)
+				dma_coerce_mask_and_coherent(alloc_devs[i], DMA_BIT_MASK(64));
 		}
 	}
 
