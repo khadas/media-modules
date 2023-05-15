@@ -10859,8 +10859,8 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->type |= nv_order;
 			if ((pic_config->double_write_mode == 3 ||
 				pic_config->double_write_mode == 5) &&
-				(!IS_8K_SIZE(pic_config->y_crop_width,
-				pic_config->y_crop_height))) {
+				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
+				!IS_8K_SIZE(pic_config->y_crop_width, pic_config->y_crop_height))) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (pbi->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;

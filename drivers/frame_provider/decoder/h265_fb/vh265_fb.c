@@ -9611,6 +9611,15 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 	return 0;
 }
 
+static bool output_compress(struct hevc_state_s *hevc)
+{
+	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5 &&
+		IS_8K_SIZE(hevc->frame_width, hevc->frame_height))
+		return false;
+
+	return true;
+}
+
 #ifdef HEVC_PIC_STRUCT_SUPPORT
 static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf)
 {
@@ -9619,10 +9628,10 @@ static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf
 	int index2;
 
 	if ((hevc->double_write_mode == 3) &&
-			(!(IS_8K_SIZE(vf->width, vf->height)))) {
-				vf->type |= VIDTYPE_COMPRESS;
-				if (hevc->mmu_enable)
-					vf->type |= VIDTYPE_SCATTER;
+		output_compress(hevc)) {
+		vf->type |= VIDTYPE_COMPRESS;
+		if (hevc->mmu_enable)
+			vf->type |= VIDTYPE_SCATTER;
 	}
 	if (get_dbg_flag(hevc) & H265_DEBUG_PIC_STRUCT)
 		hevc_print(hevc, 0,
@@ -9701,7 +9710,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		} else if ((!pair_frame_top_flag) &&
 			(((vf->index >> 8) & 0xff) == 0xff)) {
 			if ((pair_pic->double_write_mode == 3) &&
-				(!(IS_8K_SIZE(vf->width, vf->height)))) {
+				output_compress(hevc)) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
@@ -9722,7 +9731,7 @@ static int process_pending_vframe(struct hevc_state_s *hevc,
 		} else if (pair_frame_top_flag &&
 			((vf->index & 0xff) == 0xff)) {
 			if ((pair_pic->double_write_mode == 3) &&
-				(!(IS_8K_SIZE(vf->width, vf->height)))) {
+				output_compress(hevc)) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
@@ -10043,7 +10052,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 			if (((pic->double_write_mode == 3) || (pic->double_write_mode == 5) ||
 				(pic->double_write_mode == 9)) &&
-				(!(IS_8K_SIZE(pic->width, pic->height)))) {
+				output_compress(hevc)) {
 				vf->type |= VIDTYPE_COMPRESS;
 				if (hevc->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
