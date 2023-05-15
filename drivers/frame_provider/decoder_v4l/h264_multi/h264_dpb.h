@@ -1017,4 +1017,6 @@ int is_used_for_reference(struct FrameStore *fs);
 
 bool check_num_ref(struct DecodedPictureBuffer *p_Dpb);
 
+u32 is_save_buffer_mode(void);
+
 #endif

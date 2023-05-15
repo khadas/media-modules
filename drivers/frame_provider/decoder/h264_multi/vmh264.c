@@ -186,6 +186,7 @@ static u32 run_ready_max_buf_num = 0xff;
 #endif
 
 static u32 run_ready_min_buf_num = 2;
+static u32 save_buffer = 1;
 
 #define VDEC_ASSIST_CANVAS_BLK32		0x5
 
@@ -1057,6 +1058,11 @@ static u32 mem_map_mode = H265_MEM_MAP_MODE;
 static inline bool get_field(struct vdec_h264_hw_s *hw, unsigned int frame_mbs_only_flag)
 {
 	return ((!hw->is_interlace) && frame_mbs_only_flag) ? 0 : 1;
+}
+
+u32 is_save_buffer_mode(void)
+{
+	return save_buffer;
 }
 
 static int is_oversize(int w, int h)
@@ -5817,7 +5823,9 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 		size = size_vui;
 	}
 
-	size += 2;	/* need two more buffer */
+	size += 1;	/* need one more buffer */
+	if (!save_buffer)
+		size += 1;
 
 	return size;
 }
@@ -12328,6 +12336,9 @@ MODULE_PARM_DESC(dirty_again_threshold, "\n amvdec_h264 dirty_again_threshold\n"
 
 module_param(one_packet_multi_frames_multi_run, uint, 0664);
 MODULE_PARM_DESC(one_packet_multi_frames_multi_run, "\n one_packet_multi_frames_multi_run\n");
+
+module_param(save_buffer, uint, 0664);
+MODULE_PARM_DESC(save_buffer, "\n save_buffer\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);

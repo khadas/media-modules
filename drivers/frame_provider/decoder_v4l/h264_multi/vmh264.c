@@ -188,6 +188,7 @@ static u32 run_ready_max_buf_num = 0xff;
 #endif
 
 static u32 run_ready_min_buf_num = 2;
+static u32 save_buffer = 1;
 
 #define VDEC_ASSIST_CANVAS_BLK32		0x5
 
@@ -1035,6 +1036,11 @@ static u32 mem_map_mode = H265_MEM_MAP_MODE;
 
 #define MAX_SIZE_4K (4096 * 2304)
 #define MAX_SIZE_2K (1920 * 1088)
+
+u32 is_save_buffer_mode(void)
+{
+	return save_buffer;
+}
 
 static int is_oversize(int w, int h)
 {
@@ -5416,7 +5422,9 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 		size = size_vui;
 	}
 
-	size += 2;	/* need two more buffer */
+	size += 1;	/* need one more buffer */
+	if (!save_buffer)
+		size += 1;
 
 	if (!hw->discard_dv_data)  {
 		size += 1;
@@ -11904,6 +11912,9 @@ MODULE_PARM_DESC(adjust_dpb_size, "\n adjust dpb size\n");
 
 module_param(one_packet_multi_frames_multi_run, uint, 0664);
 MODULE_PARM_DESC(one_packet_multi_frames_multi_run, "\n one_packet_multi_frames_multi_run\n");
+
+module_param(save_buffer, uint, 0664);
+MODULE_PARM_DESC(save_buffer, "\n save_buffer\n");
 
 module_init(ammvdec_h264_driver_init_module);
 module_exit(ammvdec_h264_driver_remove_module);

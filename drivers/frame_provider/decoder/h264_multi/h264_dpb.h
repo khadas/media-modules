@@ -1011,4 +1011,6 @@ int post_picture_early(struct vdec_s *vdec, int index);
 
 int is_used_for_reference(struct FrameStore *fs);
 
+u32 is_save_buffer_mode(void);
+
 #endif

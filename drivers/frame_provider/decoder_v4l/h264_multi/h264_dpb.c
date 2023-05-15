@@ -3267,7 +3267,11 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 						p_Dpb->last_picture = NULL;
 						p_Dpb->need_put_ref = 1;
 
-						if (p_H264_Dpb->first_insert_frame == FirstInsertFrm_IDLE) {
+						if (p_H264_Dpb->first_insert_frame == FirstInsertFrm_IDLE ||
+							is_save_buffer_mode()) {
+							dpb_print(p_H264_Dpb->decoder_index,
+								PRINT_FLAG_DPB_DETAIL,
+								"%s, is_save_buffer_mode:%d, 2 fields comes.\n", __func__, is_save_buffer_mode());
 							while (output_frames(p_H264_Dpb, 0))
 								;
 						}
@@ -3370,7 +3374,11 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 	else
 		i = 0;
 
-	if (i || (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE)) {
+	if (i || (p_H264_Dpb->first_insert_frame < FirstInsertFrm_SKIPDONE ||
+		is_save_buffer_mode())) {
+		dpb_print(p_H264_Dpb->decoder_index,
+			PRINT_FLAG_DPB_DETAIL,
+			"%s, is_save_buffer_mode:%d\n", __func__, is_save_buffer_mode());
 		while (output_frames(p_H264_Dpb, i))
 			;
 	}
