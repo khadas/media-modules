@@ -939,15 +939,17 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	}
 	if (img->type == B_IMG &&
 		(avs2_dec->fref[0]->imgtr_fwRefDistance <= img->tr
-		|| avs2_dec->fref[1]->imgtr_fwRefDistance >= img->tr)) {
+		|| avs2_dec->fref[1]->imgtr_fwRefDistance >= img->tr
+		|| avs2_dec->fref[1]->imgtr_fwRefDistance == -256)) {
 
 		pr_info("wrong reference configuration for B frame\n");
 		pr_info("fref0 imgtr_fwRefDistance %d, fref1 imgtr_fwRefDistance %d, img->tr %d\n",
 			avs2_dec->fref[0]->imgtr_fwRefDistance,
 			avs2_dec->fref[1]->imgtr_fwRefDistance,
 			img->tr);
-		hc->f_rec->error_mark = 1;
-		avs2_dec->bufmgr_error_flag = 1;
+		if (avs2_dec->fref[1]->imgtr_fwRefDistance != -256) {
+			avs2_dec->bufmgr_error_flag = 1;
+		}
 		return; /* exit(-1);*/
 		/*******************************************/
 	}
