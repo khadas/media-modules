@@ -1519,9 +1519,13 @@ static void get_pitches(struct encode_wq_s *wq,struct encode_request_s *request,
 			w_pitch_tmp = ENC_ALIGN_64(wq->pic.encoder_width);
 			h_pitch_tmp = ENC_ALIGN_16(wq->pic.encoder_height);
 		}
-		else{
+		else if (request->framesize == ENC_ALIGN_32(wq->pic.encoder_width) * ENC_ALIGN_16(wq->pic.encoder_height) * 3 / 2) {
 			w_pitch_tmp = ENC_ALIGN_32(wq->pic.encoder_width);
 			h_pitch_tmp = ENC_ALIGN_16(wq->pic.encoder_height);
+		}
+		else{
+			w_pitch_tmp = ENC_ALIGN_32(wq->pic.encoder_width);
+			h_pitch_tmp = wq->pic.encoder_height;
 		}
 	}
 	*pitch_w = w_pitch_tmp;
