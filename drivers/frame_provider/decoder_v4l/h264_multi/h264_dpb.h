@@ -779,6 +779,7 @@ struct FrameStore {
 #define IDR_FLAG		0x02
 #define ERROR_FLAG		0x10
 #define NULL_FLAG		0x20
+#define FIELD_DISP_FLAG	0x40
 #define NODISP_FLAG		0x80
 	unsigned char data_flag;
 #endif

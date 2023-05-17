@@ -2316,7 +2316,7 @@ int output_frames(struct h264_dpb_stru *p_H264_Dpb, unsigned char flush_flag)
 		for (i = 0; i < p_Dpb->used_size; i++) {
 			if ((!p_Dpb->fs[i]->is_output) &&
 				(!p_Dpb->fs[i]->pre_output) &&((p_Dpb->fs[i]->is_used == 3
-				||p_Dpb->fs[i]->data_flag & ERROR_FLAG )))  {
+				||((p_Dpb->fs[i]->data_flag) & ERROR_FLAG && (p_Dpb->fs[i]->data_flag & FIELD_DISP_FLAG)))))  {
 				none_displayed_num++;
 				if ((p_H264_Dpb->first_insert_frame == FirstInsertFrm_IDLE ||
 					p_H264_Dpb->first_insert_frame == FirstInsertFrm_RESET)
@@ -3644,6 +3644,22 @@ int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 
 	while (remove_unused_frame_from_dpb(p_H264_Dpb))
 		;
+
+	if (p_Dpb->last_picture) {
+		if ((int)p_Dpb->last_picture->frame_num !=
+			p->pic_num) {
+			if (((p_Dpb->last_picture->is_used == 2) ||
+				(p_Dpb->last_picture->is_used == 1)) &&
+				(p_Dpb->last_picture->data_flag & ERROR_FLAG)) {
+				p_Dpb->last_picture->data_flag |= FIELD_DISP_FLAG;
+
+				dpb_print(p_H264_Dpb->decoder_index,
+					PRINT_FLAG_DPB_DETAIL,
+					"%s, last_picture->data_flag:0x%x, last_picture->poc:%d\n", __func__, p_Dpb->last_picture->data_flag, p_Dpb->last_picture->poc);
+
+			}
+		}
+	}
 
 	while (output_frames(p_H264_Dpb, 0))
 		;
