@@ -8443,10 +8443,7 @@ static int vav1_get_ps_info(struct AV1HW_s *hw, struct aml_vdec_ps_infos *ps)
 	ps->coded_height 	= ALIGN(hw->frame_height, 64);
 	ps->dpb_size 		= hw->used_buf_num;
 	ps->dpb_margin		= hw->dynamic_buf_num_margin;
-	if (hw->frame_width > 1920 && hw->frame_height > 1088)
-		ps->dpb_frames = 8;
-	else
-		ps->dpb_frames = 10;
+	ps->dpb_frames = 8;
 
 	ps->dpb_frames += 2;
 

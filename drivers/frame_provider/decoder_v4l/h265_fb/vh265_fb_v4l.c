@@ -3690,10 +3690,12 @@ static int hevc_get_header_size(int w, int h)
 	h = ALIGN(h, 64);
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-			(IS_8K_SIZE(w, h)))
-		return ALIGN(MMU_COMPRESS_HEADER_SIZE_8K, 0x10000);
-	else
-		return ALIGN(MMU_COMPRESS_HEADER_SIZE_4K, 0x10000);
+		IS_8K_SIZE(w, h))
+		return MMU_COMPRESS_HEADER_SIZE_8K;
+	if (IS_4K_SIZE(w, h))
+		return MMU_COMPRESS_HEADER_SIZE_4K;
+
+	return MMU_COMPRESS_HEADER_SIZE_1080P;
 }
 
 static void hevc_put_video_frame(void *vdec_ctx, struct vframe_s *vf)

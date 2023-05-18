@@ -9562,9 +9562,9 @@ static int h264_get_header_size(int w, int h)
 	h = ALIGN(h, 64);
 
 	if (IS_4K_SIZE(w, h))
-		return ALIGN(MMU_COMPRESS_HEADER_SIZE_4K, 0x10000);
+		return MMU_COMPRESS_HEADER_SIZE_4K;
 
-	return ALIGN(MMU_COMPRESS_HEADER_SIZE_1080P, 0x10000);
+	return MMU_COMPRESS_HEADER_SIZE_1080P;
 }
 
 static void h264_get_comp_buf_info(struct aml_vdec_ps_infos *ps,
