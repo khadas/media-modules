@@ -117,7 +117,7 @@ int init_ci_addr(struct platform_device *pdev)
 		pr_dbg("%s fail\n", __func__);
 		return -1;
 	}
-
+	if (!p_hw_base)
 	p_hw_base = devm_ioremap_nocache(&pdev->dev, res->start,
 					 resource_size(res));
 	if (p_hw_base) {
@@ -1150,8 +1150,7 @@ int aml_ci_bus_init(struct platform_device *pdev, struct aml_ci *ci_dev)
 		pr_error("aml_pcmcia_init failed\n");
 		goto fail1;
 	}
-	pr_dbg("*********ci bus aml_ci_bus_mod_init---\n");
-	aml_ci_bus_mod_init();
+
 	return 0;
 fail1:
 	kfree(ci_bus_dev);
@@ -1166,7 +1165,7 @@ EXPORT_SYMBOL(aml_ci_bus_init);
 */
 int aml_ci_bus_exit(struct aml_ci *ci)
 {
-	aml_ci_bus_mod_exit();
+
 	/*exit pc card*/
 	aml_pcmcia_exit(&ci_bus.pc);
 	/*free gpio*/

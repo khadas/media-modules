@@ -1414,6 +1414,8 @@ static int dvb_ca_en50221_thread(void *data)
 						break;
 					}
 					dvb_ringbuffer_init(&ca->slot_info[slot].rx_buffer, rxbuf, RX_BUFFER_SIZE);
+				} else {
+					dvb_ringbuffer_reset(&ca->slot_info[slot].rx_buffer);
 				}
 
 				ca->pub->slot_ts_enable(ca->pub, slot);

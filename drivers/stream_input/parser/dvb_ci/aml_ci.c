@@ -731,6 +731,12 @@ static int aml_ci_probe(struct platform_device *pdev)
 		pr_error("%s %d aml_ci_init fail\n", __func__, __LINE__);
 		return err;
 	}
+
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS) {
+		pr_dbg("*********ci bus aml_ci_bus_mod_init---\n");
+		aml_ci_bus_mod_init();
+	}
+
 	platform_set_drvdata(pdev, ci_dev);
 	aml_ci_register_class(ci_dev);
 #if 0
@@ -758,10 +764,12 @@ static int aml_ci_remove(struct platform_device *pdev)
 		aml_cimax_exit(ci_dev);
 	else
 #endif
-	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS)
+	if (ci_dev->io_type == AML_DVB_IO_TYPE_CIBUS) {
+		aml_ci_bus_mod_exit();
 		aml_ci_bus_exit(ci_dev);
-	else
+	} else {
 		pr_dbg("---Amlogic CI remove unknown io type---\n");
+	}
 
 	aml_ci_exit(ci_dev);
 
