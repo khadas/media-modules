@@ -1082,9 +1082,36 @@ static int avs3_print_cont(struct AVS3Decoder_s *dec,
 /*compute_losless_comp_body_size(4096, 2304, 1) = 18874368(0x1200000)*/
 #define MAX_FRAME_4K_NUM 0x1200
 #define MAX_FRAME_8K_NUM 0x4800
+#define MAX_SIZE_8K (8192 * 4608)
 #define MAX_SIZE_4K (4096 * 2304)
+#define MAX_SIZE_2K (1920 * 1088)
+
 #define IS_8K_SIZE(w, h)	(((w) * (h)) > MAX_SIZE_4K)
 #define IS_4K_SIZE(w, h)  (((w) * (h)) > (1920*1088))
+
+static int is_oversize(int w, int h)
+{
+	int max = MAX_SIZE_8K;
+	int max_w_h = 8192;
+	int max_h_w = 4608;
+
+	if (w <= 0 || h <= 0)
+		return true;
+
+	if (w > h) {
+		if (w > max_w_h || h > max_h_w)
+			return true;
+	} else if (w < h) {
+		if (w > max_h_w || h > max_w_h)
+			return true;
+	} else {
+		if (w * h > max)
+			return true;
+	}
+
+	return false;
+}
+
 
 static int get_frame_mmu_map_size(void)
 {
@@ -5668,7 +5695,6 @@ static void dec_again_process(struct AVS3Decoder_s *dec)
 		PROC_STATE_HEAD_AGAIN;
 	}
 	dec->next_again_flag = 1;
-	reset_process_time(dec);
 
 	vdec_schedule_work(&dec->work);
 }
@@ -6723,10 +6749,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 
 	struct vdec_s *vdec = hw_to_vdec(dec);
 
-	/*if (dec->wait_buf)
-		pr_info("set wait_buf to 0\r\n");
-	*/
-
 #if 0
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 		"%s decode_status 0x%x process_state %d lcu 0x%x\n",
@@ -6779,6 +6801,9 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START, TRACE_BASIC);
 	}
 
+	if (dec->m_ins_flag)
+		reset_process_time(dec);
+
 #ifndef G12A_BRINGUP_DEBUG
 	if (dec->eos) {
 		goto irq_handled_exit;
@@ -6787,7 +6812,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 	dec->wait_buf = 0;
 	if (dec_status == AVS3_DECODE_BUFEMPTY) {
 		if (dec->m_ins_flag) {
-			reset_process_time(dec);
 			if (!vdec_frame_based(hw_to_vdec(dec)))
 				dec_again_process(dec);
 			else {
@@ -6796,7 +6820,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 					vdec_v4l_post_error_frame_event(v4l2_ctx);
 				}
 				dec->dec_result = DEC_RESULT_DONE;
-				reset_process_time(dec);
 #ifdef NEW_FB_CODE
 				if (dec->front_back_mode == 1) {
 					amhevc_stop_f();
@@ -6855,7 +6878,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			if (dec->front_back_mode == 0)
 #endif
 			get_picture_qos_info(dec);
-			reset_process_time(dec);
 			dec->dec_result = DEC_RESULT_DONE;
 #ifdef NEW_FB_CODE
 			if (dec->front_back_mode) {
@@ -6898,13 +6920,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		debug |= (AVS3_DBG_DIS_LOC_ERROR_PROC |
 			AVS3_DBG_DIS_SYS_ERROR_PROC);
 		dec->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		if (dec->m_ins_flag)
-			reset_process_time(dec);
 		goto irq_handled_exit;
 	}
-
-	if (dec->m_ins_flag)
-		reset_process_time(dec);
 
 	if (dec_status == AVS3_HEAD_SEQ_READY)
 		start_code = SEQUENCE_HEADER_CODE;
@@ -6917,8 +6934,9 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 	else if (dec_status == AVS3_STARTCODE_SEARCH_DONE)
 		/*VIDEO_EDIT_CODE*/
 		start_code = READ_VREG(CUR_NAL_UNIT_TYPE);
-	else
-		goto irq_handled_exit;
+	else {
+		goto irq_handled_exit_and_start_timer;
+	}
 	if (dec->process_state ==
 			PROC_STATE_HEAD_AGAIN
 			) {
@@ -6927,14 +6945,14 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			avs3_print(dec, 0,
 				"PROC_STATE_HEAD_AGAIN error, start_code 0x%x!!!\r\n",
 				start_code);
-			goto irq_handled_exit;
+			goto irq_handled_exit_and_start_timer;
 		} else {
 			avs3_print(dec, AVS3_DBG_BUFMGR,
 				"PROC_STATE_HEAD_AGAIN, start_code 0x%x\r\n",
 				start_code);
 			dec->process_state = PROC_STATE_HEAD_DONE;
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
-			goto irq_handled_exit;
+			goto irq_handled_exit_and_start_timer;
 		}
 	} else if (dec->process_state ==
 			PROC_STATE_DECODE_AGAIN) {
@@ -6949,7 +6967,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				"PROC_STATE_DECODE_AGAIN, start_code 0x%x!!!\r\n",
 				start_code);
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
-			goto irq_handled_exit;
+			goto irq_handled_exit_and_start_timer;
 		}
 	}
 
@@ -7171,66 +7189,69 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 
 		dec->frame_width = dec->avs3_dec.param.p.sqh_horizontal_size;
 		dec->frame_height = dec->avs3_dec.param.p.sqh_vertical_size;
-		if (!v4l_res_change(dec)) {
-			if (v4l2_ctx->param_sets_from_ucode && !dec->v4l_params_parsed) {
-				struct aml_vdec_ps_infos ps;
-				struct vdec_comp_buf_info comp;
+		if ((start_code == I_PICTURE_START_CODE) &&
+			(!is_oversize(dec->frame_width, dec->frame_height))) {
+			if (!v4l_res_change(dec)) {
+				if (v4l2_ctx->param_sets_from_ucode && !dec->v4l_params_parsed) {
+					struct aml_vdec_ps_infos ps;
+					struct vdec_comp_buf_info comp;
 
-				avs3_print(dec, 0, "set ucode parse\n");
-				if (get_valid_double_write_mode(dec) != 16) {
-					vavs3_get_comp_buf_info(dec, &comp);
-					vdec_v4l_set_comp_buf_info(v4l2_ctx, &comp);
-				}
-
-				vavs3_get_ps_info(dec, &ps);
-				/*notice the v4l2 codec.*/
-				vdec_v4l_set_ps_infos(v4l2_ctx, &ps);
-				dec->init_pic_w = dec->frame_width;
-				dec->init_pic_h = dec->frame_height;
-				dec->last_width = dec->frame_width;
-				dec->last_height = dec->frame_height;
-				dec->v4l_params_parsed = true;
-				dec->process_busy = 0;
-#ifdef NEW_FB_CODE
-				if (dec->m_ins_flag) {
-					u32 width = avs3_dec->param.p.sqh_horizontal_size;
-					u32 height = avs3_dec->param.p.sqh_vertical_size;
-					u8 bit_depth = (u8)avs3_dec->param.p.sqh_encoding_precision;
-					int cur_mmu_fb_4k_number = 0;
-
-					width = ((width + MINI_SIZE - 1) >> MINI_SIZE_LOG2) << MINI_SIZE_LOG2;
-					height = ((height   + MINI_SIZE - 1) >> MINI_SIZE_LOG2) << MINI_SIZE_LOG2;
-					bit_depth = (bit_depth == 2) ? 10 : 8;
-					cur_mmu_fb_4k_number = dec->fb_ifbuf_num * avs3_mmu_page_num(dec,
-						width, height, (bit_depth == 10));
-
-					if ((dec->front_back_mode == 1) &&
-						(start_code == I_PICTURE_START_CODE) &&
-						(dec->mmu_fb_4k_number < cur_mmu_fb_4k_number) &&
-						(cur_mmu_fb_4k_number > 0)) {
-						amhevc_stop_f();
-						avs3_print(dec, AVS3_DBG_BUFMGR, "need realloc mmu fb\n");
-						uninit_mmu_fb_bufstate(dec);
-						init_mmu_fb_bufstate(dec, cur_mmu_fb_4k_number);
+					avs3_print(dec, 0, "set ucode parse\n");
+					if (get_valid_double_write_mode(dec) != 16) {
+						vavs3_get_comp_buf_info(dec, &comp);
+						vdec_v4l_set_comp_buf_info(v4l2_ctx, &comp);
 					}
-				}
+
+					vavs3_get_ps_info(dec, &ps);
+					/*notice the v4l2 codec.*/
+					vdec_v4l_set_ps_infos(v4l2_ctx, &ps);
+					dec->init_pic_w = dec->frame_width;
+					dec->init_pic_h = dec->frame_height;
+					dec->last_width = dec->frame_width;
+					dec->last_height = dec->frame_height;
+					dec->v4l_params_parsed = true;
+					dec->process_busy = 0;
+#ifdef NEW_FB_CODE
+					if (dec->m_ins_flag) {
+						u32 width = avs3_dec->param.p.sqh_horizontal_size;
+						u32 height = avs3_dec->param.p.sqh_vertical_size;
+						u8 bit_depth = (u8)avs3_dec->param.p.sqh_encoding_precision;
+						int cur_mmu_fb_4k_number = 0;
+
+						width = ((width + MINI_SIZE - 1) >> MINI_SIZE_LOG2) << MINI_SIZE_LOG2;
+						height = ((height   + MINI_SIZE - 1) >> MINI_SIZE_LOG2) << MINI_SIZE_LOG2;
+						bit_depth = (bit_depth == 2) ? 10 : 8;
+						cur_mmu_fb_4k_number = dec->fb_ifbuf_num * avs3_mmu_page_num(dec,
+							width, height, (bit_depth == 10));
+
+						if ((dec->front_back_mode == 1) &&
+							(start_code == I_PICTURE_START_CODE) &&
+							(dec->mmu_fb_4k_number < cur_mmu_fb_4k_number) &&
+							(cur_mmu_fb_4k_number > 0)) {
+							amhevc_stop_f();
+							avs3_print(dec, AVS3_DBG_BUFMGR, "need realloc mmu fb\n");
+							uninit_mmu_fb_bufstate(dec);
+							init_mmu_fb_bufstate(dec, cur_mmu_fb_4k_number);
+						}
+					}
 #endif
+					dec_again_process(dec);
+					return IRQ_HANDLED;
+				} else {
+					struct vdec_pic_info pic;
+
+					vdec_v4l_get_pic_info(v4l2_ctx, &pic);
+					dec->avs3_dec.max_pb_size = pic.dpb_frames + pic.dpb_margin;
+					if (dec->avs3_dec.max_pb_size > MAX_BUF_NUM)
+						dec->avs3_dec.max_pb_size = MAX_BUF_NUM;
+					if (dec->avs3_dec.max_pb_size > FRAME_BUFFERS)
+						dec->avs3_dec.max_pb_size = FRAME_BUFFERS;
+				}
+			} else {
+				dec->process_busy = 0;
 				dec_again_process(dec);
 				return IRQ_HANDLED;
-			} else {
-				struct vdec_pic_info pic;
-
-				vdec_v4l_get_pic_info(v4l2_ctx, &pic);
-				dec->avs3_dec.max_pb_size = pic.dpb_frames + pic.dpb_margin;
-				if (dec->avs3_dec.max_pb_size > MAX_BUF_NUM)
-					dec->avs3_dec.max_pb_size = MAX_BUF_NUM;
-				if (dec->avs3_dec.max_pb_size > FRAME_BUFFERS)
-					dec->avs3_dec.max_pb_size = FRAME_BUFFERS;
 			}
-		} else {
-			dec->process_busy = 0;
-			dec_again_process(dec);
-			return IRQ_HANDLED;
 		}
 	}
 
@@ -7565,8 +7586,6 @@ decode_slice:
 		}
 		if (start_code == I_PICTURE_START_CODE)
 			dec->has_i_frame = 1;
-		if (dec->m_ins_flag)
-			start_process_time(dec);
 		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	}
 
@@ -7653,6 +7672,11 @@ decode_slice:
 	}
 
 	mutex_unlock(&dec->slice_header_lock);
+
+irq_handled_exit_and_start_timer:
+	if (dec->m_ins_flag)
+		start_process_time(dec);
+
 irq_handled_exit:
 
 	dec->process_busy = 0;

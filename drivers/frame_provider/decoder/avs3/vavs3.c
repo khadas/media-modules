@@ -6110,7 +6110,6 @@ static void dec_again_process(struct AVS3Decoder_s *dec)
 		PROC_STATE_HEAD_AGAIN;
 	}
 	dec->next_again_flag = 1;
-	reset_process_time(dec);
 
 	vdec_schedule_work(&dec->work);
 }
@@ -7049,10 +7048,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 	unsigned char avs3_bi_mid_ptr;
 	struct vdec_s *vdec = hw_to_vdec(dec);
 
-	/*if (dec->wait_buf)
-		pr_info("set wait_buf to 0\r\n");
-	*/
-
 #if 0
 	avs3_print(dec, AVS3_DBG_BUFMGR_MORE,
 		"%s decode_status 0x%x process_state %d lcu 0x%x\n",
@@ -7106,6 +7101,9 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		decoder_trace(dec->trace.decode_time_name, DECODER_ISR_THREAD_PIC_DONE_START, TRACE_BASIC);
 	}
 
+	if (dec->m_ins_flag)
+		reset_process_time(dec);
+
 #ifndef G12A_BRINGUP_DEBUG
 	if (dec->eos) {
 		goto irq_handled_exit;
@@ -7114,12 +7112,10 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 	dec->wait_buf = 0;
 	if (dec_status == AVS3_DECODE_BUFEMPTY) {
 		if (dec->m_ins_flag) {
-			reset_process_time(dec);
 			if (!vdec_frame_based(hw_to_vdec(dec)))
 				dec_again_process(dec);
 			else {
 				dec->dec_result = DEC_RESULT_DONE;
-				reset_process_time(dec);
 #ifdef NEW_FB_CODE
 				if (dec->front_back_mode == 1) {
 					amhevc_stop_f();
@@ -7179,7 +7175,6 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			if (dec->front_back_mode == 0)
 #endif
 			get_picture_qos_info(dec);
-			reset_process_time(dec);
 			dec->dec_result = DEC_RESULT_DONE;
 #ifdef NEW_FB_CODE
 			if (dec->front_back_mode) {
@@ -7223,13 +7218,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		debug |= (AVS3_DBG_DIS_LOC_ERROR_PROC |
 			AVS3_DBG_DIS_SYS_ERROR_PROC);
 		dec->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		if (dec->m_ins_flag)
-			reset_process_time(dec);
 		goto irq_handled_exit;
 	}
-
-	if (dec->m_ins_flag)
-		reset_process_time(dec);
 
 	if (dec_status == AVS3_HEAD_SEQ_READY)
 		start_code = SEQUENCE_HEADER_CODE;
@@ -7243,7 +7233,8 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 		/*VIDEO_EDIT_CODE*/
 		start_code = READ_VREG(CUR_NAL_UNIT_TYPE);
 	else
-		goto irq_handled_exit;
+		goto irq_handled_exit_and_start_timer;
+
 	if (dec->process_state ==
 			PROC_STATE_HEAD_AGAIN
 			) {
@@ -7252,14 +7243,14 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 			avs3_print(dec, 0,
 				"PROC_STATE_HEAD_AGAIN error, start_code 0x%x!!!\r\n",
 				start_code);
-			goto irq_handled_exit;
+			goto irq_handled_exit_and_start_timer;
 		} else {
 			avs3_print(dec, AVS3_DBG_BUFMGR,
 				"PROC_STATE_HEAD_AGAIN, start_code 0x%x\r\n",
 				start_code);
 			dec->process_state = PROC_STATE_HEAD_DONE;
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
-			goto irq_handled_exit;
+			goto irq_handled_exit_and_start_timer;
 		}
 	} else if (dec->process_state ==
 			PROC_STATE_DECODE_AGAIN) {
@@ -7279,7 +7270,7 @@ static irqreturn_t vavs3_isr_thread_fn(int irq, void *data)
 				"PROC_STATE_DECODE_AGAIN, start_code 0x%x!!!\r\n",
 				start_code);
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS3_ACTION_DONE);
-			goto irq_handled_exit;
+			goto irq_handled_exit_and_start_timer;
 		}
 	}
 
@@ -7999,6 +7990,11 @@ decode_slice:
 		}
 	}
 	mutex_unlock(&dec->slice_header_lock);
+
+irq_handled_exit_and_start_timer:
+	if (dec->m_ins_flag)
+		start_process_time(dec);
+
 irq_handled_exit:
 
 	dec->process_busy = 0;
