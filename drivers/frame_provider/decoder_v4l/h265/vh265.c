@@ -8512,10 +8512,12 @@ static int recycle_pending_vframe(struct hevc_state_s *hevc, struct vframe_s *vf
 	if (index1 < MAX_REF_PIC_NUM) {
 		hevc->m_PIC[index1]->vf_ref = 0;
 		hevc->m_PIC[index1]->output_ready = 0;
+		hevc->m_PIC[index1]->error_mark = 1;
 	}
 	if (index2 < MAX_REF_PIC_NUM) {
 		hevc->m_PIC[index2]->vf_ref = 0;
 		hevc->m_PIC[index2]->output_ready = 0;
+		hevc->m_PIC[index2]->error_mark = 1;
 	}
 	if (hevc->wait_buf != 0)
 		WRITE_VREG(HEVC_ASSIST_MBOX0_IRQ_REG,
@@ -9962,7 +9964,7 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 				pts_valid = 0;
 			}
 		}
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s: id = %x, offset: %x, vpts: %d, pts_valid: %d\n",
 			__func__, ctx->ptsserver_id, pic->stream_offset, vpts, pts_valid);
 		vh265_userdata_fill_vpts(hevc, vpts, pts_valid, pic->POC);
@@ -10102,9 +10104,8 @@ static void vh265_buf_ref_process_for_exception(struct hevc_state_s *hevc)
 		struct aml_buf *aml_buf =
 		(struct aml_buf *)hevc->m_BUF[pic->index].v4l_ref_buf_addr;
 
-		hevc_print(hevc, 0,
-			"process_for_exception: dma addr(0x%lx)\n",
-			pic->cma_alloc_addr);
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
+			"%s: dma addr(0x%lx)\n", __func__, pic->cma_alloc_addr);
 
 		if (aml_buf == NULL)
 			return;
