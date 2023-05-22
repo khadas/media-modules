@@ -10290,7 +10290,7 @@ muti_output:
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 					vdec_schedule_work(&hevc->work);
 					return IRQ_HANDLED;
-				} else if ((frmbase_muti_slice != 1) || (dec_status != HEVC_NAL_DECODE_DONE)) {
+				} else if ((frmbase_muti_slice != 1) || (hevc->slice_count != 0)) {
 					check_pic_decoded_error(hevc,
 						READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
 

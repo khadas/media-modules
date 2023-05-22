@@ -2013,6 +2013,7 @@ struct hevc_state_s {
 	u32 data_invalid;
 	u32 consume_byte;
 	u32 muti_frame_flag;
+	int slice_count;
 } /*hevc_stru_t */;
 
 #ifdef AGAIN_HAS_THRESHOLD
@@ -10605,7 +10606,7 @@ muti_output:
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 					vdec_schedule_work(&hevc->work);
 					return IRQ_HANDLED;
-				} else if ((frmbase_muti_slice != 1) || (dec_status != HEVC_NAL_DECODE_DONE)) {
+				} else if ((frmbase_muti_slice != 1) || (hevc->slice_count != 0)) {
 					check_pic_decoded_error(hevc,
 						READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
 
@@ -11288,6 +11289,9 @@ force_output:
 			if (hevc->m_ins_flag)
 				start_process_time(hevc);
 #endif
+			if (hevc->cur_pic) {
+				hevc->slice_count++;
+			}
 #ifdef MULTI_INSTANCE_SUPPORT
 		} else if (hevc->m_ins_flag) {
 			hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
@@ -11296,6 +11300,9 @@ force_output:
 			hevc->decoded_poc = INVALID_POC;
 			hevc->decoding_pic = NULL;
 			hevc->dec_result = DEC_RESULT_DONE;
+			if (hevc->cur_pic) {
+				hevc->slice_count++;
+			}
 			amhevc_stop();
 			reset_process_time(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc)))
@@ -13688,6 +13695,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec->mvfrm->hw_decode_start = local_clock();
 	amhevc_start();
 	hevc->stat |= STAT_VDEC_RUN;
+	hevc->slice_count = 0;
 
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_RUN_END);
 }
