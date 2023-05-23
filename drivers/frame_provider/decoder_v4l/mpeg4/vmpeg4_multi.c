@@ -2093,6 +2093,7 @@ static int vmpeg4_workspace_init(struct vdec_mpeg4_hw_s *hw)
 {
 	int ret;
 	void *buf = NULL;
+	struct vdec_s *vdec = hw_to_vdec(hw);
 
 	ret = decoder_bmmu_box_alloc_buf_phy(hw->mm_blk_handle,
 		DECODE_BUFFER_NUM_MAX,
@@ -2106,12 +2107,14 @@ static int vmpeg4_workspace_init(struct vdec_mpeg4_hw_s *hw)
 	}
 
 	/* notify ucode the buffer start address */
-	buf = codec_mm_vmap(hw->buf_start, WORKSPACE_SIZE);
-	if (buf) {
-		memset(buf, 0, WORKSPACE_SIZE);
-		codec_mm_dma_flush(buf,
-			WORKSPACE_SIZE, DMA_TO_DEVICE);
-		codec_mm_unmap_phyaddr(buf);
+	if (!vdec_secure(vdec)) {
+		buf = codec_mm_vmap(hw->buf_start, WORKSPACE_SIZE);
+		if (buf) {
+			memset(buf, 0, WORKSPACE_SIZE);
+			codec_mm_dma_flush(buf,
+				WORKSPACE_SIZE, DMA_TO_DEVICE);
+			codec_mm_unmap_phyaddr(buf);
+		}
 	}
 
 	WRITE_VREG(MEM_OFFSET_REG, hw->buf_start);
@@ -2259,7 +2262,7 @@ static void timeout_process(struct vdec_mpeg4_hw_s *hw)
 
 	mmpeg4_debug_print(DECODE_ID(hw), 0,
 		"%s decoder timeout %d\n", __func__, hw->timeout_cnt);
-	if (debug_enable && vdec_frame_based((hw_to_vdec(hw)))) {
+	if (debug_enable && vdec_frame_based((hw_to_vdec(hw))) && !vdec_secure(hw_to_vdec(hw))) {
 		if (hw->chunk) {
 			mmpeg4_debug_print(DECODE_ID(hw), 0,
 				"%s frame_num %d, chunk size 0x%x, chksum 0x%x\n",
@@ -2447,6 +2450,8 @@ static int vmpeg4_hw_ctx_restore(struct vdec_mpeg4_hw_s *hw)
 static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 {
 	int i;
+	int tvp_flag = vdec_secure(hw_to_vdec(hw)) ?
+			CODEC_MM_FLAGS_TVP : 0;
 	struct aml_vcodec_ctx *ctx = hw->v4l2_ctx;
 
 	hw->vmpeg4_ratio = hw->vmpeg4_amstream_dec_info.ratio;
@@ -2526,7 +2531,7 @@ static void vmpeg4_local_init(struct vdec_mpeg4_hw_s *hw)
 			MAX_BMMU_BUFFER_NUM,
 			4 + PAGE_SHIFT,
 			CODEC_MM_FLAGS_CMA_CLEAR |
-			CODEC_MM_FLAGS_FOR_VDECODER,
+			CODEC_MM_FLAGS_FOR_VDECODER | tvp_flag,
 			BMMU_ALLOC_FLAGS_WAIT);
 	if (hw->mm_blk_handle) {
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_NO_MEM);
@@ -2838,7 +2843,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		tail[3] = 0xb6;
 		codec_mm_dma_flush(tail, 4, DMA_TO_DEVICE);
 	}
-	if (vdec_frame_based(vdec) &&
+	if (vdec_frame_based(vdec) && !vdec_secure(vdec) &&
 		(debug_enable & 0xc00)) {
 		u8 *data = NULL;
 
