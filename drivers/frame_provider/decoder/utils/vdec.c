@@ -435,41 +435,65 @@ int vdec_data_get_index(ulong data, struct vdec_data_buf_s *vdata_buf)
 	int i = 0;
 
 	for (i = 0; i < VDEC_DATA_NUM; i++) {
-		if ((atomic_read(&vdata->data[i].use_count) == 0) &&
-			(vdata->data[i].alloc_flag == 0)) {
+		struct vdec_data_s *pdata = &vdata->data[i];
+
+		if ((atomic_read(&pdata->use_count) == 0) &&
+			(pdata->alloc_flag == 2)) {
+			if ((pdata->user_buf_size < vdata_buf->user_buf_size) ||
+				(pdata->hdr10p_buf_size < vdata_buf->hdr10p_buf_size) ||
+				(pdata->aux_buf_size < vdata_buf->aux_buf_size)) {
+
+				if (pdata->user_data_buf != NULL) {
+					vfree(pdata->user_data_buf);
+					pdata->user_data_buf = NULL;
+				}
+				if (pdata->hdr10p_data_buf != NULL) {
+					vfree(pdata->hdr10p_data_buf);
+					pdata->hdr10p_data_buf = NULL;
+				}
+				if (pdata->aux_data_buf != NULL) {
+					vfree(pdata->aux_data_buf);
+					pdata->aux_data_buf = NULL;
+				}
+				pdata->alloc_flag = 0;
+			} else {
+				pdata->alloc_flag = 1;
+				return i;
+			}
+		}
+
+		if ((atomic_read(&pdata->use_count) == 0) &&
+			(pdata->alloc_flag == 0)) {
 			if (vdata_buf->alloc_policy & ALLOC_USER_BUF) {
-				vdata->data[i].user_data_buf = vzalloc(vdata_buf->user_buf_size);
-				if (vdata->data[i].user_data_buf == NULL) {
+				pdata->user_data_buf = vzalloc(vdata_buf->user_buf_size);
+				if (pdata->user_data_buf == NULL) {
 					pr_debug("alloc %dth userdata failed\n", i);
 					return -1;
 				}
+				pdata->user_buf_size = vdata_buf->user_buf_size;
 			}
 			if (vdata_buf->alloc_policy & ALLOC_HDR10P_BUF) {
-				vdata->data[i].hdr10p_data_buf = vzalloc(vdata_buf->hdr10p_buf_size);
-				if (vdata->data[i].hdr10p_data_buf == NULL) {
+				pdata->hdr10p_data_buf = vzalloc(vdata_buf->hdr10p_buf_size);
+				if (pdata->hdr10p_data_buf == NULL) {
 					pr_debug("alloc %dth hdr10p failed\n", i);
 					return -1;
 				}
+				pdata->hdr10p_buf_size = vdata_buf->hdr10p_buf_size;
 			}
 			if (vdata_buf->alloc_policy & ALLOC_AUX_BUF) {
-				vdata->data[i].aux_data_buf = vzalloc(vdata_buf->aux_buf_size);
-				if (vdata->data[i].aux_data_buf == NULL) {
+				pdata->aux_data_buf = vzalloc(vdata_buf->aux_buf_size);
+				if (pdata->aux_data_buf == NULL) {
 					pr_debug("alloc %dth aux failed\n", i);
 					return -1;
 				}
+				pdata->aux_buf_size = vdata_buf->aux_buf_size;
 			}
-			vdata->data[i].alloc_flag = 1;
+			pdata->alloc_flag = 1;
 
-			return i;
-		}
-
-		if ((atomic_read(&vdata->data[i].use_count) == 0) &&
-			(vdata->data[i].alloc_flag == 2)) {
-			vdata->data[i].alloc_flag = 1;
 			return i;
 		}
 	}
-
+	pr_err("index to large > VDEC_DATA_NUM\n");
 	return -1;
 }
 EXPORT_SYMBOL(vdec_data_get_index);

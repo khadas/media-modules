@@ -349,6 +349,9 @@ struct vdec_data_s {
 	 * 2, allocated, free
 	 */
 	u32 alloc_flag;
+	u32 aux_buf_size;
+	u32 user_buf_size;
+	u32 hdr10p_buf_size;
 };
 
 struct vdec_data_info_s {
