@@ -4242,6 +4242,7 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 	struct vdec_s *vdec = hw_to_vdec(dec);
 #endif
 	uint8_t index;
+	unsigned long flags = 0;
 
 	if (vf == (&dec->vframe_dummy))
 		return;
@@ -4249,6 +4250,7 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 	if (!vf)
 		return;
 
+	lock_buffer(dec, flags);
 	index = vf->index & 0xff;
 
 	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
@@ -4260,11 +4262,8 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 		dec->vf_put_count);
 
 	if (index < dec->used_buf_num) {
-		unsigned long flags;
-		struct avs2_frame_s *pic;
+		struct avs2_frame_s *pic = get_pic_by_index(dec, index);
 
-		lock_buffer(dec, flags);
-		pic = get_pic_by_index(dec, index);
 		if (pic && pic->vf_ref > 0)
 			pic->vf_ref--;
 		else {
@@ -4282,8 +4281,9 @@ static void vavs2_vf_put(struct vframe_s *vf, void *op_arg)
 						0x1);
 		dec->last_put_idx = index;
 		dec->new_frame_displayed++;
-		unlock_buffer(dec, flags);
 	}
+	unlock_buffer(dec, flags);
+
 #ifdef MULTI_INSTANCE_SUPPORT
 	vdec_up(vdec);
 #endif

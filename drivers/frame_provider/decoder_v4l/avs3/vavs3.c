@@ -4861,12 +4861,10 @@ static struct vframe_s *vavs3_vf_peek(void *op_arg)
 static struct avs3_frame_s *get_pic_by_index(
 	struct AVS3Decoder_s *dec, int index)
 {
-	int i;
 	struct avs3_frame_s *pic = NULL;
-	for (i = 0; i < dec->avs3_dec.max_pb_size; i++) {
-		if (dec->avs3_dec.pic_pool[i].buf_cfg.index == index)
-			pic = &dec->avs3_dec.pic_pool[i].buf_cfg;
-	}
+
+	if ((index >= 0) && (index < dec->avs3_dec.max_pb_size))
+		pic = &dec->avs3_dec.pic_pool[index].buf_cfg;
 	return pic;
 }
 
@@ -4882,10 +4880,8 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 
 	if (force_disp_pic_index & 0x100) {
 		int idx = force_disp_pic_index & 0xff;
-		struct avs3_frame_s *pic = NULL;
-		if (idx >= 0
-			&& idx < dec->avs3_dec.max_pb_size)
-			pic = get_pic_by_index(dec, idx);
+		struct avs3_frame_s *pic = get_pic_by_index(dec, idx);
+
 		if (pic == NULL)
 			return NULL;
 		if (force_disp_pic_index & 0x200)
@@ -4914,6 +4910,7 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 		if (index < dec->avs3_dec.max_pb_size ||
 			(vf->type & VIDTYPE_V4L_EOS)) {
 			struct avs3_frame_s *pic = get_pic_by_index(dec, index);
+
 			if (pic == NULL &&
 				(debug & AVS3_DBG_PIC_LEAK)) {
 				int i;

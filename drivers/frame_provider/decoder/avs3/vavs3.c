@@ -5238,7 +5238,8 @@ static struct vframe_s *vavs3_vf_peek(void *op_arg)
 		if (kfifo_peek(&dec->display_q, &vf_tmp) && vf_tmp) {
 				uint8_t index = vf_tmp->index & 0xff;
 				struct avs3_frame_s *pic = get_pic_by_index(dec, index);
-				if (!pic->back_done_mark) {
+
+				if ((pic == NULL) || (!pic->back_done_mark)) {
 					return NULL;
 				}
 		} else
@@ -5256,12 +5257,10 @@ static struct vframe_s *vavs3_vf_peek(void *op_arg)
 static struct avs3_frame_s *get_pic_by_index(
 	struct AVS3Decoder_s *dec, int index)
 {
-	int i;
 	struct avs3_frame_s *pic = NULL;
-	for (i = 0; i < dec->avs3_dec.max_pb_size; i++) {
-		if (dec->avs3_dec.pic_pool[i].buf_cfg.index == index)
-			pic = &dec->avs3_dec.pic_pool[i].buf_cfg;
-	}
+
+	if ((index >= 0) && (index < dec->avs3_dec.max_pb_size))
+		pic = &dec->avs3_dec.pic_pool[index].buf_cfg;
 	return pic;
 }
 
@@ -5325,10 +5324,8 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 
 	if (force_disp_pic_index & 0x100) {
 		int idx = force_disp_pic_index & 0xff;
-		struct avs3_frame_s *pic = NULL;
-		if (idx >= 0
-			&& idx < dec->avs3_dec.max_pb_size)
-			pic = get_pic_by_index(dec, idx);
+		struct avs3_frame_s *pic = get_pic_by_index(dec, idx);
+
 		if (pic == NULL)
 			return NULL;
 		if (force_disp_pic_index & 0x200)
@@ -5347,7 +5344,8 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 		if (kfifo_peek(&dec->display_q, &vf) && vf) {
 				uint8_t index = vf->index & 0xff;
 				struct avs3_frame_s *pic = get_pic_by_index(dec, index);
-				if (!pic->back_done_mark) {
+
+				if ((pic == NULL) || (!pic->back_done_mark)) {
 					return NULL;
 				}
 		} else
@@ -5369,6 +5367,7 @@ static struct vframe_s *vavs3_vf_get(void *op_arg)
 
 		if (index < dec->avs3_dec.max_pb_size) {
 			struct avs3_frame_s *pic = get_pic_by_index(dec, index);
+
 			if (pic == NULL &&
 				(debug & AVS3_DBG_PIC_LEAK)) {
 				int i;
@@ -5438,14 +5437,13 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 	struct vdec_s *vdec = hw_to_vdec(dec);
 #endif
 	uint8_t index;
+	unsigned long flags = 0;
 
 	if (vf == (&dec->vframe_dummy))
 		return;
 
 	if (!vf)
 		return;
-
-	index = vf->index & 0xff;
 
 	decoder_trace(dec->trace.vf_put_name, (long)vf, TRACE_BUFFER);
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -5454,15 +5452,14 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 	decoder_trace(dec->trace.put_canvas0_addr, vf->canvas0Addr, TRACE_BUFFER);
 #endif
 
+	lock_buffer(dec, flags);
+	index = vf->index & 0xff;
 	kfifo_put(&dec->newframe_q, (const struct vframe_s *)vf);
 	decoder_trace(dec->trace.new_q_name, kfifo_len(&dec->newframe_q), TRACE_BUFFER);
 
 	if (index < dec->avs3_dec.max_pb_size) {
-		unsigned long flags;
-		struct avs3_frame_s *pic;
+		struct avs3_frame_s *pic = get_pic_by_index(dec, index);
 
-		lock_buffer(dec, flags);
-		pic = get_pic_by_index(dec, index);
 		if (pic && pic->vf_ref > 0) {
 			pic->vf_ref--;
 		} else {
@@ -5487,8 +5484,9 @@ static void vavs3_vf_put(struct vframe_s *vf, void *op_arg)
 			WRITE_VREG(dec->ASSIST_MBOX0_IRQ_REG, 0x1);
 		dec->last_put_idx = index;
 		dec->new_frame_displayed++;
-		unlock_buffer(dec, flags);
 	}
+	unlock_buffer(dec, flags);
+
 #ifdef MULTI_INSTANCE_SUPPORT
 	vdec_up(vdec);
 #endif
@@ -6905,6 +6903,7 @@ irqreturn_t vavs3_back_isr_thread_fn(struct AVS3Decoder_s *dec)
 			if (kfifo_peek(&dec->display_q, &vf) && vf) {
 				uint8_t index = vf->index & 0xff;
 				struct avs3_frame_s *peek_pic = get_pic_by_index(dec, index);
+
 				if (peek_pic == pic)
 					vf_notify_receiver(dec->provider_name,
 						VFRAME_EVENT_PROVIDER_VFRAME_READY, NULL);
