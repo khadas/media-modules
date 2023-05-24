@@ -7364,6 +7364,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 			}
 			else {
+				mutex_lock(&hw->pic_mutex);
 				if (p_H264_Dpb->mVideo.dec_picture) {
 					if (p_H264_Dpb->mVideo.dec_picture->colocated_buf_index >= 0) {
 						release_colocate_buf(p_H264_Dpb,
@@ -7371,6 +7372,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 						p_H264_Dpb->mVideo.dec_picture->colocated_buf_index = -1;
 					}
 				}
+				mutex_unlock(&hw->pic_mutex);
 				release_cur_decoding_buf(hw);
 			}
 		}
@@ -7581,6 +7583,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 
 		vh264_cal_frame_size(vdec);
 
+		mutex_lock(&hw->pic_mutex);
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			int cfg_ret = 0;
 			bool field_pic_flag = false;
@@ -7677,6 +7680,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					if (((hw->error_proc_policy & 0x80)
 						&& ((hw->dec_flag &
 							NODISP_FLAG) == 0)) ||(hw->reflist_error_count > 50)) {
+						mutex_unlock(&hw->pic_mutex);
 						hw->reset_bufmgr_flag = 1;
 						hw->reflist_error_count = 0;
 						amvdec_stop();
@@ -7697,6 +7701,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
 				if ((hw->error_proc_policy & 0x80) &&
 					((hw->dec_flag & NODISP_FLAG) == 0)) {
+					mutex_unlock(&hw->pic_mutex);
 					hw->reset_bufmgr_flag = 1;
 					amvdec_stop();
 					vdec->mc_loaded = 0;
@@ -7714,6 +7719,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					"config_decode_buf fail (%d)\n",
 					cfg_ret);
 				if (hw->error_proc_policy & 0x2) {
+					mutex_unlock(&hw->pic_mutex);
 					release_cur_decoding_buf(hw);
 					/*hw->data_flag |= ERROR_FLAG;*/
 					hw->reset_bufmgr_flag = 1;
@@ -7725,6 +7731,7 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				p_H264_Dpb->mVideo.dec_picture->data_flag |= ERROR_FLAG;
 			}
 		}
+		mutex_unlock(&hw->pic_mutex);
 
 		ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 
@@ -7772,8 +7779,10 @@ pic_done_proc:
 			(dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
 			hw->data_flag |= ERROR_FLAG;
+			mutex_lock(&hw->pic_mutex);
 			if (hw->dpb.mVideo.dec_picture)
 				hw->dpb.mVideo.dec_picture->data_flag |= ERROR_FLAG;
+			mutex_unlock(&hw->pic_mutex);
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 				"%s, mark err_frame\n", __func__);
 		}
