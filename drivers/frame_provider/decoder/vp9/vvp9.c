@@ -11023,6 +11023,7 @@ static void vp9_work(struct work_struct *work)
 	if (pbi->dec_result == DEC_INIT_PICLIST) {
 		init_pic_list(pbi);
 		pbi->pic_list_init_done = true;
+		vdec_up(vdec);
 		return;
 	}
 
