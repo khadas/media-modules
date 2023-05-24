@@ -7993,45 +7993,51 @@ static int avs2_recycle_frame_buffer(struct AVS2Decoder_s *dec)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(dec->v4l2_ctx);
 	struct aml_buf *aml_buf;
+	struct avs2_frame_s *pic = NULL;
 	ulong flags;
 	int i;
 	int index;
 
 	for (i = 0; i < avs2_dec->ref_maxbuffer; ++i) {
-		if (avs2_dec->fref[i] == NULL)
-			continue;
-
-		index = avs2_dec->fref[i]->index;
-		if ((avs2_dec->fref[i]->imgcoi_ref < -256) &&
-				(avs2_dec->fref[i]->bg_flag == 0) &&
+		pic = &avs2_dec->frm_pool[i];
+		index = pic->index;
+		if ((pic->imgcoi_ref < -256) &&
+				(pic->bg_flag == 0) &&
 #ifdef NEW_FRONT_BACK_CODE
-				(avs2_dec->fref[i]->backend_ref == 0) &&
+				(pic->backend_ref == 0) &&
 #endif
 #ifndef NO_DISPLAY
-				(avs2_dec->fref[i]->vf_ref) &&
+				(pic->vf_ref ||
+				((dec->error_proc_policy & 0x2) &&
+				pic->error_mark)) &&
 #endif
-				(avs2_dec->fref[i]->index != -1) &&
-				(avs2_dec->fref[i]->is_display == 1) &&
-				(avs2_dec->fref[i]->cma_alloc_addr)) {
+				(pic->index != -1) &&
+				(pic->is_display == 1) &&
+				(pic->cma_alloc_addr)) {
 
 			aml_buf = (struct aml_buf *)dec->m_BUF[index].v4l_ref_buf_addr;
 
 			avs2_print(dec,
 		PRINT_FLAG_VDEC_DETAIL, "%s idx %d index %d imgcoi_ref %d vf_ref %d "
 			"index %d cma_alloc_addr = 0x%lx\n",
-			__func__, i, index, avs2_dec->fref[i]->imgcoi_ref,
-			avs2_dec->fref[i]->vf_ref,
-			avs2_dec->fref[i]->index,
-			avs2_dec->fref[i]->cma_alloc_addr);
+			__func__, i, index, pic->imgcoi_ref,
+			pic->vf_ref,
+			pic->index,
+			pic->cma_alloc_addr);
 
 			aml_buf_put_ref(&ctx->bm, aml_buf);
+			if ((dec->error_proc_policy & 0x2) &&
+				pic->error_mark) {
+				aml_buf_put_ref(&ctx->bm, aml_buf);
+			}
+
 			lock_buffer(dec, flags);
 
-			avs2_dec->fref[i]->cma_alloc_addr = 0;
-			avs2_dec->fref[i]->vf_ref = 0;
-			avs2_dec->fref[i]->is_display = 0;
+			pic->cma_alloc_addr = 0;
+			pic->vf_ref = 0;
+			pic->is_display = 0;
 #ifdef NEW_FRONT_BACK_CODE
-			avs2_dec->fref[i]->backend_ref = 0;
+			pic->backend_ref = 0;
 #endif
 			dec->m_BUF[index].v4l_ref_buf_addr = 0;
 
@@ -9282,6 +9288,9 @@ static void __exit amvdec_avs2_driver_remove_module(void)
 
 module_param(bit_depth_luma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_luma, "\n amvdec_avs2 bit_depth_luma\n");
+
+module_param(error_proc_policy, uint, 0664);
+MODULE_PARM_DESC(error_proc_policy, "\n amvdec_avs2 error_proc_policy\n");
 
 module_param(bit_depth_chroma, uint, 0664);
 MODULE_PARM_DESC(bit_depth_chroma, "\n amvdec_avs2 bit_depth_chroma\n");
