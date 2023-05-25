@@ -2907,7 +2907,8 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
             input = wq->InputBuffStart;
 
         picsize_x = ((cmd->encoder_width + 15) >> 4) << 4;
-        picsize_y = ((cmd->encoder_height + 15) >> 4) << 4;
+        //picsize_y = ((cmd->encoder_height + 15) >> 4) << 4;
+        picsize_y = cmd->encoder_height;
 
         if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
             /*
