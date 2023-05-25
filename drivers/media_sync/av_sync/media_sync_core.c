@@ -765,8 +765,8 @@ static void mediasync_ins_reset_l(mediasync_ins* pInstance) {
 	struct frame_table_s *pTable;
 	if (pInstance != NULL) {
 		mediasync_ins_init_syncinfo(pInstance);
-		pInstance->mHasAudio = -1;
-		pInstance->mHasVideo = -1;
+		pInstance->mHasAudio = 0;
+		pInstance->mHasVideo = 0;
 		pInstance->mVideoWorkMode = 0;
 		pInstance->mFccEnable = 0;
 		pInstance->mPaused = 0;
@@ -821,8 +821,8 @@ long mediasync_ins_alloc(s32 sDemuxId,
 			pInstance->mDemuxId = sDemuxId;
 			pInstance->mPcrPid = sPcrPid;
 			mediasync_ins_init_syncinfo(pInstance);
-			pInstance->mHasAudio = -1;
-			pInstance->mHasVideo = -1;
+			pInstance->mHasAudio = 0;
+			pInstance->mHasVideo = 0;
 			pInstance->mVideoWorkMode = 0;
 			pInstance->mFccEnable = 0;
 			pInstance->mSourceClockType = UNKNOWN_CLOCK;
@@ -923,8 +923,8 @@ long mediasync_static_ins_binder(s32 sSyncInsId,
 					//TODO add demuxID and pcr pid
 					pInstance->mDemuxId = -1;
 					pInstance->mPcrPid = -1;
-					pInstance->mHasAudio = -1;
-					pInstance->mHasVideo = -1;
+					pInstance->mHasAudio = 0;
+					pInstance->mHasVideo = 0;
 					pInstance->mVideoWorkMode = 0;
 					pInstance->mFccEnable = 0;
 					pInstance->mSourceClockType = UNKNOWN_CLOCK;
