@@ -3711,7 +3711,6 @@ static void dealloc_mv_bufs(struct hevc_state_s *hevc)
 		if (hevc->m_PIC[i] != NULL)
 			hevc->m_PIC[i]->mv_buf_index = -1;
 	}
-	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_INIT;
 }
 
 static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
@@ -15606,6 +15605,7 @@ static void reset(struct vdec_s *vdec)
 	reset_process_time(hevc);
 	hevc->pic_list_init_flag = 0;
 	dealloc_mv_bufs(hevc);
+	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_INIT;
 	aml_free_canvas(vdec);
 	hevc_local_uninit(hevc);
 	if (vh265_local_init(hevc) < 0)

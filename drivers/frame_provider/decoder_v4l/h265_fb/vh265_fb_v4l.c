@@ -3468,7 +3468,6 @@ static void dealloc_mv_bufs(struct hevc_state_s *hevc)
 		if (hevc->m_PIC[i] != NULL)
 			hevc->m_PIC[i]->mv_buf_index = -1;
 	}
-	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_INIT;
 }
 
 static int alloc_mv_buf(struct hevc_state_s *hevc, int i)
@@ -12120,6 +12119,9 @@ force_output:
 				H265_DEBUG_DIS_SYS_ERROR_PROC);
 #endif
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
+		vh265_buf_ref_process_for_exception(hevc);
+		if (vdec_frame_based(hw_to_vdec(hevc)))
+			vdec_v4l_post_error_frame_event(ctx);
 	}
 
 	if (efficiency_mode == 1) {
@@ -15082,6 +15084,7 @@ static void reset(struct vdec_s *vdec)
 	reset_process_time(hevc);
 	hevc->pic_list_init_flag = 0;
 	dealloc_mv_bufs(hevc);
+	hevc->pic_mv_buf_wait_alloc_done_flag = BUFFER_INIT;
 	h265_reset_frame_buffer(hevc);
 	aml_free_canvas(vdec);
 	if (!hevc->resolution_change)
