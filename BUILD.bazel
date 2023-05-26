@@ -40,6 +40,7 @@ kernel_module(
         "frame_provider/decoder_v4l/mpeg4/amvdec_mmpeg4_v4l.ko",
         "frame_provider/decoder_v4l/vav1/amvdec_av1_v4l.ko",
         "frame_provider/decoder_v4l/vav1_fb/amvdec_av1_fb_v4l.ko",
+        "frame_provider/decoder_v4l/vav1_t5d/amvdec_av1_t5d_v4l.ko",
         "frame_provider/decoder_v4l/vp9/amvdec_vp9_v4l.ko",
         "frame_provider/decoder_v4l/vp9_fb/amvdec_vp9_fb_v4l.ko",
         "frame_provider/decoder/vav1/amvdec_av1.ko",

@@ -861,7 +861,7 @@ retry:
 
 		v4l_dbg(ctx, V4L_DEBUG_VPP_BUFMGR,
 			"vpp_handle start: idx:(%d, %d), dec vf:%px/%d afbc:0x%lx, vpp vf:%px/%d, iphy:%lx/%lx %dx%d ophy:%lx/%lx %dx%d, %s %s "
-			"in:%d, out:%d, vf:%d, in done:%d, out done:%d",
+			"in:%d, out:%d, vf:%d, in done:%d, out done:%d, fgs_valid:%d",
 			in_buf->aml_vb->aml_buf->index,
 			out_buf->aml_vb->aml_buf->index,
 			in_buf->di_buf.vf,
@@ -882,7 +882,8 @@ retry:
 			kfifo_len(&vpp->output),
 			kfifo_len(&vpp->frame),
 			kfifo_len(&vpp->in_done_q),
-			kfifo_len(&vpp->out_done_q));
+			kfifo_len(&vpp->out_done_q),
+			in_buf->di_buf.vf->fgs_valid);
 
 		if (vpp->work_mode == VPP_MODE_S4_DW_MMU) {
 			vdec_tracing(&vpp->ctx->vtr, VTRACE_VPP_PIC_7,

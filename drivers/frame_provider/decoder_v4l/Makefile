@@ -11,4 +11,5 @@ obj-y	+=	avs3/
 obj-y	+=	vp9_fb/
 obj-y	+=	h265_fb/
 obj-y	+=	vav1_fb/
+obj-y	+=	vav1_t5d/
 obj-y	+=	avs2_fb/
