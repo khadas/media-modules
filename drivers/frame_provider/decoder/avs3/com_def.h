@@ -1529,7 +1529,7 @@ typedef struct avs3_frame_s{
 	struct canvas_config_s canvas_config[2];
 	int double_write_mode;
 
-	int stream_offset;
+	u32 stream_offset;
 	u32 pts;
 	u64 pts64;
 	/* picture qos information*/

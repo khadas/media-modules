@@ -4197,13 +4197,13 @@ static void set_vframe(struct AVS2Decoder_s *dec,
 	struct vframe_s *vf, struct avs2_frame_s *pic, u8 dummy)
 {
 	unsigned long flags;
-	int stream_offset;
+	u32 stream_offset = pic->stream_offset;
 	unsigned int frame_size = 0;
 	int pts_discontinue;
 	struct vdec_s *vdec = hw_to_vdec(dec);
 	struct aml_vcodec_ctx * v4l2_ctx = dec->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
-	stream_offset = pic->stream_offset;
+
 	avs2_print(dec, AVS2_DBG_BUFMGR,
 		"%s index = %d pos = %d\r\n",
 		__func__, pic->index,
@@ -4479,7 +4479,7 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 
 		if (vf) {
 			struct vdec_info tmp4x;
-			int stream_offset = pic->stream_offset;
+			u32 stream_offset = pic->stream_offset;
 
 
 			vf->v4l_mem_handle = dec->m_BUF[pic->BUF_index].v4l_ref_buf_addr;
@@ -4497,15 +4497,15 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			dec_update_gvs(dec);
 			/*count info*/
 			vdec_count_info(dec->gvs, 0, stream_offset);
-		if (stream_offset) {
-			if (pic->slice_type == I_IMG) {
-				dec->gvs->i_decoded_frames++;
-			} else if (pic->slice_type == P_IMG) {
-				dec->gvs->p_decoded_frames++;
-			} else if (pic->slice_type == B_IMG) {
-				dec->gvs->b_decoded_frames++;
+			if (stream_offset) {
+				if (pic->slice_type == I_IMG) {
+					dec->gvs->i_decoded_frames++;
+				} else if (pic->slice_type == P_IMG) {
+					dec->gvs->p_decoded_frames++;
+				} else if (pic->slice_type == B_IMG) {
+					dec->gvs->b_decoded_frames++;
+				}
 			}
-		}
 			memcpy(&tmp4x, dec->gvs, sizeof(struct vdec_info));
 			tmp4x.bit_depth_luma = bit_depth_luma;
 			tmp4x.bit_depth_chroma = bit_depth_chroma;

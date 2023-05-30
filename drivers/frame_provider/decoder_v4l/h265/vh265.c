@@ -1445,7 +1445,7 @@ struct PIC_s {
 	int RefNum_L0;
 	int RefNum_L1;
 	int num_reorder_pic;
-	int stream_offset;
+	unsigned int stream_offset;
 	unsigned char referenced;
 	unsigned char output_mark;
 	unsigned char recon_mark;
@@ -8732,7 +8732,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 {
 	struct hevc_state_s *hevc = (struct hevc_state_s *)vdec->private;
 	struct vframe_s *vf = NULL;
-	int stream_offset = pic->stream_offset;
+	unsigned int stream_offset = pic->stream_offset;
 	unsigned short slice_type = pic->slice_type;
 	ulong nv_order = VIDTYPE_VIU_NV21;
 	u32 frame_size = 0;

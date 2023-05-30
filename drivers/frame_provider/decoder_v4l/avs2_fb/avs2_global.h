@@ -778,7 +778,7 @@ struct avs2_frame_s {
 	int BUF_index;
 	int pic_w;
 	int pic_h;
-	int stream_offset;
+	u32 stream_offset;
 	u32 pts;
 	u64 pts64;
 	/**/

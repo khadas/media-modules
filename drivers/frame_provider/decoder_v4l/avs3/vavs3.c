@@ -5136,13 +5136,13 @@ static void fill_frame_info(struct AVS3Decoder_s *dec,
 static void set_vframe(struct AVS3Decoder_s *dec,
 	struct vframe_s *vf, struct avs3_frame_s *pic, u8 dummy)
 {
-	int stream_offset;
+	u32 stream_offset = pic->stream_offset;
 	unsigned int frame_size = 0;
 	int pts_discontinue;
 	struct vdec_s *vdec = hw_to_vdec(dec);
 	struct aml_vcodec_ctx * v4l2_ctx = dec->v4l2_ctx;
 	ulong nv_order = VIDTYPE_VIU_NV21;
-	stream_offset = pic->stream_offset;
+
 	avs3_print(dec, AVS3_DBG_BUFMGR,
 		"%s index = %d\r\n",
 		__func__, pic->index);
@@ -5495,7 +5495,8 @@ static int avs3_prepare_display_buf(struct AVS3Decoder_s *dec)
 		}
 		if (vf) {
 			struct vdec_info tmp4x;
-			int stream_offset = pic->stream_offset;
+			u32 stream_offset = pic->stream_offset;
+
 			aml_buf = index_to_aml_buf(dec, pic->BUF_index);
 			vf->v4l_mem_handle = (ulong)aml_buf;
 			vf->src_fmt.dv_id = v4l2_ctx->dv_id;
