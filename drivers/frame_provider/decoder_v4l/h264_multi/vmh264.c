@@ -1887,11 +1887,14 @@ static void  hevc_set_frame_done(struct vdec_h264_hw_s *hw)
 	return;
 }
 
+extern void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw);
+
 static void release_cur_decoding_buf(struct vdec_h264_hw_s *hw)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 	mutex_lock(&hw->pic_mutex);
 	if (p_H264_Dpb->mVideo.dec_picture) {
+		buf_ref_process_for_exception(hw);
 		release_picture(p_H264_Dpb,
 			p_H264_Dpb->mVideo.dec_picture);
 		p_H264_Dpb->mVideo.dec_picture->data_flag &= ~ERROR_FLAG;
@@ -6752,7 +6755,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 		return 0;
 }
 
-static void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
+void buf_ref_process_for_exception(struct vdec_h264_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	struct StorablePicture *dec_picture = hw->dpb.mVideo.dec_picture;
@@ -7042,12 +7045,9 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 				}
 
 				mutex_unlock(&hw->pic_mutex);
-				buf_ref_process_for_exception(hw);
 				release_cur_decoding_buf(hw);
 			}
 		}
-
-
 #endif
 
 		hw->reg_iqidct_control = READ_VREG(IQIDCT_CONTROL);
@@ -7388,7 +7388,6 @@ static irqreturn_t vh264_isr_thread_fn(struct vdec_s *vdec, int irq)
 					cfg_ret);
 				if (hw->error_proc_policy & 0x2) {
 					mutex_unlock(&hw->pic_mutex);
-					buf_ref_process_for_exception(hw);
 					if (input_frame_based(vdec))
 						vdec_v4l_post_error_frame_event(ctx);
 					else
@@ -7610,9 +7609,10 @@ empty_proc:
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
 			(!hw->frmbase_cont_flag && (dec_dpb_status == H264_SEARCH_BUFEMPTY || dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec))))
 			goto pic_done_proc;
-		buf_ref_process_for_exception(hw);
 		if (!hw->frmbase_cont_flag)
 			release_cur_decoding_buf(hw);
+		else
+			buf_ref_process_for_exception(hw);
 
 		if (input_frame_based(vdec) ||
 			(READ_VREG(VLD_MEM_VIFIFO_LEVEL) > 0x200)) {
@@ -7701,7 +7701,6 @@ send_again:
 		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
 		dpb_print(DECODE_ID(hw), 0,
 			"vmh264 decode oversize !!\n");
-		buf_ref_process_for_exception(hw);
 		if (input_frame_based(vdec))
 			vdec_v4l_post_error_frame_event(ctx);
 		else
@@ -10270,7 +10269,6 @@ result_done:
 
 	if (p_H264_Dpb->mVideo.dec_picture) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS, "%s, release decoded picture\n", __func__);
-		buf_ref_process_for_exception(hw);
 		release_cur_decoding_buf(hw);
 	}
 
