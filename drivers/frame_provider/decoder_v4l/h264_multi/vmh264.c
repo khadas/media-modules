@@ -2805,6 +2805,9 @@ static int check_force_interlace(struct vdec_h264_hw_s *hw, int width, int heigh
 	if (!ctx->force_di_permission)
 		return 0;
 
+	if (hw->enable_fence)
+		return 0;
+
 	if ((dec_control & DEC_CONTROL_FLAG_FORCE_2997_1080P_INTERLACE)
 		&& p_H264_Dpb->bitstream_restriction_flag
 		&& (width == 1920)
