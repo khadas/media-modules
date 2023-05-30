@@ -9842,12 +9842,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			hevc->no_need_aux_data = true;
 		}
 
-		if (hevc->no_need_aux_data) {
-			v4l2_ctx->aux_infos.free_one_sei_buffer(v4l2_ctx,
-				&hevc->m_PIC[index]->aux_data_buf,
-				&hevc->m_PIC[index]->aux_data_size,
-				hevc->m_PIC[index]->ctx_buf_idx);
-		} else {
+		if (!hevc->no_need_aux_data) {
 			if (!hevc->discard_dv_data)
 				v4l2_ctx->aux_infos.bind_dv_buffer(v4l2_ctx, &vf->src_fmt.comp_buf,
 					&vf->src_fmt.md_buf);

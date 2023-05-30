@@ -3397,12 +3397,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			hw->need_free_aux_data = true;
 		}
 
-		if (hw->need_free_aux_data) {
-			v4l2_ctx->aux_infos.free_one_sei_buffer(v4l2_ctx,
-				&hw->buffer_spec[buffer_index].aux_data_buf,
-				&hw->buffer_spec[buffer_index].aux_data_size,
-				hw->buffer_spec[buffer_index].ctx_buf_idx);
-		} else {
+		if (!hw->need_free_aux_data) {
 			if (!hw->discard_dv_data)
 				v4l2_ctx->aux_infos.bind_dv_buffer(v4l2_ctx,
 					&vf->src_fmt.comp_buf,

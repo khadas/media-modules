@@ -6281,21 +6281,15 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			hw->no_need_aux_data = true;
 		}
 
-		if (hw->no_need_aux_data) {
-			v4l2_ctx->aux_infos.free_buffer(v4l2_ctx, DV_TYPE | HDR10P_TYPE);
-			v4l2_ctx->aux_infos.free_one_sei_buffer(v4l2_ctx,
-				&pic_config->aux_data_buf,
-				&pic_config->aux_data_size,
-				pic_config->ctx_buf_idx);
-		} else {
+		if (!hw->no_need_aux_data) {
 			v4l2_ctx->aux_infos.bind_dv_buffer(v4l2_ctx, &vf->src_fmt.comp_buf,
 				&vf->src_fmt.md_buf);
-		}
 
-		update_vframe_src_fmt(vf,
-			pic_config->aux_data_buf,
-			pic_config->aux_data_size,
-			false, hw->provider_name, NULL);
+			update_vframe_src_fmt(vf,
+				pic_config->aux_data_buf,
+				pic_config->aux_data_size,
+				false, hw->provider_name, NULL);
+		}
 
 		av1_update_gvs(hw, vf, pic_config);
 		memcpy(&tmp4x, hw->gvs, sizeof(struct vdec_info));
