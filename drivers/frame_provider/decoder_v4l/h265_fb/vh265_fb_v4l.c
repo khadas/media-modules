@@ -11493,6 +11493,13 @@ force_output:
 			clear_poc_flag(hevc);
 			if (input_frame_based(vdec)) {
 				u32 shiftbyte = READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+				/*
+				  The s5 parse module needs to cache some data,
+				  so HEVC_SHIFT_BYTE_COUNT will be 8 bytes more than the actual.
+				*/
+				if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) &&
+					(shiftbyte > 8))
+					shiftbyte -= 8;
 				if (shiftbyte < 0x8 && (hevc->decode_size - shiftbyte) > 0x100) {
 					hevc_print(hevc, 0," shiftbytes 0x%x  decode_size 0x%x\n", shiftbyte, hevc->decode_size);
 					eos_in_head = true;
