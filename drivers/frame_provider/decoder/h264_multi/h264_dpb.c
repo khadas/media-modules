@@ -31,7 +31,7 @@
 
 #undef pr_info
 #define pr_info pr_cont
-int dpb_print(int index, int debug_flag, const char *fmt, ...)
+int dpb_debug(int index, int debug_flag, const char *fmt, ...)
 {
 	if (((h264_debug_flag & debug_flag) &&
 		((1 << index) & h264_debug_mask))
@@ -641,14 +641,14 @@ static void decode_poc(struct VideoParameters *p_Vid, struct Slice *pSlice)
 		/* Calculate the MSBs of current picture */
 		if (pSlice->pic_order_cnt_lsb < p_Vid->PrevPicOrderCntLsb &&
 		    (p_Vid->PrevPicOrderCntLsb - pSlice->pic_order_cnt_lsb) >=
-		    (MaxPicOrderCntLsb / 2))
+		    (MaxPicOrderCntLsb >> 1))
 			pSlice->PicOrderCntMsb = p_Vid->PrevPicOrderCntMsb +
 					MaxPicOrderCntLsb;
 		else if (pSlice->pic_order_cnt_lsb >
 				p_Vid->PrevPicOrderCntLsb &&
 			 (pSlice->pic_order_cnt_lsb -
 				p_Vid->PrevPicOrderCntLsb)  >
-				 (MaxPicOrderCntLsb / 2))
+				 (MaxPicOrderCntLsb >> 1))
 			pSlice->PicOrderCntMsb = p_Vid->PrevPicOrderCntMsb -
 					MaxPicOrderCntLsb;
 		else
@@ -1192,7 +1192,7 @@ static struct StorablePicture *get_new_pic(struct h264_dpb_stru *p_H264_Dpb,
 		s->top_poc = s->bottom_poc = s->poc = 0;
 		s->seiHasTone_mapping = 0;
 		s->frame_mbs_only_flag = p_Vid->active_sps->frame_mbs_only_flag;
-
+#if 0
 		if (!p_Vid->active_sps->frame_mbs_only_flag &&
 			structure != FRAME) {
 			int i, j;
@@ -1211,6 +1211,7 @@ static struct StorablePicture *get_new_pic(struct h264_dpb_stru *p_H264_Dpb,
 				}
 			}
 		}
+#endif
 	} else
 		p_H264_Dpb->buf_alloc_fail = 1;
 	dpb_print(p_H264_Dpb->decoder_index, PRINT_FLAG_DPB_DETAIL,
@@ -3854,7 +3855,7 @@ recurse:
 		 * simply picking the middle element for the latter case.
 		 */
 
-		mid = lo + (size / 2) * width;      /* find middle element */
+		mid = lo + (size >> 1) * width;      /* find middle element */
 
 		/* Sort the first, middle, last elements into order */
 		if (__COMPARE(context, lo, mid) > 0)

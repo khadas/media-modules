@@ -932,7 +932,17 @@ struct h264_dpb_stru {
 extern unsigned int h264_debug_flag;
 extern unsigned int h264_debug_mask;
 
-int dpb_print(int indext, int debug_flag, const char *fmt, ...);
+int dpb_debug(int indext, int debug_flag, const char *fmt, ...);
+
+#define dpb_print(index, flag, fmt, args...) \
+	do { \
+		if ((flag == 0) || \
+			((h264_debug_mask & (1 << index)) \
+			&& (h264_debug_flag & flag))) { \
+			dpb_debug(index, flag, fmt, ##args); \
+		} \
+	} while (0)
+
 
 int dpb_print_cont(int index, int debug_flag, const char *fmt, ...);
 

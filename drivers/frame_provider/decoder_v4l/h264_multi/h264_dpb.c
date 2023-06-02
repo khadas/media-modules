@@ -31,7 +31,7 @@
 
 #undef pr_info
 #define pr_info pr_cont
-int dpb_print(int index, int debug_flag, const char *fmt, ...)
+int dpb_debug(int index, int debug_flag, const char *fmt, ...)
 {
 	if (((h264_debug_flag & debug_flag) &&
 		((1 << index) & h264_debug_mask))
@@ -568,14 +568,14 @@ static void decode_poc(struct VideoParameters *p_Vid, struct Slice *pSlice)
 		/* Calculate the MSBs of current picture */
 		if (pSlice->pic_order_cnt_lsb < p_Vid->PrevPicOrderCntLsb &&
 		    (p_Vid->PrevPicOrderCntLsb - pSlice->pic_order_cnt_lsb) >=
-		    (MaxPicOrderCntLsb / 2))
+		    (MaxPicOrderCntLsb >> 1))
 			pSlice->PicOrderCntMsb = p_Vid->PrevPicOrderCntMsb +
 					MaxPicOrderCntLsb;
 		else if (pSlice->pic_order_cnt_lsb >
 				p_Vid->PrevPicOrderCntLsb &&
 			 (pSlice->pic_order_cnt_lsb -
 				p_Vid->PrevPicOrderCntLsb)  >
-				 (MaxPicOrderCntLsb / 2))
+				 (MaxPicOrderCntLsb >> 1))
 			pSlice->PicOrderCntMsb = p_Vid->PrevPicOrderCntMsb -
 					MaxPicOrderCntLsb;
 		else
@@ -3505,7 +3505,7 @@ recurse:
 		 * simply picking the middle element for the latter case.
 		 */
 
-		mid = lo + (size / 2) * width;      /* find middle element */
+		mid = lo + (size >> 1) * width;      /* find middle element */
 
 		/* Sort the first, middle, last elements into order */
 		if (__COMPARE(context, lo, mid) > 0)

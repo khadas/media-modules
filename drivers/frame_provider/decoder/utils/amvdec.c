@@ -59,6 +59,7 @@ struct timer_list amvdevtimer;
 #define AMVDEC_USE_STATIC_MEMORY
 static void *mc_addr;
 static dma_addr_t mc_addr_map;
+static void *addr_mc[9];
 
 static void *mc_addr_dbe;
 static dma_addr_t mc_addr_map_dbe;
@@ -353,6 +354,90 @@ static s32 am_loadmc_ex(enum vformat_e type,
 	return err;
 }
 
+static s32 am_loadmc_vdec_ex(struct vdec_s *vdec,
+		const char *name, char *def, s32(*load)(const u32 *, int))
+{
+	int err;
+	char *pmc_addr = NULL;
+
+	if (!vdec->mc_loaded) {
+		if (!def) {
+			err = get_decoder_firmware_data(vdec->format,
+						name, (u8 *)(vdec->mc),
+						(4096 * 4 * 4));
+			if (err <= 0)
+				return -1;
+		} else
+			pmc_addr = def;
+			//memcpy((char *)vdec->mc, def, sizeof(vdec->mc));
+
+		vdec->mc_loaded = true;
+	}
+
+	err = (*load)((u32 *) pmc_addr, vdec->id);
+	if (err < 0) {
+		pr_err("loading firmware %s to vdec ram  failed!\n", name);
+		return err;
+	}
+
+	return err;
+}
+
+static s32 aml_loadmc_vdec(const u32 *p, int id)
+{
+	ulong timeout;
+	s32 ret = 0;
+
+#ifdef AMVDEC_USE_STATIC_MEMORY
+	if (addr_mc[id] == NULL) {
+#else
+	{
+#endif
+		addr_mc[id] = kmalloc(MC_SIZE, GFP_KERNEL);
+		memcpy(addr_mc[id], p, MC_SIZE);
+
+	}
+
+	if (!addr_mc[id])
+		return -ENOMEM;
+
+	mc_addr_map = dma_map_single(get_vdec_device(),
+		addr_mc[id], MC_SIZE, DMA_TO_DEVICE);
+
+	WRITE_VREG(MPSR, 0);
+	WRITE_VREG(CPSR, 0);
+
+	/* Read CBUS register for timing */
+	timeout = READ_VREG(MPSR);
+	timeout = READ_VREG(MPSR);
+
+	timeout = jiffies + HZ;
+
+	WRITE_VREG(IMEM_DMA_ADR, mc_addr_map);
+	WRITE_VREG(IMEM_DMA_COUNT, 0x1000);
+	WRITE_VREG(IMEM_DMA_CTRL, (0x8000 | (7 << 16)));
+
+	while (READ_VREG(IMEM_DMA_CTRL) & 0x8000) {
+		if (time_before(jiffies, timeout))
+			schedule();
+		else {
+			pr_err("vdec load mc error\n");
+			ret = -EBUSY;
+			break;
+		}
+	}
+
+	dma_unmap_single(get_vdec_device(),
+		mc_addr_map, MC_SIZE, DMA_TO_DEVICE);
+
+#ifndef AMVDEC_USE_STATIC_MEMORY
+	kfree(addr_mc[id]);
+	addr_mc[id] = NULL;
+#endif
+
+	return ret;
+}
+
 static s32 amvdec_loadmc(const u32 *p)
 {
 	ulong timeout;
@@ -608,7 +693,7 @@ s32 amvdec_vdec_loadmc_ex(enum vformat_e type, const char *name,
 	if (tee_enabled())
 		return optee_load_fw(type, name);
 	else
-		return am_vdec_loadmc_ex(vdec, name, def, &amvdec_loadmc);
+		return am_loadmc_vdec_ex(vdec, name, def, &aml_loadmc_vdec);
 }
 EXPORT_SYMBOL(amvdec_vdec_loadmc_ex);
 

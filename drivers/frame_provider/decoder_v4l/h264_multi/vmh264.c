@@ -984,6 +984,8 @@ static void set_frame_info(struct vdec_h264_hw_s *hw, struct vframe_s *vf,
 static void h264_clear_dpb(struct vdec_h264_hw_s *hw);
 #endif
 static int h264_reset_frame_buffer(struct vdec_h264_hw_s *hw);
+static void vh264_work_implement(struct vdec_h264_hw_s *hw,
+	struct vdec_s *vdec, int from);
 
 
 #define		H265_PUT_SAO_4K_SET			0x03
@@ -1215,7 +1217,8 @@ static int  compute_losless_comp_header_size(int width, int height)
 static int get_dw_size(struct vdec_h264_hw_s *hw, u32 *pdw_buffer_size_u_v_h)
 {
 	int pic_width, pic_height;
-	int lcu_size = 16;
+	int lcu_size_log = 4;
+	int lcu_size = 1 << lcu_size_log;
 	int dw_buf_size;
 	u32 dw_buffer_size_u_v;
 	u32 dw_buffer_size_u_v_h;
@@ -1231,15 +1234,15 @@ static int get_dw_size(struct vdec_h264_hw_s *hw, u32 *pdw_buffer_size_u_v_h)
 			get_double_write_ratio(hw->double_write_mode);
 
 		int pic_width_lcu_dw = (pic_width_dw % lcu_size) ?
-			pic_width_dw / lcu_size + 1 :
-			pic_width_dw / lcu_size;
+			(pic_width_dw >> lcu_size_log) + 1 :
+			pic_width_dw >> lcu_size_log;
 		int pic_height_lcu_dw = (pic_height_dw % lcu_size) ?
-			pic_height_dw / lcu_size + 1 :
-			pic_height_dw / lcu_size;
+			(pic_height_dw >> lcu_size_log) + 1 :
+			pic_height_dw >> lcu_size_log;
 		int lcu_total_dw = pic_width_lcu_dw * pic_height_lcu_dw;
 
 
-		dw_buffer_size_u_v = lcu_total_dw * lcu_size * lcu_size / 2;
+		dw_buffer_size_u_v = ((lcu_total_dw << lcu_size_log) << lcu_size_log) >> 1;
 		dw_buffer_size_u_v_h = (dw_buffer_size_u_v + 0xffff) >> 16;
 		/*64k alignment*/
 		dw_buf_size = ((dw_buffer_size_u_v_h << 16) * 3);
@@ -3614,11 +3617,11 @@ void print_pic_info(int decindex, const char *info,
 static void reset_process_time(struct vdec_h264_hw_s *hw)
 {
 	if (hw->start_process_time) {
-		unsigned process_time =
-			1000 * (jiffies - hw->start_process_time) / HZ;
+//		unsigned process_time =
+//			1000 * (jiffies - hw->start_process_time) / HZ;
 		hw->start_process_time = 0;
-		if (process_time > max_process_time[DECODE_ID(hw)])
-			max_process_time[DECODE_ID(hw)] = process_time;
+//		if (process_time > max_process_time[DECODE_ID(hw)])
+//			max_process_time[DECODE_ID(hw)] = process_time;
 	}
 }
 
@@ -4382,11 +4385,11 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 		if (cur_structure < 2) {
 			//current_field_structure
 			if (l10_structure != 2) {
-				colocate_rd_adr_offset = pSlice->first_mb_in_slice * 2;
+				colocate_rd_adr_offset = pSlice->first_mb_in_slice << 1;
 			} else {
 				// field_ref_from_frame co_mv_rd_addr :
 				// mby*2*mb_width + mbx
-				colocate_rd_adr_offset = mby * 2 * mb_width + mbx;
+				colocate_rd_adr_offset = (mby << 1) * mb_width + mbx;
 			}
 
 		} else {
@@ -4395,12 +4398,12 @@ int config_decode_buf(struct vdec_h264_hw_s *hw, struct StorablePicture *pic)
 				//calculate_co_mv_offset_frame_ref_field:
 				// frame_ref_from_field co_mv_rd_addr :
 				// (mby/2*mb_width+mbx)*2
-				colocate_rd_adr_offset = ((mby / 2) * mb_width + mbx) * 2;
+				colocate_rd_adr_offset = ((mby >> 1) * mb_width + mbx) << 1;
 			} else if (cur_structure == 2) {
 				colocate_rd_adr_offset = pSlice->first_mb_in_slice;
 			} else {
 				//mbaff frame case1196
-				colocate_rd_adr_offset = pSlice->first_mb_in_slice * 2;
+				colocate_rd_adr_offset = pSlice->first_mb_in_slice << 1;
 			}
 
 		}
@@ -6237,7 +6240,7 @@ static int get_bits(unsigned char buffer[],
 
 	int bitcounter = numbits;
 
-	byteoffset = totbitoffset / 8;
+	byteoffset = totbitoffset >> 3;
 	bitoffset = 7 - (totbitoffset % 8);
 
 	inf = 0;
@@ -7490,7 +7493,7 @@ pic_done_proc:
 		if (hw->frmbase_cont_flag && one_packet_multi_frames_multi_run) {
 			hw->dec_result = DEC_RESULT_UNFINISH;
 		}
-		vdec_schedule_work(&hw->work);
+		vh264_work_implement(hw, vdec, 0);
 
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 	} else if (
@@ -7679,7 +7682,7 @@ send_again:
 						sei_data_buf[i]
 							= trans_data_buf[i*2];
 
-					aux_data_len = aux_data_len / 2;
+					aux_data_len = aux_data_len >> 1;
 					for (i = 0; i < aux_data_len; i = i+4) {
 						swap_byte = sei_data_buf[i];
 						sei_data_buf[i]
@@ -8665,7 +8668,7 @@ static void wait_vmh264_search_done(struct vdec_h264_hw_s *hw)
 	u32 vld_rp = READ_VREG(VLD_MEM_VIFIFO_RP);
 	int count = 0;
 	do {
-		usleep_range(100, 500);
+		usleep_range(100, 101);
 		if (vld_rp == READ_VREG(VLD_MEM_VIFIFO_RP))
 			break;
 		if (count > 2000) {
