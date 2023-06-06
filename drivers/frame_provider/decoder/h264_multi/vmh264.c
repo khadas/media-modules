@@ -3276,6 +3276,13 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	if (bForceInterlace)
 		vf_count = 2;
 
+	if (frame->frame != NULL &&
+			(frame->frame->pic_struct == PIC_TOP_BOT_TOP ||
+			 frame->frame->pic_struct == PIC_BOT_TOP_BOT ||
+			 frame->frame->pic_struct == PIC_TRIPLE_FRAME)){
+		vf_count = 3;
+	}
+
 	if (!hw->enable_fence)
 		hw->buffer_spec[buffer_index].vf_ref = 0;
 	fill_frame_info(hw, frame);
@@ -3430,16 +3437,22 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 			if (frame->frame != NULL &&
 				(frame->frame->pic_struct == PIC_TOP_BOT ||
-				frame->frame->pic_struct == PIC_BOT_TOP) &&
+				frame->frame->pic_struct == PIC_BOT_TOP  ||
+				frame->frame->pic_struct == PIC_TOP_BOT_TOP ||
+				frame->frame->pic_struct == PIC_BOT_TOP_BOT) &&
 				frame->frame->coded_frame) {
-				if (frame->frame != NULL && frame->frame->pic_struct == PIC_TOP_BOT) {
+				if (frame->frame != NULL && (frame->frame->pic_struct == PIC_TOP_BOT ||
+					frame->frame->pic_struct == PIC_TOP_BOT_TOP)) {
 				vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_TOP :
-					VIDTYPE_INTERLACE_BOTTOM);
-				} else if (frame->frame != NULL && frame->frame->pic_struct == PIC_BOT_TOP) {
+					i == 1?VIDTYPE_INTERLACE_BOTTOM :
+					VIDTYPE_INTERLACE_TOP);
+				} else if (frame->frame != NULL && (frame->frame->pic_struct == PIC_BOT_TOP ||
+					frame->frame->pic_struct == PIC_BOT_TOP_BOT)) {
 					vf->type |= (i == 0 ?
 					VIDTYPE_INTERLACE_BOTTOM :
-					VIDTYPE_INTERLACE_TOP);
+					i == 1?VIDTYPE_INTERLACE_TOP :
+					VIDTYPE_INTERLACE_BOTTOM);
 				}
 			} else if (frame->top_field != NULL && frame->bottom_field != NULL) {/*top first*/
 				if (frame->top_field->poc <= frame->bottom_field->poc)
@@ -3461,8 +3474,8 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					VIDTYPE_INTERLACE_TOP :
 					VIDTYPE_INTERLACE_BOTTOM);
 			}
-			vf->duration = vf->duration/2;
-			if (i == 1) {
+			vf->duration = vf->duration / vf_count;
+			if (i >= 1) {
 				vf->pts = 0;
 				vf->pts_us64 = 0;
 			}
@@ -3473,6 +3486,11 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 					__func__, __LINE__, vf->type, frame->frame->pic_struct,
 					vf->pts, vf->pts_us64, bForceInterlace);
 			}
+		}else if (frame->frame != NULL &&
+			 (frame->frame->pic_struct == PIC_DOUBLE_FRAME ||
+			 frame->frame->pic_struct == PIC_TRIPLE_FRAME) && i >= 1){
+			vf->pts = 0;
+			vf->pts_us64 = 0;
 		}
 
 		if (hw->i_only) {
