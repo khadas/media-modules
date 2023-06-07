@@ -172,6 +172,12 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
 
+	[AM_MESON_CPU_MAJOR_ID_C1 - MAJOR_ID_START] = {
+		.chip_id = AM_MESON_CPU_MAJOR_ID_C1,
+		.reg_compat = NULL,
+	},
+
+
 	[AM_MESON_CPU_MAJOR_ID_SC2 - MAJOR_ID_START] = {
 		.chip_id = AM_MESON_CPU_MAJOR_ID_SC2,
 		.reg_compat = NULL,
@@ -460,6 +466,10 @@ static const struct of_device_id cpu_ver_of_match[] = {
 	{
 		.compatible = "amlogic, cpu-major-id-tm2",
 		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_TM2 - MAJOR_ID_START],
+	},
+	{
+		.compatible = "amlogic, cpu-major-id-c1",
+		.data = &dos_dev_data[AM_MESON_CPU_MAJOR_ID_C1 - MAJOR_ID_START],
 	},
 	{
 		.compatible = "amlogic, cpu-major-id-sc2",

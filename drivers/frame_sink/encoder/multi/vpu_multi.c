@@ -118,6 +118,7 @@ struct vpu_clks {
 };
 
 static struct vpu_clks s_vpu_clks;
+static struct platform_device *multienc_pdev;
 
 #ifdef CONFIG_COMPAT
 static struct file *file_open(const char *path, int flags, int rights)
@@ -279,24 +280,29 @@ static void vpu_clk_enable(struct vpu_clks *clks)
 	clk_set_rate(clks->dos_clk, freq * MHz);
 	clk_set_rate(clks->dos_apb_clk, freq * MHz);
 
-	if (clock_a > 0) {
-		enc_pr(LOG_INFO, "vpu_multi: desired clock_a freq %u\n", clock_a);
-		clk_set_rate(clks->a_clk, clock_a);
-	} else
-		clk_set_rate(clks->a_clk, 666666666);
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) {
+		if (clock_a > 0) {
+			enc_pr(LOG_INFO, "vpu_multi: desired clock_a freq %u\n", clock_a);
+			clk_set_rate(clks->a_clk, clock_a);
+		} else
+			clk_set_rate(clks->a_clk, 666666666);
 
-	if (clock_b > 0) {
-		enc_pr(LOG_INFO, "vpu_multi: desired clock_b freq %u\n", clock_b);
-		clk_set_rate(clks->b_clk, clock_b);
-	} else
-		clk_set_rate(clks->b_clk, 500 * MHz);
+		if (clock_b > 0) {
+			enc_pr(LOG_INFO, "vpu_multi: desired clock_b freq %u\n", clock_b);
+			clk_set_rate(clks->b_clk, clock_b);
+		} else
+			clk_set_rate(clks->b_clk, 500 * MHz);
 
-	if (clock_c > 0) {
-		enc_pr(LOG_INFO, "vpu_multi: desired clock_c freq %u\n", clock_c);
-		clk_set_rate(clks->c_clk, clock_c);
-	} else
-		clk_set_rate(clks->c_clk, 500 * MHz);
-
+		if (clock_c > 0) {
+			enc_pr(LOG_INFO, "vpu_multi: desired clock_c freq %u\n", clock_c);
+			clk_set_rate(clks->c_clk, clock_c);
+		} else
+			clk_set_rate(clks->c_clk, 500 * MHz);
+	} else {
+		clk_set_rate(clks->a_clk, freq * MHz);
+		clk_set_rate(clks->b_clk, freq * MHz);
+		clk_set_rate(clks->c_clk, freq * MHz);
+	}
 	clk_prepare_enable(clks->dos_clk);
 	clk_prepare_enable(clks->dos_apb_clk);
 	clk_prepare_enable(clks->a_clk);
@@ -315,9 +321,9 @@ static void vpu_clk_enable(struct vpu_clks *clks)
 		mdelay(5);
 		enc_pr(LOG_INFO, "wave power stauts after poweron: %d\n", vdec_on(VDEC_WAVE));
 	} else {
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, true);
+		pm_runtime_get_sync(&multienc_pdev->dev);
 		mdelay(5);
-		enc_pr(LOG_INFO, "wave power stauts after poweron: %lu\n", pwr_ctrl_status_psci_smc(PDID_T7_DOS_WAVE));
+		enc_pr(LOG_INFO, "wave power stauts after poweron: %d\n", pm_runtime_active(&multienc_pdev->dev));
 	}
 
 	/* reset */
@@ -358,9 +364,9 @@ static void vpu_clk_disable(struct vpu_clks *clks)
 		mdelay(5);
 		enc_pr(LOG_INFO, "wave power stauts after poweroff: %d\n", vdec_on(VDEC_WAVE));
 	} else {
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, false);
+		pm_runtime_put_sync(&multienc_pdev->dev);
 		mdelay(5);
-		enc_pr(LOG_INFO, "wave power stauts after poweroff: %lu\n", pwr_ctrl_status_psci_smc(PDID_T7_DOS_WAVE));
+		enc_pr(LOG_INFO, "wave power stauts after poweroff: %d\n", pm_runtime_active(&multienc_pdev->dev));
 	}
 }
 
@@ -389,7 +395,6 @@ static DEFINE_SEMAPHORE(s_vpu_sem);
 static struct list_head s_vbp_head = LIST_HEAD_INIT(s_vbp_head);
 static struct list_head s_inst_list_head = LIST_HEAD_INIT(s_inst_list_head);
 static struct tasklet_struct multienc_tasklet;
-static struct platform_device *multienc_pdev;
 
 static struct vpu_bit_firmware_info_t s_bit_firmware_info[MAX_NUM_VPU_CORE];
 
@@ -3169,6 +3174,7 @@ static s32 vpu_probe(struct platform_device *pdev)
 
 	enc_pr(LOG_DEBUG, "to be allocate from CMA pool_size 0x%lx\n", cma_pool_size);
 	multienc_pdev = pdev;
+	pm_runtime_enable(&multienc_pdev->dev);
 
 	return 0;
 
@@ -3322,7 +3328,7 @@ static s32 vpu_suspend(struct platform_device *pdev, pm_message_t state)
 			clk_disable(s_vpu_clks.a_clk);
 		}
 		/* the power off */
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, false);
+		pm_runtime_put_sync(&multienc_pdev->dev);
 	}
 	return 0;
 
@@ -3355,7 +3361,7 @@ static s32 vpu_resume(struct platform_device *pdev)
 		}
 		vpu_clk_config(1);
 		/* the power on */
-		pwr_ctrl_psci_smc(PDID_T7_DOS_WAVE, true);
+		pm_runtime_get_sync(&multienc_pdev->dev);
 		for (core = 0; core < MAX_NUM_VPU_CORE; core++) {
 			if (s_bit_firmware_info[core].size == 0)
 				continue;
@@ -3446,11 +3452,6 @@ static s32 __init vpu_init(void)
 	s32 res;
 
 	enc_pr(LOG_DEBUG, "vpu_init\n");
-
-	if (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T7) {
-		enc_pr(LOG_ERROR, "The chip is not support multi encoder!!\n");
-		return -1;
-	}
 
 	res = platform_driver_register(&vpu_driver);
 	enc_pr(LOG_INFO,

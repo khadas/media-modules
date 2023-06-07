@@ -741,10 +741,19 @@ static void jpeg_enc_clk_enable(struct jpeg_enc_clks *clks, u32 frq)
         jenc_pr(LOG_INFO, "apb clk: %ld\n", clk_get_rate(clks->dos_apb_clk));
     }
 
-    if (clks->jpeg_enc_clk != NULL) {
-        clk_set_rate(clks->jpeg_enc_clk, 666666666);
-        clk_prepare_enable(clks->jpeg_enc_clk);
-        jenc_pr(LOG_INFO, "jpegenc clk: %ld\n", clk_get_rate(clks->jpeg_enc_clk));
+    if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_C1) {
+        if (clks->jpeg_enc_clk != NULL) {
+            clk_set_rate(clks->jpeg_enc_clk, 400 * MHz);
+            clk_prepare_enable(clks->jpeg_enc_clk);
+            jenc_pr(LOG_INFO, "jpegenc clk: %ld\n", clk_get_rate(clks->jpeg_enc_clk));
+        }
+    }
+    else {
+        if (clks->jpeg_enc_clk != NULL) {
+            clk_set_rate(clks->jpeg_enc_clk, 666666666);
+            clk_prepare_enable(clks->jpeg_enc_clk);
+            jenc_pr(LOG_INFO, "jpegenc clk: %ld\n", clk_get_rate(clks->jpeg_enc_clk));
+        }
     }
 
     /*
@@ -2264,7 +2273,8 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
     pic_width = wq->cmd.encoder_width;
     pic_height = wq->cmd.encoder_height;
 
-    if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2)) {
         q_sel_comp0 = QUANT_SEL_COMP0 & 0xff;
         q_sel_comp1 = QUANT_SEL_COMP1 & 0xff;
         q_sel_comp2 = QUANT_SEL_COMP2 & 0xff;
@@ -2362,7 +2372,8 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
     WRITE_HREG(HCODEC_QDCT_JPEG_QUANT_ADDR, data32);
 
     /* Burst-write Quantization LUT data */
-    if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_C1)
+        || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2)) {
         write_jpeg_quant_lut(0);
         if (q_sel_comp0 != q_sel_comp1)
             write_jpeg_quant_lut(1);
@@ -2387,7 +2398,8 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
     if (dc_huff_sel_comp1 != dc_huff_sel_comp0)
         write_jpeg_huffman_lut_dc(dc_huff_sel_comp1);
 
-    if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2)) {
         if ((dc_huff_sel_comp2 != dc_huff_sel_comp0)
             && (dc_huff_sel_comp2 != dc_huff_sel_comp1))
             write_jpeg_huffman_lut_dc(dc_huff_sel_comp2);
@@ -2404,7 +2416,8 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
     if (ac_huff_sel_comp1 != ac_huff_sel_comp0)
         write_jpeg_huffman_lut_ac(ac_huff_sel_comp1);
 
-    if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2)) {
         if ((ac_huff_sel_comp2 != ac_huff_sel_comp0)
             && (ac_huff_sel_comp2 != ac_huff_sel_comp1))
             write_jpeg_huffman_lut_ac(ac_huff_sel_comp2);
@@ -2506,7 +2519,8 @@ static void init_jpeg_encoder(struct jpegenc_wq_s *wq)
         (0 << 1) | /* mb_read_en */
         (0 << 0)); /* soft reset */
 
-    if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2)) {
         // INIT_ENCODER
         WRITE_HREG(HCODEC_VLC_TOTAL_BYTES, 0);
         WRITE_HREG(HCODEC_VLC_INT_CONTROL, 0);// disable vlc interrupt
@@ -2682,7 +2696,8 @@ static void mfdin_basic_jpeg(
     else
         mfdin_input_mode = 1;
 
-    if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2)
+    if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2))
         mfdin_input_mode = 2;
 
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXBB) {
@@ -2910,7 +2925,8 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
         //picsize_y = ((cmd->encoder_height + 15) >> 4) << 4;
         picsize_y = cmd->encoder_height;
 
-        if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
+        if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+            && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2)) {
             /*
              * mfdin in  fmt:  0:422 single, 1:444 single, 2:NV21, 3:NV12, 4:420 plane, 5:444 plane
              * mfdin out fmt:  0:420, 1:422, 2:444
@@ -3408,7 +3424,8 @@ static irqreturn_t jpegenc_isr(s32 irq_number, void *para)
         return IRQ_NONE;
 
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1) {
-        if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)
+        if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
+            || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2))
             WRITE_HREG(HCODEC_ASSIST_MBOX2_CLR_REG, 1);
         else
             WRITE_HREG(HCODEC_ASSIST_MBOX0_CLR_REG, 1);
@@ -3507,8 +3524,10 @@ s32 jpegenc_loadmc(const char *p)
         memset(mc_addr, 0, MC_SIZE);
     }
 
-    ret = get_data_from_name("gxl_jpeg_enc", (u8 *)mc_addr);
-    //ret = get_firmware_data(VIDEO_ENC_JPEG, (u8 *)mc_addr);
+    if (get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_C1)
+        ret = get_data_from_name("gxl_jpeg_enc", (u8 *)mc_addr);
+    else
+        ret = get_firmware_data(VIDEO_ENC_JPEG, (u8 *)mc_addr);
 
     dump_mem(mc_addr);
 
@@ -3574,7 +3593,7 @@ static s32 jpegenc_poweron_ex(u32 clock)
         vdec_poweron(VDEC_HCODEC);
         jenc_pr(LOG_INFO, "hcodec power status after poweron:%d\n", vdec_on(VDEC_HCODEC));
     } else {
-        pwr_ctrl_psci_smc(PDID_T7_DOS_HCODEC, true);
+        pm_runtime_get_sync(&gJpegenc.this_pdev->dev);
     }
 
     /*
@@ -3603,7 +3622,7 @@ static s32 jpegenc_poweroff_ex(void)
         vdec_poweroff(VDEC_HCODEC);
         jenc_pr(LOG_INFO, "hcodec power status after poweroff:%d\n", vdec_on(VDEC_HCODEC));
     } else
-        pwr_ctrl_psci_smc(PDID_T7_DOS_HCODEC, false);
+        pm_runtime_put_sync(&gJpegenc.this_pdev->dev);
 
     /* power off HCODEC memories */
     WRITE_VREG(DOS_MEM_PD_HCODEC, 0xffffffffUL);
@@ -3637,7 +3656,8 @@ static s32 jpegenc_poweron(u32 clock)
 
     //spin_lock_irqsave(&lock, flags);
 
-    if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_C1)
+        || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2)) {
         data32 = 0;
         amports_switch_gate("vdec", 1);
 
@@ -3695,7 +3715,8 @@ static s32 jpegenc_poweroff(void)
     //ulong flags;
     //spin_lock_irqsave(&lock, flags);
 
-    if (get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_C1)
+        || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2)) {
         if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) {
             jpeg_enc_clk_disable(&g_jpeg_enc_clks);
             pwr_ctrl_psci_smc(PDID_SC2_DOS_HCODEC, false);
@@ -3757,7 +3778,8 @@ static s32 jpegenc_init(void)
 
     jenc_pr(LOG_ALL, "start to load microcode\n");
 
-    if (!legacy_load && (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2 )) {
+    if (!legacy_load && ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7 )
+        || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2 ))) {
         char *buf = vmalloc(0x1000 * 16);
         int ret = -1;
         jenc_pr(LOG_INFO, "load ucode\n");
@@ -3869,7 +3891,8 @@ static void jpegenc_start_cmd(struct jpegenc_wq_s *wq)
 
     /* clear mailbox interrupt */
     if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1) {
-        if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2)
+        if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
+            || (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2))
             WRITE_HREG(HCODEC_ASSIST_MBOX2_CLR_REG, 1);
         else
             WRITE_HREG(HCODEC_ASSIST_MBOX0_CLR_REG, 1);
@@ -3877,7 +3900,8 @@ static void jpegenc_start_cmd(struct jpegenc_wq_s *wq)
         WRITE_HREG(HCODEC_ASSIST_MBOX2_CLR_REG, 1);
 
     /* enable mailbox interrupt */
-    if (get_cpu_major_id() > AM_MESON_CPU_MAJOR_ID_SC2) {
+    if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_C1)
+        && (get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_SC2)) {
         if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
             WRITE_HREG(HCODEC_ASSIST_MBOX2_MASK, 0xffffffff);
         else
@@ -4933,6 +4957,7 @@ static s32 jpegenc_probe(struct platform_device *pdev)
             return -1;
         }
     }
+    pm_runtime_enable(&gJpegenc.this_pdev->dev);
 
     jenc_pr(LOG_DEBUG, "jpegenc probe end.\n");
     return 0;

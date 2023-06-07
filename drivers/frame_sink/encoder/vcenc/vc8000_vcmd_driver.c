@@ -653,7 +653,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 		return -EFAULT;
 
 	enc_pr(LOG_INFO,
-		"dma_unmap planes %d fd: %d-%d-%d, phy_add: 0x%lx-%lx-%lx\n",
+		"dma_unmap planes %d fd: %d-%d-%d, phy_add: 0x%x-%x-%x\n",
 		pinfo->num_planes, pinfo->fd[0],pinfo->fd[1], pinfo->fd[2],
 		pinfo->phys_addr[0], pinfo->phys_addr[1], pinfo->phys_addr[2]);
 
@@ -667,7 +667,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 				if (phys_addr != pinfo->phys_addr[0]) {
 					enc_pr(LOG_ERROR, "dma_unmap plane 0");
 					enc_pr(LOG_ERROR, " no match ");
-					enc_pr(LOG_ERROR, "0x%lx %lx\n",
+					enc_pr(LOG_ERROR, "0x%lx %x\n",
 						phys_addr, pinfo->phys_addr[0]);
 				}
 				found = 1;
@@ -678,7 +678,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 				if (phys_addr != pinfo->phys_addr[1]) {
 					enc_pr(LOG_ERROR, "dma_unmap plane 1");
 					enc_pr(LOG_ERROR, " no match ");
-					enc_pr(LOG_ERROR, "0x%lx %lx\n",
+					enc_pr(LOG_ERROR, "0x%lx %x\n",
 						phys_addr, pinfo->phys_addr[1]);
 				}
 				plane_idx++;
@@ -689,7 +689,7 @@ static s32 vers_src_addr_unmap(struct versdrv_dma_buf_info_t *pinfo,
 				if (phys_addr != pinfo->phys_addr[2]) {
 					enc_pr(LOG_ERROR, "dma_unmap plane 2");
 					enc_pr(LOG_ERROR, " no match ");
-					enc_pr(LOG_ERROR, "0x%lx %lx\n",
+					enc_pr(LOG_ERROR, "0x%lx %x\n",
 						phys_addr, pinfo->phys_addr[2]);
 				}
 				plane_idx++;
@@ -1906,7 +1906,7 @@ static long hantrovcmd_ioctl(struct file *filp, unsigned int cmd,
 				dma_info.phys_addr[2] = dst.addr;
 			}
 
-			enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS: 0x%lx 0x%lx 0x%lx\n",
+			enc_pr(LOG_ALL,"[+]HANTRO_IOCTL_READ_CANVAS: 0x%x 0x%x 0x%x\n",
 			dma_info.phys_addr[0],
 			dma_info.phys_addr[1],
 			dma_info.phys_addr[2]);
@@ -3019,7 +3019,7 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 	}
 
 	vaddr = dma_alloc_coherent(&pf_dev->dev, alloc_size_byte, &paddr, GFP_KERNEL);
-	pr_info("------- vaddr: %lpx, paddr: %lx\n", vaddr, paddr);
+	pr_info("------- vaddr: %p, paddr: %llx\n", vaddr, paddr);
 	g_vcmd_base_hdwr = 0xfe380000;
 	pr_info("Base hw val 0x%llx\n", (unsigned long long)g_vcmd_base_hdwr);
 
@@ -3061,7 +3061,7 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 	//sam test
 	*(vcmd_buf_mem_pool.virtualAddress+1) = 0x10;
 
-	pr_info("sam debug >> virtualAddress1 = 0x%lx.\n",
+	pr_info("sam debug >> virtualAddress1 = 0x%x.\n",
 			*(vcmd_buf_mem_pool.virtualAddress+1));
 	//end
 
@@ -3082,7 +3082,7 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 	//sam test
 	*(vcmd_status_buf_mem_pool.virtualAddress+1) = 0x11;
 
-	pr_info("sam debug >> virtualAddress1 = 0x%lx.\n",
+	pr_info("sam debug >> virtualAddress1 = 0x%x.\n",
 			*(vcmd_status_buf_mem_pool.virtualAddress+1));
 	//end
 
@@ -3104,7 +3104,7 @@ static int vcmd_pcie_init(struct platform_device *pf_dev)
 
 	//sam test
     *(vcmd_registers_mem_pool.virtualAddress+1) = 0x22;
-    pr_info("sam debug >> virtualAddress1 = 0x%llx.\n",
+    pr_info("sam debug >> virtualAddress1 = 0x%x.\n",
 		*(vcmd_registers_mem_pool.virtualAddress+1));
 	//end
 	return 0;

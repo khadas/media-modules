@@ -283,7 +283,7 @@ static int memalloc_init(struct platform_device *pf_dev)
 
     vaddr = dma_alloc_coherent(&pf_dev->dev, alloc_size*SZ_1M, &paddr, GFP_KERNEL);
     //vaddr = codec_mm_vmap(paddr, 32 * SZ_1M);
-    pr_info("------- vaddr: %lpx, paddr: %lx\n", vaddr, paddr);
+    pr_info("------- vaddr: %px, paddr: %llx\n", vaddr, paddr);
 
     alloc_base = paddr;
     pr_info("memalloc: alloc_size = 0x%x,Linear memory base = %px\n", alloc_size,
