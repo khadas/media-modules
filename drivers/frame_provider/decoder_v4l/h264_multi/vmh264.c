@@ -7396,7 +7396,10 @@ pic_done_proc:
 			mutex_lock(&hw->pic_mutex);
 			if (hw->dpb.mVideo.dec_picture)
 				hw->dpb.mVideo.dec_picture->data_flag |= ERROR_FLAG;
+			else
+				vdec_v4l_post_error_frame_event(ctx);
 			mutex_unlock(&hw->pic_mutex);
+
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 				"%s, mark err_frame\n", __func__);
 		}
