@@ -380,7 +380,8 @@ bool is_support_no_parser(void)
 {
 	if ((enable_stream_mode_multi_dec) ||
 		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_SC2) ||
-		(get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7))
+		((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7) &&
+		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)))
 		return true;
 	return false;
 }
