@@ -10524,15 +10524,17 @@ force_output:
 					eos_in_head = true;
 				}
 			}
-			WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_DISCARD_NAL);
-			/* Interrupt Amrisc to execute */
-			WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
 
 			/* eos is in the head of the chunk and followed by sps/pps/IDR
 			  * so need to go on decoding
 			  */
-			if (eos_in_head)
+			if (eos_in_head) {
+				WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_DISCARD_NAL);
+				/* Interrupt Amrisc to execute */
+				WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
+
 				return IRQ_HANDLED;
+			}
 
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag) {
