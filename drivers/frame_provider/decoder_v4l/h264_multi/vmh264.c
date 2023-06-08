@@ -10819,6 +10819,8 @@ static void reset(struct vdec_s *vdec)
 	}
 	hw->eos = 0;
 	hw->decode_pic_count = 0;
+	hw->dec_result = DEC_RESULT_NONE;
+	hw->multi_frame_unfinish = 0;
 
 	reset_process_time(hw);
 	h264_reset_bufmgr_v4l(vdec, 0, true);
