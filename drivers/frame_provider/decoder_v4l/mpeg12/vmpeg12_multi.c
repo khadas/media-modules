@@ -3954,6 +3954,7 @@ static void reset(struct vdec_s *vdec)
 	hw->first_field_timestamp_valid = false;
 	hw->eos 		= 0;
 	hw->aml_buf		= NULL;
+	hw->dec_result = DEC_RESULT_NONE;
 
 	atomic_set(&hw->disp_num, 0);
 	atomic_set(&hw->get_num, 0);
