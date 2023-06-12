@@ -629,14 +629,14 @@ struct PIC_BUFFER_CONFIG_s {
 	unsigned long mc_y_adr;
 	unsigned long mc_u_v_adr;
 #endif
-	unsigned int dw_y_adr;
-	unsigned int dw_u_v_adr;
+	ulong dw_y_adr;
+	ulong dw_u_v_adr;
 
 	u32 luma_size;
 	u32 chroma_size;
 
-	u32 tw_y_adr;
-	u32 tw_u_v_adr;
+	ulong tw_y_adr;
+	ulong tw_u_v_adr;
 
 	//int tw_y_canvas_index;
 	//int tw_uv_canvas_index;
@@ -7660,7 +7660,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	WRITE_VREG(HEVC_SAO_C_LENGTH, pic_config->chroma_size);
 
 	if (debug & PRINT_FLAG_V4L_DETAIL) {
-		pr_info("[%d] config pic, id: %d, Y:(%x, %d) C:(%x, %d).\n",
+		pr_info("[%d] config pic, id: %d, Y:(%lx, %d) C:(%lx, %d).\n",
 			v4l2_ctx->id, pic_config->index,
 			pic_config->dw_y_adr, pic_config->luma_size,
 			pic_config->dw_u_v_adr, pic_config->chroma_size);
@@ -7704,7 +7704,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 			WRITE_VREG(HEVC_SAO_CTRL3, data32);
 
 			if (debug & PRINT_FLAG_V4L_DETAIL) {
-				pr_info("[%d] config tw, id: %d, Y:(%x, %d) C:(%x, %d).\n",
+				pr_info("[%d] config tw, id: %d, Y:(%lx, %d) C:(%lx, %d).\n",
 					v4l2_ctx->id, pic_config->index,
 					pic_config->tw_y_adr, pic_config->luma_size_tw,
 					pic_config->tw_u_v_adr, pic_config->chroma_size_tw);
