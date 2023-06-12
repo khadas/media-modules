@@ -151,13 +151,14 @@ static int task_item_put(struct task_item_s *item)
 	return kref_put(&item->ref, task_item_release);
 }
 
-static void task_buffer_submit(struct task_chain_s *task,
+static int task_buffer_submit(struct task_chain_s *task,
 			       enum task_type_e type)
 {
 	struct aml_buf *aml_buf =
 		(struct aml_buf *)task->obj;
 	struct task_item_s *item = NULL;
 	struct task_item_s *item2 = NULL;
+	int ret = 0;
 
 	memset(task->vf_tmp, 0, sizeof(struct vframe_s));
 
@@ -182,13 +183,22 @@ static void task_buffer_submit(struct task_chain_s *task,
 			task->direction = TASK_DIR_SUBMIT;
 
 			task_item_put(item2);
-		} else
+
+			ret = 0;
+		} else {
 			v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
 				"TSK(%px):%d get item:%d fail.\n", task, task->id, type);
+			ret = -1;
+		}
 		task_item_put(item);
-	} else
+
+	} else {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
 			"TSK(%px):%d get item:%d fail.\n", task, task->id, type);
+		ret = -1;
+	}
+
+	return ret;
 }
 
 static void task_buffer_recycle(struct task_chain_s *task,

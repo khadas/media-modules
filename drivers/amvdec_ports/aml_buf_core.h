@@ -160,7 +160,7 @@ struct buf_core_ops {
 	void	(*put)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*get_ref)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*put_ref)(struct buf_core_mgr_s *, struct buf_core_entry *);
-	void	(*done)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
+	int	(*done)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void	(*fill)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	int	(*ready_num)(struct buf_core_mgr_s *);
 	bool	(*empty)(struct buf_core_mgr_s *);
@@ -220,7 +220,7 @@ struct buf_core_mgr_s {
 	void	(*reset)(struct buf_core_mgr_s *);
 	void	(*prepare)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	void	(*input)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
-	void	(*output)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
+	int	(*output)(struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 	void    (*external_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	int	(*get_pre_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
 

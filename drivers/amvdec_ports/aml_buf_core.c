@@ -305,10 +305,12 @@ static void buf_core_put_ref(struct buf_core_mgr_s *bc,
 	mutex_unlock(&bc->mutex);
 }
 
-static void buf_core_done(struct buf_core_mgr_s *bc,
+static int buf_core_done(struct buf_core_mgr_s *bc,
 			   struct buf_core_entry *entry,
 			   enum buf_core_user user)
 {
+	int ret = 0;
+
 	mutex_lock(&bc->mutex);
 
 	if (!bc_sanity_check(bc)) {
@@ -318,6 +320,7 @@ static void buf_core_done(struct buf_core_mgr_s *bc,
 	if (WARN_ON((entry->state != BUF_STATE_USE) &&
 		(entry->state != BUF_STATE_REF) &&
 		(entry->state != BUF_STATE_DONE))) {
+		ret = -1;
 		goto out;
 	}
 
@@ -333,9 +336,11 @@ static void buf_core_done(struct buf_core_mgr_s *bc,
 
 	entry->state = BUF_STATE_DONE;
 
-	bc->output(bc, entry, user);
+	ret = bc->output(bc, entry, user);
 out:
 	mutex_unlock(&bc->mutex);
+
+	return ret;
 }
 
 static void buf_core_fill(struct buf_core_mgr_s *bc,

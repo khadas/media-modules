@@ -113,11 +113,11 @@ static inline bool aml_buf_empty(struct aml_buf_mgr_s *bm)
  *
  * The done interface is called if the user finishes fill the data.
  */
-static inline void aml_buf_done(struct aml_buf_mgr_s *bm,
+static inline int aml_buf_done(struct aml_buf_mgr_s *bm,
 			       struct aml_buf *buf,
 			       enum buf_core_user user)
 {
-	bm->bc.buf_ops.done(&bm->bc, &buf->entry, user);
+	return bm->bc.buf_ops.done(&bm->bc, &buf->entry, user);
 }
 
 /*

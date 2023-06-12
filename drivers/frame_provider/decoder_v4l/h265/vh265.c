@@ -9386,23 +9386,31 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vh265_vf_put(vh265_vf_get(vdec), vdec);
 			} else {
 				if (hevc->send_frame_flag == 1) {
-					 while (kfifo_len(&hevc->display_q)) {
+					int ret = 0;
+
+					while (kfifo_len(&hevc->display_q)) {
 						if (hevc->pair_fb[0] != NULL && hevc->pair_fb[1] != NULL) {
-								set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
+							set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
 
-								vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, hevc->pair_fb[0]->index);
-								aml_buf_done(&v4l2_ctx->bm, hevc->pair_fb[0], BUF_USER_DEC);
+							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, hevc->pair_fb[0]->index);
+							ret = aml_buf_done(&v4l2_ctx->bm, hevc->pair_fb[0], BUF_USER_DEC);
 
-								vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, hevc->pair_fb[1]->index);
-								aml_buf_done(&v4l2_ctx->bm, hevc->pair_fb[1], BUF_USER_DEC);
+							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, hevc->pair_fb[1]->index);
+							ret |= aml_buf_done(&v4l2_ctx->bm, hevc->pair_fb[1], BUF_USER_DEC);
 
-								clear_pair_fb(hevc);
-							} else {
-								set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
+							clear_pair_fb(hevc);
+						} else {
+							set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
 
-								vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
-								aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
-							}
+							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+							ret = aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+						}
+						if (ret) {
+							hevc_print(hevc, 0,"%s, disp_q len %d, buf done fail\n",
+								__func__, kfifo_len(&hevc->display_q));
+							//vh265_vf_put(vh265_vf_get(vdec), vdec);
+							break;
+						}
 					}
 				}
 			}

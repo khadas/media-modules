@@ -639,7 +639,7 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 		aml_creat_pipeline(bm->priv, buf, entry->user);
 }
 
-static void aml_buf_output(struct buf_core_mgr_s *bc,
+static int aml_buf_output(struct buf_core_mgr_s *bc,
 			  struct buf_core_entry *entry,
 			  enum buf_core_user user)
 {
@@ -647,7 +647,7 @@ static void aml_buf_output(struct buf_core_mgr_s *bc,
 	struct aml_buf *buf = entry_to_aml_buf(entry);
 
 	if (task_chain_empty(buf->task))
-		return;
+		return -1;
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -660,7 +660,7 @@ static void aml_buf_output(struct buf_core_mgr_s *bc,
 		kref_read(&bc->core_ref),
 		bc->free_num);
 
-	buf->task->submit(buf->task, user_to_task(user));
+	return buf->task->submit(buf->task, user_to_task(user));
 }
 
 static void aml_buf_input(struct buf_core_mgr_s *bc,
