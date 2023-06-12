@@ -9482,8 +9482,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			if (hevc->mmu_enable)
 				vf->type |= VIDTYPE_SCATTER;
 		}
-		vf->compWidth = pic->crop_w;
-		vf->compHeight = pic->crop_h;
+		vf->compWidth = pic->width;
+		vf->compHeight = pic->height;
 		switch (pic->bit_depth_luma) {
 		case 9:
 			vf->bitdepth = BITDEPTH_Y9;
@@ -10407,6 +10407,8 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	u32 SubWidthC, SubHeightC;
 	u32 width = rpm_param->p.pic_width_in_luma_samples;
 	u32 height = rpm_param->p.pic_height_in_luma_samples;
+	u32 coded_width = width;
+	u32 coded_height = height;
 
 	switch (rpm_param->p.chroma_format_idc) {
 	case 1:
@@ -10438,8 +10440,8 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 	height <<= hevc->interlace_flag;
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
-	ps->coded_width 	= ALIGN(width, 64);
-	ps->coded_height 	= ALIGN(height, 64);
+	ps->coded_width 	= ALIGN(coded_width, 64);
+	ps->coded_height 	= ALIGN(coded_height, 64);
 	ps->field 		= hevc->interlace_flag ? V4L2_FIELD_INTERLACED : V4L2_FIELD_NONE;
 	ps->dpb_frames		= v4l_parser_work_pic_num(hevc);
 	ps->dpb_margin		= get_dynamic_buf_num_margin(hevc);
