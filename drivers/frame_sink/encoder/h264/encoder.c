@@ -87,8 +87,8 @@
 		__FUNCTION__, __LINE__, _ret);}
 
 #define ENCODE_NAME "encoder"
-#define AMVENC_CANVAS_INDEX 0x64
-#define AMVENC_CANVAS_MAX_INDEX 0x6F
+#define AMVENC_CANVAS_INDEX 0xE4
+#define AMVENC_CANVAS_MAX_INDEX 0xEF
 
 #define MIN_SIZE amvenc_buffspec[0].min_buffsize
 #define DUMP_INFO_BYTES_PER_MB 80
@@ -111,7 +111,7 @@ static struct encode_manager_s encode_manager;
 #define H264_ENC_CBR
 /* #define MORE_MODULE_PARAM */
 
-#define ENC_CANVAS_OFFSET  AMVENC_CANVAS_INDEX
+#define ENC_CANVAS_OFFSET  0x64
 
 #define UCODE_MODE_FULL 0
 
@@ -131,6 +131,7 @@ static u32 qp_table_debug;
 static u32 use_reset_control;
 static u32 use_ge2d;
 static u32 dump_input;
+static unsigned int enc_canvas_offset;
 
 #ifdef H264_ENC_SVC
 static u32 svc_enable = 0; /* Enable sac feature or not */
@@ -911,30 +912,30 @@ static void avc_canvas_init(struct encode_wq_s *wq)
 	canvas_width = ((wq->pic.encoder_width + 31) >> 5) << 5;
 	canvas_height = ((wq->pic.encoder_height + 15) >> 4) << 4;
 
-	canvas_config_proxy(ENC_CANVAS_OFFSET,
+	canvas_config_proxy(enc_canvas_offset,
 	      start_addr + wq->mem.bufspec.dec0_y.buf_start,
 	      canvas_width, canvas_height,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config_proxy(1 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(1 + enc_canvas_offset,
 	      start_addr + wq->mem.bufspec.dec0_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 	/*here the third plane use the same address as the second plane*/
-	canvas_config_proxy(2 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(2 + enc_canvas_offset,
 	      start_addr + wq->mem.bufspec.dec0_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 
-	canvas_config_proxy(3 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(3 + enc_canvas_offset,
 	      start_addr + wq->mem.bufspec.dec1_y.buf_start,
 	      canvas_width, canvas_height,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
-	canvas_config_proxy(4 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(4 + enc_canvas_offset,
 	      start_addr + wq->mem.bufspec.dec1_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 	/*here the third plane use the same address as the second plane*/
-	canvas_config_proxy(5 + ENC_CANVAS_OFFSET,
+	canvas_config_proxy(5 + enc_canvas_offset,
 	      start_addr + wq->mem.bufspec.dec1_uv.buf_start,
 	      canvas_width, canvas_height / 2,
 	      CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
@@ -1005,13 +1006,13 @@ static void avc_buffspec_init(struct encode_wq_s *wq)
 		            wq->mem.bufspec.cbr_info.buf_size);
 
 	wq->mem.dblk_buf_canvas =
-		((ENC_CANVAS_OFFSET + 2) << 16) |
-		((ENC_CANVAS_OFFSET + 1) << 8) |
-		(ENC_CANVAS_OFFSET);
+		((enc_canvas_offset + 2) << 16) |
+		((enc_canvas_offset + 1) << 8) |
+		(enc_canvas_offset);
 	wq->mem.ref_buf_canvas =
-		((ENC_CANVAS_OFFSET + 5) << 16) |
-		((ENC_CANVAS_OFFSET + 4) << 8) |
-		(ENC_CANVAS_OFFSET + 3);
+		((enc_canvas_offset + 5) << 16) |
+		((enc_canvas_offset + 4) << 8) |
+		(enc_canvas_offset + 3);
 }
 
 static void avc_init_ie_me_parameter(struct encode_wq_s *wq, u32 quant)
@@ -1323,83 +1324,83 @@ static int scale_frame(struct encode_wq_s *wq,
 			|| (request->fmt == FMT_NV12)) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
-			canvas_config(ENC_CANVAS_OFFSET + 9,
+			canvas_config(enc_canvas_offset + 9,
 				src_addr,
 				src_canvas_w, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 10,
+			canvas_config(enc_canvas_offset + 10,
 				src_addr + src_canvas_w * src_h,
 				src_canvas_w, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
 			src_canvas =
-				((ENC_CANVAS_OFFSET + 10) << 8)
-				| (ENC_CANVAS_OFFSET + 9);
+				((enc_canvas_offset + 10) << 8)
+				| (enc_canvas_offset + 9);
 			input_format = GE2D_FORMAT_M24_NV21;
 		} else if (request->fmt == FMT_BGR888) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
 
-			canvas_config(ENC_CANVAS_OFFSET + 9,
+			canvas_config(enc_canvas_offset + 9,
 				src_addr,
 				src_canvas_w * 3, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			src_canvas = ENC_CANVAS_OFFSET + 9;
+			src_canvas = enc_canvas_offset + 9;
 			input_format = GE2D_FORMAT_S24_RGB; //Opposite color after ge2d
 		} else if (request->fmt == FMT_RGBA8888) {
 			src_canvas_w =
 				((request->src_w + 31) >> 5) << 5;
 			canvas_config(
-				ENC_CANVAS_OFFSET + 9,
+				enc_canvas_offset + 9,
 				src_addr,
 				src_canvas_w * 4,
 				src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			src_canvas = ENC_CANVAS_OFFSET + 9;
+			src_canvas = enc_canvas_offset + 9;
 			input_format = GE2D_FORMAT_S32_ABGR; //Opposite color after ge2d
 		} else {
 			src_canvas_w =
 				((request->src_w + 63) >> 6) << 6;
-			canvas_config(ENC_CANVAS_OFFSET + 9,
+			canvas_config(enc_canvas_offset + 9,
 				src_addr,
 				src_canvas_w, src_h,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 10,
+			canvas_config(enc_canvas_offset + 10,
 				src_addr + src_canvas_w * src_h,
 				src_canvas_w / 2, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config(ENC_CANVAS_OFFSET + 11,
+			canvas_config(enc_canvas_offset + 11,
 				src_addr + src_canvas_w * src_h * 5 / 4,
 				src_canvas_w / 2, src_h / 2,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
 			src_canvas =
-				((ENC_CANVAS_OFFSET + 11) << 16) |
-				((ENC_CANVAS_OFFSET + 10) << 8) |
-				(ENC_CANVAS_OFFSET + 9);
+				((enc_canvas_offset + 11) << 16) |
+				((enc_canvas_offset + 10) << 8) |
+				(enc_canvas_offset + 9);
 			input_format = GE2D_FORMAT_M24_YUV420;
 		}
 	}
 
 	dst_canvas_w =  ((dst_w + 31) >> 5) << 5;
 
-	canvas_config(ENC_CANVAS_OFFSET + 6,
+	canvas_config(enc_canvas_offset + 6,
 		wq->mem.scaler_buff_start_addr,
 		dst_canvas_w, dst_h,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 
-	canvas_config(ENC_CANVAS_OFFSET + 7,
+	canvas_config(enc_canvas_offset + 7,
 		wq->mem.scaler_buff_start_addr + dst_canvas_w * dst_h,
 		dst_canvas_w, dst_h / 2,
 		CANVAS_ADDR_NOWRAP, CANVAS_BLKMODE_LINEAR);
 
-	dst_canvas = ((ENC_CANVAS_OFFSET + 7) << 8) |
-		(ENC_CANVAS_OFFSET + 6);
+	dst_canvas = ((enc_canvas_offset + 7) << 8) |
+		(enc_canvas_offset + 6);
 
 	ge2d_config->alu_const_color = 0;
 	ge2d_config->bitmask_en  = 0;
@@ -1624,8 +1625,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				false);
 			iformat = 2;
 			r2y_en = 0;
-			input = ((ENC_CANVAS_OFFSET + 7) << 8) |
-				(ENC_CANVAS_OFFSET + 6);
+			input = ((enc_canvas_offset + 7) << 8) |
+				(enc_canvas_offset + 6);
 			ret = 0;
 
 			if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) || \
@@ -1638,19 +1639,19 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
 				iformat = 2;
 
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(enc_canvas_offset + 6,
 					wq->mem.scaler_buff_start_addr,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(enc_canvas_offset + 7,
 					wq->mem.scaler_buff_start_addr + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 
-				input = ((ENC_CANVAS_OFFSET + 7) << 8) |
-					(ENC_CANVAS_OFFSET + 6);
+				input = ((enc_canvas_offset + 7) << 8) |
+					(enc_canvas_offset + 6);
 			}
 
 			goto MFDIN;
@@ -1676,12 +1677,12 @@ static s32 set_input_format(struct encode_wq_s *wq,
 			else
 				canvas_w = (picsize_x * 20 + 7) / 8;
 			canvas_w = ((canvas_w + 31) >> 5) << 5;
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(enc_canvas_offset + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			input = ENC_CANVAS_OFFSET + 6;
+			input = enc_canvas_offset + 6;
 			input = input & 0xff;
 		} else if (request->fmt == FMT_YUV422_SINGLE)
 			iformat = 10;
@@ -1692,105 +1693,105 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				r2y_en = 1;
 			canvas_w =  picsize_x * 3;
 			canvas_w = ((canvas_w + 31) >> 5) << 5;
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(enc_canvas_offset + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			input = ENC_CANVAS_OFFSET + 6;
+			input = enc_canvas_offset + 6;
 		} else if ((request->fmt == FMT_NV21)
 			|| (request->fmt == FMT_NV12)) {
 			canvas_w = pitch;//((wq->pic.encoder_width + 31) >> 5) << 5;
 			iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 			if (request->type == DMA_BUFF) {
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(enc_canvas_offset + 6,
 					input_y,
 					canvas_w, h_pitch,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(enc_canvas_offset + 7,
 					input_u,
 					canvas_w, h_pitch / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(enc_canvas_offset + 6,
 					input,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(enc_canvas_offset + 7,
 					input + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			}
-			input = ((ENC_CANVAS_OFFSET + 7) << 8) |
-				(ENC_CANVAS_OFFSET + 6);
+			input = ((enc_canvas_offset + 7) << 8) |
+				(enc_canvas_offset + 6);
 		} else if (request->fmt == FMT_YUV420) {
 			iformat = 4;
 			canvas_w = ((wq->pic.encoder_width + 63) >> 6) << 6;
 			if (request->type == DMA_BUFF) {
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(enc_canvas_offset + 6,
 					input_y,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(enc_canvas_offset + 7,
 					input_u,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
+				canvas_config_proxy(enc_canvas_offset + 8,
 					input_v,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 			} else {
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(enc_canvas_offset + 6,
 					input,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(enc_canvas_offset + 7,
 					input + canvas_w * picsize_y,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
+				canvas_config_proxy(enc_canvas_offset + 8,
 					input + canvas_w * picsize_y * 5 / 4,
 					canvas_w / 2, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 
 			}
-			input = ((ENC_CANVAS_OFFSET + 8) << 16) |
-				((ENC_CANVAS_OFFSET + 7) << 8) |
-				(ENC_CANVAS_OFFSET + 6);
+			input = ((enc_canvas_offset + 8) << 16) |
+				((enc_canvas_offset + 7) << 8) |
+				(enc_canvas_offset + 6);
 		} else if ((request->fmt == FMT_YUV444_PLANE)
 			|| (request->fmt == FMT_RGB888_PLANE)) {
 			if (request->fmt == FMT_RGB888_PLANE)
 				r2y_en = 1;
 			iformat = 5;
 			canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+			canvas_config_proxy(enc_canvas_offset + 6,
 				input,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+			canvas_config_proxy(enc_canvas_offset + 7,
 				input + canvas_w * picsize_y,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			canvas_config_proxy(ENC_CANVAS_OFFSET + 8,
+			canvas_config_proxy(enc_canvas_offset + 8,
 				input + canvas_w * picsize_y * 2,
 				canvas_w, picsize_y,
 				CANVAS_ADDR_NOWRAP,
 				CANVAS_BLKMODE_LINEAR);
-			input = ((ENC_CANVAS_OFFSET + 8) << 16) |
-				((ENC_CANVAS_OFFSET + 7) << 8) |
-				(ENC_CANVAS_OFFSET + 6);
+			input = ((enc_canvas_offset + 8) << 16) |
+				((enc_canvas_offset + 7) << 8) |
+				(enc_canvas_offset + 6);
 		} else if (request->fmt == FMT_RGBA8888) {
 			r2y_en = 1;
 			iformat = 12;
@@ -1810,8 +1811,8 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				input, true);
 			iformat = 2;
 			r2y_en = 0;
-			input = ((ENC_CANVAS_OFFSET + 7) << 8) |
-				(ENC_CANVAS_OFFSET + 6);
+			input = ((enc_canvas_offset + 7) << 8) |
+				(enc_canvas_offset + 6);
 			ret = 0;
 
 			/*
@@ -1820,19 +1821,19 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				canvas_w = ((wq->pic.encoder_width + 31) >> 5) << 5;
 				iformat = 2;
 
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 6,
+				canvas_config_proxy(enc_canvas_offset + 6,
 					wq->mem.scaler_buff_start_addr,
 					canvas_w, picsize_y,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
-				canvas_config_proxy(ENC_CANVAS_OFFSET + 7,
+				canvas_config_proxy(enc_canvas_offset + 7,
 					wq->mem.scaler_buff_start_addr + canvas_w * picsize_y,
 					canvas_w, picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 
-				input = ((ENC_CANVAS_OFFSET + 7) << 8) |
-					(ENC_CANVAS_OFFSET + 6);
+				input = ((enc_canvas_offset + 7) << 8) |
+					(enc_canvas_offset + 6);
 			}
 			*/
 
@@ -1872,7 +1873,7 @@ static s32 set_input_format(struct encode_wq_s *wq,
 				iformat = (request->fmt == FMT_NV21) ? 2 : 3;
 
 				canvas_config_proxy(
-					ENC_CANVAS_OFFSET + 6,
+					enc_canvas_offset + 6,
 					y_addr,
 					canvas_w,
 					picsize_y,
@@ -1880,15 +1881,15 @@ static s32 set_input_format(struct encode_wq_s *wq,
 					CANVAS_BLKMODE_LINEAR);
 
 				canvas_config_proxy(
-					ENC_CANVAS_OFFSET + 7,
+					enc_canvas_offset + 7,
 					uv_addr,
 					canvas_w,
 					picsize_y / 2,
 					CANVAS_ADDR_NOWRAP,
 					CANVAS_BLKMODE_LINEAR);
 
-				input = ((ENC_CANVAS_OFFSET + 7) << 8) |
-					(ENC_CANVAS_OFFSET + 6);
+				input = ((enc_canvas_offset + 7) << 8) |
+					(enc_canvas_offset + 6);
 			}
 		} else if (request->fmt == FMT_YUV420) {
 			iformat = 4;
@@ -3754,7 +3755,7 @@ static long amvenc_avc_ioctl(struct file *file, u32 cmd, ulong arg)
 	memset(&dst, 0, sizeof(struct canvas_s));
 	switch (cmd) {
 	case AMVENC_AVC_IOC_GET_ADDR:
-		if ((wq->mem.ref_buf_canvas & 0xff) == (ENC_CANVAS_OFFSET))
+		if ((wq->mem.ref_buf_canvas & 0xff) == (enc_canvas_offset))
 			put_user(1, (u32 *)arg);
 		else
 			put_user(2, (u32 *)arg);
@@ -4132,7 +4133,7 @@ Again:
 			if (request->flush_flag & AMVENC_FLUSH_FLAG_REFERENCE) {
 				u32 ref_id = ENCODER_BUFFER_REF0;
 
-				if ((wq->mem.ref_buf_canvas & 0xff) == (ENC_CANVAS_OFFSET))
+				if ((wq->mem.ref_buf_canvas & 0xff) == (enc_canvas_offset))
 					ref_id = ENCODER_BUFFER_REF0;
 				else
 					ref_id = ENCODER_BUFFER_REF1;
@@ -4604,6 +4605,12 @@ static s32 encode_wq_init(void)
 	encode_manager.wq_count = 0;
 	encode_manager.remove_flag = false;
 	spin_unlock(&encode_manager.event.sem_lock);
+
+	if (is_support_vdec_canvas())
+		enc_canvas_offset = ENC_CANVAS_OFFSET;
+	else
+		enc_canvas_offset = AMVENC_CANVAS_INDEX;
+
 	InitEncodeWeight();
 	if (encode_start_monitor()) {
 		enc_pr(LOG_ERROR, "encode create thread error.\n");

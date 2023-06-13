@@ -73,10 +73,10 @@
 #include "encoder.h"
 #endif
 
-#define JPEGENC_CANVAS_INDEX 0x64
-#define JPEGENC_CANVAS_MAX_INDEX 0x67
+#define JPEGENC_CANVAS_INDEX 0xE4
+#define JPEGENC_CANVAS_MAX_INDEX 0xE7
 
-#define ENC_CANVAS_OFFSET  JPEGENC_CANVAS_INDEX
+#define ENC_CANVAS_OFFSET  0x64
 
 #define LOG_ALL 0
 #define LOG_INFO 1
@@ -132,6 +132,7 @@ static u32 g_canvas_height;
 static u32 jpeg_in_full_hcodec;
 static u32 mfdin_ambus_canv_conv;
 static u32 dump_input;
+static unsigned int enc_canvas_offset;
 
 #define MHz (1000000)
 
@@ -3097,12 +3098,12 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
                     else
                         canvas_w = (picsize_x * 20 + 7) / 8;
                     canvas_w = ((canvas_w + 31) >> 5) << 5;
-                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                    canvas_config_proxy(enc_canvas_offset,
                         input,
                         canvas_w, picsize_y,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    input = ENC_CANVAS_OFFSET;
+                    input = enc_canvas_offset;
                     input = input & 0xff;
     #endif
                 } else if (cmd->input_fmt == JPEGENC_FMT_YUV422_SINGLE) {
@@ -3111,12 +3112,12 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
     #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                     canvas_w = picsize_x * 2;
                     canvas_w = ((canvas_w + 31) >> 5) << 5;
-                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                    canvas_config_proxy(enc_canvas_offset,
                         input,
                         canvas_w, picsize_y,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    input = ENC_CANVAS_OFFSET;
+                    input = enc_canvas_offset;
     #endif
                 } else if ((cmd->input_fmt == JPEGENC_FMT_YUV444_SINGLE)
                     || (cmd->input_fmt == JPEGENC_FMT_RGB888)) {
@@ -3127,53 +3128,53 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
     #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                     canvas_w = picsize_x * 3;
                     canvas_w = ((canvas_w + 31) >> 5) << 5;
-                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                    canvas_config_proxy(enc_canvas_offset,
                         input,
                         canvas_w, picsize_y,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    input = ENC_CANVAS_OFFSET;
+                    input = enc_canvas_offset;
     #endif
                 } else if ((cmd->input_fmt == JPEGENC_FMT_NV21)
                     || (cmd->input_fmt == JPEGENC_FMT_NV12)) {
                     iformat = (cmd->input_fmt == JPEGENC_FMT_NV21) ? 2 : 3;
     #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                     canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
-                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                    canvas_config_proxy(enc_canvas_offset,
                         input,
                         canvas_w, picsize_y,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                    canvas_config_proxy(enc_canvas_offset + 1,
                         input + canvas_w * picsize_y, canvas_w,
                         picsize_y / 2, CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    input = ((ENC_CANVAS_OFFSET + 1) << 8) |
-                        ENC_CANVAS_OFFSET;
+                    input = ((enc_canvas_offset + 1) << 8) |
+                        enc_canvas_offset;
     #endif
                 } else if (cmd->input_fmt == JPEGENC_FMT_YUV420) {
                     iformat = 4;
 
     #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                     canvas_w = ((cmd->encoder_width + 63) >> 6) << 6;
-                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                    canvas_config_proxy(enc_canvas_offset,
                         input,
                         canvas_w, picsize_y,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                    canvas_config_proxy(enc_canvas_offset + 2,
                         input + canvas_w * picsize_y,
                         canvas_w / 2, picsize_y / 2,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                    canvas_config_proxy(enc_canvas_offset + 2,
                         input + canvas_w * picsize_y * 5 / 4,
                         canvas_w / 2, picsize_y / 2,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    input = ((ENC_CANVAS_OFFSET + 2) << 16) |
-                        ((ENC_CANVAS_OFFSET + 1) << 8) |
-                        ENC_CANVAS_OFFSET;
+                    input = ((enc_canvas_offset + 2) << 16) |
+                        ((enc_canvas_offset + 1) << 8) |
+                        enc_canvas_offset;
     #endif
                 } else if ((cmd->input_fmt == JPEGENC_FMT_YUV444_PLANE)
                     || (cmd->input_fmt == JPEGENC_FMT_RGB888_PLANE)) {
@@ -3183,22 +3184,22 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 
     #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                     canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
-                    canvas_config_proxy(ENC_CANVAS_OFFSET,
+                    canvas_config_proxy(enc_canvas_offset,
                         input,
                         canvas_w, picsize_y,
                         CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                    canvas_config_proxy(enc_canvas_offset + 1,
                         input + canvas_w * picsize_y, canvas_w,
                         picsize_y, CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                    canvas_config_proxy(enc_canvas_offset + 2,
                         input + canvas_w * picsize_y * 2,
                         canvas_w, picsize_y, CANVAS_ADDR_NOWRAP,
                         CANVAS_BLKMODE_LINEAR);
-                    input = ((ENC_CANVAS_OFFSET + 2) << 16) |
-                        ((ENC_CANVAS_OFFSET + 1) << 8) |
-                        ENC_CANVAS_OFFSET;
+                    input = ((enc_canvas_offset + 2) << 16) |
+                        ((enc_canvas_offset + 1) << 8) |
+                        enc_canvas_offset;
     #endif
                 } else if (cmd->input_fmt == JPEGENC_FMT_RGBA8888) {
                     iformat = 12;
@@ -3236,12 +3237,12 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
                 else
                     canvas_w = (picsize_x * 20 + 7) / 8;
                 canvas_w = ((canvas_w + 31) >> 5) << 5;
-                canvas_config_proxy(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(enc_canvas_offset,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                input = ENC_CANVAS_OFFSET;
+                input = enc_canvas_offset;
                 input = input & 0xff;
 #endif
             } else if (cmd->input_fmt == JPEGENC_FMT_YUV422_SINGLE) {
@@ -3250,12 +3251,12 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = picsize_x * 2;
                 canvas_w = ((canvas_w + 31) >> 5) << 5;
-                canvas_config_proxy(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(enc_canvas_offset,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                input = ENC_CANVAS_OFFSET;
+                input = enc_canvas_offset;
 #endif
             } else if ((cmd->input_fmt == JPEGENC_FMT_YUV444_SINGLE)
                 || (cmd->input_fmt == JPEGENC_FMT_RGB888)) {
@@ -3266,12 +3267,12 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = picsize_x * 3;
                 canvas_w = ((canvas_w + 31) >> 5) << 5;
-                canvas_config_proxy(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(enc_canvas_offset,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                input = ENC_CANVAS_OFFSET;
+                input = enc_canvas_offset;
 #endif
             } else if ((cmd->input_fmt == JPEGENC_FMT_NV21)
                 || (cmd->input_fmt == JPEGENC_FMT_NV12)) {
@@ -3279,41 +3280,41 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
-                canvas_config_proxy(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(enc_canvas_offset,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                canvas_config_proxy(enc_canvas_offset + 1,
                     input + canvas_w * picsize_y, canvas_w,
                     picsize_y / 2, CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                input = ((ENC_CANVAS_OFFSET + 1) << 8) |
-                    ENC_CANVAS_OFFSET;
+                input = ((enc_canvas_offset + 1) << 8) |
+                    enc_canvas_offset;
 #endif
             } else if (cmd->input_fmt == JPEGENC_FMT_YUV420) {
                 iformat = 4;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = ((cmd->encoder_width + 63) >> 6) << 6;
-                canvas_config_proxy(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(enc_canvas_offset,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                canvas_config_proxy(enc_canvas_offset + 1,
                     input + canvas_w * picsize_y,
                     canvas_w / 2, picsize_y / 2,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                canvas_config_proxy(enc_canvas_offset + 2,
                     input + canvas_w * picsize_y * 5 / 4,
                     canvas_w / 2, picsize_y / 2,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                input = ((ENC_CANVAS_OFFSET + 2) << 16) |
-                    ((ENC_CANVAS_OFFSET + 1) << 8) |
-                    ENC_CANVAS_OFFSET;
+                input = ((enc_canvas_offset + 2) << 16) |
+                    ((enc_canvas_offset + 1) << 8) |
+                    enc_canvas_offset;
 #endif
             } else if ((cmd->input_fmt == JPEGENC_FMT_YUV444_PLANE)
                 || (cmd->input_fmt == JPEGENC_FMT_RGB888_PLANE)) {
@@ -3323,22 +3324,22 @@ static s32 set_jpeg_input_format(struct jpegenc_wq_s *wq,
 
 #ifdef CONFIG_AMLOGIC_MEDIA_CANVAS
                 canvas_w = ((cmd->encoder_width + 31) >> 5) << 5;
-                canvas_config_proxy(ENC_CANVAS_OFFSET,
+                canvas_config_proxy(enc_canvas_offset,
                     input,
                     canvas_w, picsize_y,
                     CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config_proxy(ENC_CANVAS_OFFSET + 1,
+                canvas_config_proxy(enc_canvas_offset + 1,
                     input + canvas_w * picsize_y, canvas_w,
                     picsize_y, CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                canvas_config_proxy(ENC_CANVAS_OFFSET + 2,
+                canvas_config_proxy(enc_canvas_offset + 2,
                     input + canvas_w * picsize_y * 2,
                     canvas_w, picsize_y, CANVAS_ADDR_NOWRAP,
                     CANVAS_BLKMODE_LINEAR);
-                input = ((ENC_CANVAS_OFFSET + 2) << 16) |
-                    ((ENC_CANVAS_OFFSET + 1) << 8) |
-                    ENC_CANVAS_OFFSET;
+                input = ((enc_canvas_offset + 2) << 16) |
+                    ((enc_canvas_offset + 1) << 8) |
+                    enc_canvas_offset;
 #endif
             } else if (cmd->input_fmt == JPEGENC_FMT_RGBA8888) {
                 iformat = 12;
@@ -4390,6 +4391,11 @@ static s32 jpegenc_wq_init(void)
         clock_level = 3;
     else
         clock_level = 1;
+
+    if (is_support_vdec_canvas())
+        enc_canvas_offset = ENC_CANVAS_OFFSET;
+    else
+        enc_canvas_offset = JPEGENC_CANVAS_INDEX;
     return 0;
 }
 
