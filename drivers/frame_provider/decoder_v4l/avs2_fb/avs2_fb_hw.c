@@ -542,11 +542,10 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	avs2_dec->fb_buf_vcpu_imem.buf_end = avs2_dec->fb_buf_vcpu_imem.buf_start + avs2_dec->fb_buf_vcpu_imem.buf_size;
 
 	avs2_dec->fb_buf_sys_imem.buf_size = IFBUF_SYS_IMEM_SIZE * dec->fb_ifbuf_num;
-	dec->fb_buf_sys_imem_addr = dma_alloc_coherent(amports_get_dma_device(),
-		avs2_dec->fb_buf_sys_imem.buf_size,
-		&tmp_phy_adr, GFP_KERNEL);
+	avs2_dec->fb_buf_sys_imem_addr = dma_alloc_coherent(amports_get_dma_device(),
+		avs2_dec->fb_buf_sys_imem.buf_size, &tmp_phy_adr, GFP_KERNEL);
 	avs2_dec->fb_buf_sys_imem.buf_start = tmp_phy_adr;
-	if (dec->fb_buf_sys_imem_addr == NULL) {
+	if (avs2_dec->fb_buf_sys_imem_addr == NULL) {
 		pr_err("%s: failed to alloc fb_buf_sys_imem\n", __func__);
 		return;
 	}
@@ -617,7 +616,7 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	avs2_dec->fr.scalelut_ptr_changed = 0;
 	avs2_dec->bk.scalelut_ptr_changed = 0;
 
-	avs2_dec->fr.sys_imem_ptr_v = dec->fb_buf_sys_imem_addr; //for linux
+	avs2_dec->fr.sys_imem_ptr_v = avs2_dec->fb_buf_sys_imem_addr; //for linux
 
 	print_loopbufs_ptr(dec, "init", &avs2_dec->fr);
 }
@@ -658,11 +657,11 @@ static void uninit_fb_bufstate(struct AVS2Decoder_s *dec)
 			decoder_bmmu_box_free_idx(dec->bmmu_box, i);
 	}
 
-	if (dec->fb_buf_sys_imem_addr) {
+	if (avs2_dec->fb_buf_sys_imem_addr) {
 		dma_free_coherent(amports_get_dma_device(),
-			avs2_dec->fb_buf_sys_imem.buf_size, dec->fb_buf_sys_imem_addr,
+			avs2_dec->fb_buf_sys_imem.buf_size, avs2_dec->fb_buf_sys_imem_addr,
 			avs2_dec->fb_buf_sys_imem.buf_start);
-		dec->fb_buf_sys_imem_addr = NULL;
+		avs2_dec->fb_buf_sys_imem_addr = NULL;
 	}
 
 	uninit_mmu_fb_bufstate(dec);
@@ -682,65 +681,65 @@ static void config_bufstate_front_hw(struct avs2_decoder *avs2_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_parser_sao0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_parser_sao0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.parser_sao0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.parser_sao0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_parser_sao1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_parser_sao1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.parser_sao1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.parser_sao1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	//    config mpred_imp_if data write buffer start address
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 2);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.mpred_imp0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.mpred_imp1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	// config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_scalelut.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_scalelut.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.scalelut_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, avs2_dec->fr.scalelut_ptr_pre);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.scalelut_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, avs2_dec->fr.scalelut_ptr_pre);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_vcpu_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_vcpu_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.vcpu_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.vcpu_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.sys_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 	//config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_lmem0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM0_BLOCK_SIZE);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.lmem0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM0_BLOCK_SIZE);
 
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, avs2_dec->fb_buf_lmem1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, avs2_dec->fb_buf_lmem1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, avs2_dec->fr.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.lmem1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM1_BLOCK_SIZE);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, avs2_dec->bk.lmem1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM1_BLOCK_SIZE);
 }
 
 static void config_bufstate_back_hw(struct avs2_decoder *avs2_dec)
@@ -812,21 +811,19 @@ static void config_bufstate_back_hw(struct avs2_decoder *avs2_dec)
 
 static void read_bufstate_front(struct avs2_decoder *avs2_dec)
 {
-	struct AVS2Decoder_s *dec = container_of(avs2_dec,
-		struct AVS2Decoder_s, avs2_dec);
+	//struct AVS2Decoder_s *dec = container_of(avs2_dec,
+		//struct AVS2Decoder_s, avs2_dec);
 	//uint32_t tmp;
 	avs2_dec->fr.mmu0_ptr = READ_VREG(HEVC_ASSIST_FB_MMU_MAP_ADDR0);
 	avs2_dec->fr.mmu1_ptr = READ_VREG(HEVC_ASSIST_FB_MMU_MAP_ADDR1);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 
 	avs2_dec->fr.scalelut_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	avs2_dec->fr.scalelut_ptr_pre = READ_VREG(HEVC_ASSIST_RING_F_THRESHOLD);
-	avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
-		"pic_end_ptr = %x; pic_start_ptr = %x\n", avs2_dec->fr.scalelut_ptr, avs2_dec->fr.scalelut_ptr_pre);
+	//avs2_dec->fr.scalelut_ptr_pre = READ_VREG(HEVC_ASSIST_RING_F_THRESHOLD);
+	//avs2_print(dec, PRINT_FLAG_VDEC_DETAIL,
+		//"pic_end_ptr = %x; pic_start_ptr = %x\n", avs2_dec->fr.scalelut_ptr, avs2_dec->fr.scalelut_ptr_pre);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 7);
 	avs2_dec->fr.vcpu_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
-	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
-	avs2_dec->fr.sys_imem_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 5);
 	avs2_dec->fr.lmem0_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 6);
@@ -838,7 +835,9 @@ static void read_bufstate_front(struct avs2_decoder *avs2_dec)
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 2);
 	avs2_dec->fr.mpred_imp0_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
-	avs2_dec->fr.mpred_imp1_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);
+	avs2_dec->fr.mpred_imp1_ptr = READ_VREG(HEVC_ASSIST_RING_F_WPTR);\
+
+	avs2_dec->fr.sys_imem_ptr = avs2_dec->sys_imem_ptr;
 	avs2_dec->fr.sys_imem_ptr_v = avs2_dec->sys_imem_ptr_v;
 }
 
@@ -1101,7 +1100,8 @@ int32_t g_WqMDefault8x8[64] = {
 	WRITE_VREG(HEVC_ASSIST_FB_CTL, data32); // new dual
 #endif
 
-	if (front_flag) {
+#if 1 //move to ucode
+	if (!efficiency_mode && front_flag) {
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"[test.c] Enable HEVC Parser Interrupt\n");
 		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
@@ -1160,6 +1160,7 @@ int32_t g_WqMDefault8x8[64] = {
 
 		WRITE_VREG(HEVC_DEC_STATUS_REG, 0);
 	}
+#endif
 
 	if (back_flag) {
 #if 0 // Dual Core : back Microcode will always initial SCALELUT
@@ -1187,7 +1188,7 @@ int32_t g_WqMDefault8x8[64] = {
 		}
 	}
 
-	if (front_flag) {
+	if (!efficiency_mode && front_flag) {
 #ifdef ENABLE_SWAP_TEST
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 100);
 #else
@@ -1207,6 +1208,7 @@ int32_t g_WqMDefault8x8[64] = {
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_1, PARSER_CMD_SKIP_CFG_1);
 		WRITE_VREG(HEVC_PARSER_CMD_SKIP_2, PARSER_CMD_SKIP_CFG_2);
 #endif
+#if 1 //move to ucode
 
 		WRITE_VREG(HEVC_PARSER_IF_CONTROL,
 			(1 << 9) | // parser_alf_if_en
@@ -1215,6 +1217,7 @@ int32_t g_WqMDefault8x8[64] = {
 			(1 << 2) | // parser_mpred_if_en
 			(1 << 0) // parser_scaler_if_en
 			);
+#endif
 	}
 
 	if (back_flag) {
@@ -1420,14 +1423,14 @@ static int32_t avs2_hw_init(struct AVS2Decoder_s *dec, uint8_t front_flag, uint8
 
 	config_work_space_hw(dec, front_flag, back_flag);
 
-	if (front_flag && dec->pic_list_init_flag)
+	if (!efficiency_mode && front_flag && dec->pic_list_init_flag)
 		init_pic_list_hw_fb(dec);
 
 	hevc_init_decoder_hw(dec, front_flag, back_flag);
 
 	//Start JT
-#if 1
-	if (front_flag) {
+#if 1 //move to ucode
+	if (!efficiency_mode && front_flag) {
 		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 			"[test.c] Enable BitStream Fetch\n");
 #if 0
@@ -1503,7 +1506,7 @@ static int32_t avs2_hw_init(struct AVS2Decoder_s *dec, uint8_t front_flag, uint8
 		/* enable mailbox interrupt */
 		WRITE_VREG(dec->ASSIST_MBOX0_MASK, 1);
 
-		WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
+		//WRITE_VREG(DEBUG_REG1, 0x0);  //no debug
 		WRITE_VREG(NAL_SEARCH_CTL, 0x8); //check SEQUENCE/I_PICTURE_START in ucode
 		WRITE_VREG(DECODE_STOP_POS, udebug_flag);
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -1585,6 +1588,7 @@ void avs2_store_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_fb,
 	dec_fb->fb_buf_parser_sao1 = dec->fb_buf_parser_sao1;
 	dec_fb->fr = dec->fr;
 	dec_fb->bk = dec->bk;
+	dec_fb->fb_buf_sys_imem_addr = dec->fb_buf_sys_imem_addr;
 	dec_fb->sys_imem_ptr_v = dec->sys_imem_ptr_v;
 }
 
@@ -1619,6 +1623,7 @@ void avs2_restore_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_f
 	dec->fb_buf_parser_sao1 = dec_fb->fb_buf_parser_sao1;
 	dec->fr = dec_fb->fr;
 	dec->bk = dec_fb->bk;
+	dec->fb_buf_sys_imem_addr = dec_fb->fb_buf_sys_imem_addr;
 	dec->sys_imem_ptr_v = dec_fb->sys_imem_ptr_v;
 }
 
@@ -1831,8 +1836,8 @@ static void config_mpred_hw_fb(struct AVS2Decoder_s *dec)
 	struct avs2_frame_s *col_pic = avs2_dec->fref[0];
 
 	int32_t mpred_mv_rd_start_addr ;
-	int32_t mpred_curr_lcu_x;
-	int32_t mpred_curr_lcu_y;
+	//int32_t mpred_curr_lcu_x;
+	//int32_t mpred_curr_lcu_y;
 	int32_t mpred_mv_rd_end_addr;
 	int32_t MV_MEM_UNIT_l;
 
@@ -1854,9 +1859,9 @@ static void config_mpred_hw_fb(struct AVS2Decoder_s *dec)
 	}
 
 	mpred_mv_rd_start_addr = col_pic->mpred_mv_wr_start_addr;
-	data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
-	mpred_curr_lcu_x = data32 & 0xffff;
-	mpred_curr_lcu_y = (data32 >> 16) & 0xffff;
+	//data32 = READ_VREG(HEVC_MPRED_CURR_LCU);
+	//mpred_curr_lcu_x = data32 & 0xffff;
+	//mpred_curr_lcu_y = (data32 >> 16) & 0xffff;
 
 	MV_MEM_UNIT_l=avs2_dec->lcu_size_log2 == 6 ? 0x200 : avs2_dec->lcu_size_log2 == 5 ? 0x80 : 0x20;
 
@@ -2323,13 +2328,16 @@ static void config_alf_hw_fb(struct AVS2Decoder_s *dec)
 			(((dec->m_filterCoeffSym[i][4] >> 4) & 0x7) <<  0);
 		///WRITE_VREG(HEVC_DBLK_CFGD, data32);
 		WRITE_BACK_32(avs2_dec, HEVC_DBLK_CFGD, data32);
-		avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
-			"[c] alf_y_coef[%d](%d %d %d %d %d %d %d %d %d)\n",i,
-			dec->m_filterCoeffSym[i][0], dec->m_filterCoeffSym[i][1],
-			dec->m_filterCoeffSym[i][2], dec->m_filterCoeffSym[i][3],
-			dec->m_filterCoeffSym[i][4], dec->m_filterCoeffSym[i][5],
-			dec->m_filterCoeffSym[i][6], dec->m_filterCoeffSym[i][7],
-			dec->m_filterCoeffSym[i][8]);
+	}
+	if (debug & AVS2_DBG_BUFMGR_DETAIL) {
+		for (i=0;i<m_filters_per_group;i++)
+			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
+				"[c] alf_y_coef[%d](%d %d %d %d %d %d %d %d %d)\n",i,
+				dec->m_filterCoeffSym[i][0], dec->m_filterCoeffSym[i][1],
+				dec->m_filterCoeffSym[i][2], dec->m_filterCoeffSym[i][3],
+				dec->m_filterCoeffSym[i][4], dec->m_filterCoeffSym[i][5],
+				dec->m_filterCoeffSym[i][6], dec->m_filterCoeffSym[i][7],
+				dec->m_filterCoeffSym[i][8]);
 	}
 	avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
 		"[c] cfgALF .done.\n");

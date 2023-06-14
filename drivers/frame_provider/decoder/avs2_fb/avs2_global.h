@@ -1494,6 +1494,7 @@ int32_t  AEC_startcode_follows(int32_t eos_bit);
 #define RPM_BEGIN                                              0x100
 #define ALF_BEGIN                                              0x180
 #define RPM_END                                                0x280
+#define RPM_VALID_END                                          0x236
 
 union param_u {
 	struct {
@@ -1685,7 +1686,9 @@ struct avs2_decoder {
 	/**/
 	/*for WRITE_BACK_RET*/
 	//uint32_t  instruction[256];
+	uint32_t sys_imem_ptr;
 	void *sys_imem_ptr_v;
+	void *fb_buf_sys_imem_addr;
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
 #endif
