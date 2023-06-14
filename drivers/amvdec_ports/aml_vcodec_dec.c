@@ -2344,6 +2344,12 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	q_data->bytesperline[0] = q_data->coded_width;
 	q_data->sizeimage[1] = q_data->sizeimage[0] / 2;
 	q_data->bytesperline[1] = q_data->coded_width;
+
+	q_data->sizeimage_tw[0] = q_data->sizeimage[0];
+	q_data->bytesperline_tw[0] = q_data->bytesperline[0];
+	q_data->sizeimage_tw[1] = q_data->sizeimage[1];
+	q_data->bytesperline_tw[1] = q_data->bytesperline[1];
+
 	ctx->reset_flag = V4L_RESET_MODE_NORMAL;
 
 	vdec_trace_init(&ctx->vtr, ctx->id, -1);
@@ -2769,11 +2775,11 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 
 	q_data = aml_vdec_get_q_data(ctx, type);
 
-	if (ctx->internal_dw_scale) {
-		if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
-			return;
+	if (vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode))
+		return;
+
+	if (ctx->internal_dw_scale)
 		ratio = vdec_get_size_ratio(dw_mode);
-	}
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
 		q_data->sizeimage[0] = ctx->picinfo.y_len_sz;
@@ -2804,7 +2810,7 @@ static void update_ctx_dimension(struct aml_vcodec_ctx *ctx, u32 type)
 		return;
 
 	if (ctx->internal_dw_scale)
-		ratio = vdec_get_size_ratio(tw_mode & 0xffff);
+		ratio = vdec_get_size_ratio(tw_mode);
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
 		q_data->sizeimage_tw[0] = ctx->picinfo.y_len_sz_tw;
@@ -2846,7 +2852,6 @@ static void copy_v4l2_format_dimension(struct aml_vcodec_ctx *ctx,
 
 	if (vdec_if_get_param(ctx, GET_PARAM_TW_MODE, &tw_mode))
 		return;
-
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
 		pix_mp->width		= q_data->coded_width;
@@ -3291,15 +3296,21 @@ static int vb2ops_vdec_queue_setup(struct vb2_queue *vq,
 			*nplanes = 1;
 
 		for (i = 0; i < *nplanes; i++) {
-			sizes[i] = (dw_mode != DM_AVBC_ONLY) ? q_data->sizeimage[i] : q_data->sizeimage_tw[i];
-			if (V4L2_TYPE_IS_OUTPUT(vq->type) && ctx->output_dma_mode)
-				sizes[i] = 1;
 			alloc_devs[i] = &ctx->dev->plat_dev->dev;
+			sizes[i] = (dw_mode != DM_AVBC_ONLY) ? q_data->sizeimage[i] :
+				(tw_mode != DM_INVALID) ? q_data->sizeimage_tw[i] :
+				PAGE_SIZE;
 
-			if (!V4L2_TYPE_IS_OUTPUT(vq->type))
+			if (V4L2_TYPE_IS_OUTPUT(vq->type)) {
+				if (ctx->output_dma_mode)
+					sizes[i] = 1;
+				else
+					sizes[i] = q_data->sizeimage[i];
+
+				if (vq->memory == VB2_MEMORY_MMAP)
+					dma_coerce_mask_and_coherent(alloc_devs[i], DMA_BIT_MASK(64));
+			} else
 				alloc_devs[i] = v4l_get_dev_from_codec_mm();
-			else if (vq->memory == VB2_MEMORY_MMAP)
-				dma_coerce_mask_and_coherent(alloc_devs[i], DMA_BIT_MASK(64));
 		}
 	}
 
