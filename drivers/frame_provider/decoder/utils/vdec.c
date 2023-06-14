@@ -945,7 +945,9 @@ static void dec_dmc_port_ctrl(bool dmc_on, u32 target)
 			mask = (1 << 21);
 	} else if (target == VDEC_INPUT_TARGET_HEVC) {
 		mask = (1 << 4); /*hevc*/
-		if (cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A)
+		if ((cpu_type >= AM_MESON_CPU_MAJOR_ID_G12A) &&
+			(cpu_type != AM_MESON_CPU_MAJOR_ID_T5W) &&
+			(cpu_type != AM_MESON_CPU_MAJOR_ID_TXHD2))
 			mask |= (1 << 8); /*hevcb */
 	}
 
