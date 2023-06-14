@@ -384,6 +384,8 @@ static u32 one_packet_multi_frames_multi_run = 1;
 #define IS_VDEC_DW(hw)  (hw->double_write_mode >> 16 & 0xf)
 
 static void vmh264_dump_state(struct vdec_s *vdec);
+static void h264_recycle_dec_resource(void *priv, struct aml_buf *aml_buf);
+
 
 #define is_in_parsing_state(status) \
 		((status == H264_ACTION_SEARCH_HEAD) || \
@@ -3483,6 +3485,7 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		int i, j, used_size, ret;
 		int signed_count = 0;
 		struct vframe_s *signed_fence[VF_POOL_SIZE];
+		struct aml_buf *buf;
 
 		post_prepare_process(vdec, frame);
 
@@ -3515,7 +3518,10 @@ int prepare_display_buf(struct vdec_s *vdec, struct FrameStore *frame)
 		mutex_unlock(&hw->fence_mutex);
 		if (signed_count != 0) {
 			for (i = 0; i < signed_count; i++) {
-				vh264_vf_put(signed_fence[i], vdec);
+				if (!signed_fence[i])
+					continue;
+				buf = (struct aml_buf *)signed_fence[i]->v4l_mem_handle;
+				h264_recycle_dec_resource(hw, buf);
 				frame->pre_output = 1;
 			}
 		}
@@ -4780,6 +4786,7 @@ static void vh264_vf_put(struct vframe_s *vf, void *op_arg)
 	}
 
 	aml_buf = (struct aml_buf *)vf->v4l_mem_handle;
+
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	h264_recycle_dec_resource(hw, aml_buf);
 	vdec_up(vdec);
