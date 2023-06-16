@@ -12493,9 +12493,6 @@ force_output:
 					hevc_print(hevc, 0,
 						"!!!!!Error!!!!!!!!, ins_offset %d is too big (>512)\n", hevc->ins_offset);
 					hevc->ins_offset = 512;
-				} else if (hevc->ins_offset < 256) {
-					hevc->ins_offset = 256;
-					WRITE_BACK_RET(hevc);
 				}
 				memcpy(hevc->sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
 				hevc->ins_offset = 0; //for next slice
@@ -12697,9 +12694,6 @@ force_output:
 						hevc_print(hevc, 0,
 							"!!!!!Error!!!!!!!!, ins_offset %d is too big (>512)\n", hevc->ins_offset);
 						hevc->ins_offset = 512;
-					} else if (hevc->ins_offset < 256) {
-						hevc->ins_offset = 256;
-						WRITE_BACK_RET(hevc);
 					}
 					memcpy(hevc->sys_imem_ptr_v, (void*)(&hevc->instruction[0]), hevc->ins_offset*4);
 					hevc->ins_offset = 0; //for next slice
