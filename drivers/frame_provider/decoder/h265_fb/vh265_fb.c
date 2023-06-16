@@ -838,6 +838,8 @@ enum alloc_buffer_status_t {
 #define HEVC_FIND_NEXT_PIC_NAL				0x50
 #define HEVC_FIND_NEXT_DVEL_NAL				0x51
 
+#define HEVC_ONE_RUN_MULTI_FRAME				0x60
+
 #define HEVC_DUMP_LMEM				0x30
 
 #define HEVC_4k2k_60HZ_NOT_SUPPORT	0x80
@@ -2219,6 +2221,8 @@ struct hevc_state_s {
 	u32 data_invalid;
 	u32 consume_byte;
 	u32 muti_frame_flag;
+	u32 stream_multi_frame_offset;
+	u32 stream_multi_frame_flag;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -11151,7 +11155,7 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 			hevc->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
 		return IRQ_WAKE_THREAD;
 	}
-	if (pic->error_mark)
+	if (pic && pic->error_mark)
 		hevc->dec_status_back = HEVC_BE_DECODE_DATA_DONE;
 
 	if (debug & H265_DEBUG_BUFMGR)
@@ -11537,7 +11541,8 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		}
 
 		return IRQ_HANDLED;
-	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+	} else if ((dec_status == HEVC_DECPIC_DATA_DONE) || (dec_status == HEVC_OVER_DECODE)
+													|| (dec_status == HEVC_ONE_RUN_MULTI_FRAME)) {
 		if (efficiency_mode == 1) {
 			mutex_lock(&hevc->slice_header_lock);
 			mutex_unlock(&hevc->slice_header_lock);
@@ -11814,6 +11819,15 @@ force_output:
 						}
 					}
 				}
+			}
+			if (dec_status != HEVC_ONE_RUN_MULTI_FRAME) {
+				hevc->stream_multi_frame_flag = 0;
+			} else {
+				if (hevc->cur_pic)
+					hevc->cur_pic->error_mark = 1;
+				hevc->stream_multi_frame_offset = READ_VREG(HEVC_PPS_BUFFER);
+				hevc->stream_multi_frame_flag = 1;
+				hevc->dec_result = DEC_RESULT_AGAIN;
 			}
 			ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 			vh265_work_implement(hevc,hw_to_vdec(hevc), 0);
@@ -15634,6 +15648,12 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc->muti_frame_flag = 0;
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
 	}
+	if (hevc->stream_multi_frame_flag) {
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, hevc->stream_multi_frame_offset);
+		//hevc->stream_multi_frame_flag = 0;
+	} else {
+		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
+	}
 	input_empty[hevc->index] = 0;
 	hevc->dec_result = DEC_RESULT_NONE;
 	if (vdec_frame_based(vdec) &&
@@ -15992,6 +16012,9 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 		vfree(hevc);
 		mutex_unlock(&vh265_mutex);
 		return ret;
+	} else {
+		if (!vdec_secure(hw_to_vdec(hevc)))
+			codec_mm_memset(hevc->buf_start, 0, work_buf_size);
 	}
 	hevc->buf_size = work_buf_size;
 

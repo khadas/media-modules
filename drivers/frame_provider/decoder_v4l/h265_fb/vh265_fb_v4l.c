@@ -11163,7 +11163,7 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		}
 
 		return IRQ_HANDLED;
-	} else if (dec_status == HEVC_DECPIC_DATA_DONE) {
+	} else if (dec_status == HEVC_DECPIC_DATA_DONE || ((dec_status == HEVC_OVER_DECODE) && (hevc->front_back_mode == 1))) {
 		if (efficiency_mode == 1) {
 			mutex_lock(&hevc->slice_header_lock);
 			mutex_unlock(&hevc->slice_header_lock);
