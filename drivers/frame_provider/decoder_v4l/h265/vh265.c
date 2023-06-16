@@ -10331,10 +10331,11 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		}
 		else if (debug_tag & 0x20000)
 			hevc->ucode_pause_pos = 0xffffffff;
-		if (hevc->ucode_pause_pos)
-			reset_process_time(hevc);
-		else
+		if (!hevc->ucode_pause_pos) {
+			start_process_time(hevc);
+
 			WRITE_HREG(DEBUG_REG1, 0);
+		}
 	} else if (debug_tag != 0) {
 		hevc_print(hevc, 0,
 			"dbg%x: %x l/w/r %x %x %x\n", READ_HREG(DEBUG_REG1),
@@ -10350,10 +10351,11 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 			udebug_pause_pos &= 0xffff;
 			hevc->ucode_pause_pos = udebug_pause_pos;
 		}
-		if (hevc->ucode_pause_pos)
-			reset_process_time(hevc);
-		else
+		if (!hevc->ucode_pause_pos) {
+			start_process_time(hevc);
+
 			WRITE_HREG(DEBUG_REG1, 0);
+		}
 		return IRQ_HANDLED;
 	}
 
@@ -10491,7 +10493,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				} else
 					hevc->dec_result = DEC_RESULT_GET_DATA;
 			}
-			reset_process_time(hevc);
 			vdec_schedule_work(&hevc->work);
 		}
 		return IRQ_HANDLED;
@@ -10524,7 +10525,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				restore_decode_state(hevc);
 			}
 
-			reset_process_time(hevc);
 			vdec_schedule_work(&hevc->work);
 		}
 
@@ -10537,7 +10537,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				vdec_v4l_post_error_frame_event(ctx);
 			hevc->dec_result = DEC_RESULT_ERROR_DATA;
 			amhevc_stop();
-			reset_process_time(hevc);
 			vdec_schedule_work(&hevc->work);
 		}
 		return IRQ_HANDLED;
@@ -10607,7 +10606,6 @@ pic_done:
 
 			amhevc_stop();
 
-			reset_process_time(hevc);
 
 muti_output:
 			if (vdec_frame_based(hw_to_vdec(hevc)) &&
@@ -10815,7 +10813,6 @@ force_output:
 			if (vdec_frame_based(hw_to_vdec(hevc)))
 				vdec_v4l_post_error_frame_event(ctx);
 			amhevc_stop();
-			reset_process_time(hevc);
 			if (aux_data_is_available(hevc))
 				dolby_get_meta(hevc);
 			if(hevc->cur_pic && hevc->cur_pic->slice_type == 2 &&
@@ -10852,8 +10849,7 @@ force_output:
 		hevc->error_watchdog_count = 0;
 		hevc->error_skip_nal_wt_cnt = 0;
 #ifdef MULTI_INSTANCE_SUPPORT
-		if (hevc->m_ins_flag)
-			reset_process_time(hevc);
+
 #endif
 		if (slice_parse_begin > 0 &&
 			get_dbg_flag(hevc) & H265_DEBUG_DISCARD_NAL) {
@@ -11029,7 +11025,6 @@ force_output:
 	} else if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (hevc->m_ins_flag) {
-			reset_process_time(hevc);
 			read_decode_info(hevc);
 		}
 #endif
@@ -11182,7 +11177,6 @@ force_output:
 					hevc->dec_result = DEC_RESULT_AGAIN;
 					amhevc_stop();
 					restore_decode_state(hevc);
-					reset_process_time(hevc);
 					vdec_schedule_work(&hevc->work);
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 					return IRQ_HANDLED;
@@ -11200,7 +11194,6 @@ force_output:
 				hevc->dec_result = DEC_RESULT_AGAIN;
 				amhevc_stop();
 				restore_decode_state(hevc);
-				reset_process_time(hevc);
 				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
 			}
@@ -11329,7 +11322,6 @@ force_output:
 				hevc->dec_result = DEC_RESULT_AGAIN;
 				amhevc_stop();
 				restore_decode_state(hevc);
-				reset_process_time(hevc);
 				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
 			}
@@ -11384,7 +11376,6 @@ force_output:
 				hevc->slice_count++;
 			}
 			amhevc_stop();
-			reset_process_time(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc)))
 				vdec_v4l_post_error_frame_event(ctx);
 			vdec_schedule_work(&hevc->work);
@@ -11462,6 +11453,9 @@ static irqreturn_t vh265_isr(int irq, void *data)
 
 	hevc->dec_status = dec_status;
 
+	if (hevc->m_ins_flag)
+		reset_process_time(hevc);
+
 	if (hevc->pic_list_init_flag == 1)
 		return IRQ_HANDLED;
 
@@ -11474,6 +11468,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 			return IRQ_HANDLED;
 		}
 	}
+
 	ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_END);
 	return IRQ_WAKE_THREAD;
 
@@ -12842,7 +12837,7 @@ static void vh265_work_implement(struct hevc_state_s *hevc,
 				userdata_prepare(hevc);
 #endif
 				WRITE_VREG(HEVC_DEC_STATUS_REG, HEVC_ACTION_DONE);
-				reset_process_time(hevc);
+				start_process_time(hevc);
 			} else {
 				if (vdec->next_status == VDEC_STATUS_DISCONNECTED) {
 					hevc->dec_result = DEC_RESULT_AGAIN;

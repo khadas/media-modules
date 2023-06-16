@@ -11012,10 +11012,10 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 		}
 		else if (debug_tag & 0x20000)
 			hevc->ucode_pause_pos = 0xffffffff;
-		if (hevc->ucode_pause_pos)
-			reset_process_time(hevc);
-		else
+		if (!hevc->ucode_pause_pos) {
+			start_process_time(hevc);
 			WRITE_HREG(DEBUG_REG1, 0);
+		}
 	} else if (debug_tag != 0) {
 		hevc_print(hevc, 0,
 			"dbg%x: %x l/w/r %x %x %x lcu %x stream crc %x, shiftbytes 0x%x decbytes 0x%x\n",
@@ -11032,10 +11032,10 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 			udebug_pause_pos &= 0xffff;
 			hevc->ucode_pause_pos = udebug_pause_pos;
 		}
-		if (hevc->ucode_pause_pos)
-			reset_process_time(hevc);
-		else
+		if (!hevc->ucode_pause_pos) {
+			start_process_time(hevc);
 			WRITE_HREG(DEBUG_REG1, 0);
+		}
 		return IRQ_HANDLED;
 	}
 
@@ -11175,7 +11175,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				} else
 					hevc->dec_result = DEC_RESULT_GET_DATA;
 			}
-			reset_process_time(hevc);
 			vdec_schedule_work(&hevc->work);
 		}
 		return IRQ_HANDLED;
@@ -11217,7 +11216,6 @@ static irqreturn_t vh265_isr_thread_fn(int irq, void *data)
 				restore_decode_state(hevc);
 			}
 
-			reset_process_time(hevc);
 			vdec_schedule_work(&hevc->work);
 		}
 
@@ -11336,7 +11334,6 @@ pic_done:
 
 			amhevc_stop();
 
-			reset_process_time(hevc);
 
 			if (debug & H265_DEBUG_BUFMGR_MORE) {
 				pr_info("HEVC_CM_BODY_START_ADDR done= %x\n", READ_VREG(HEVC_CM_BODY_START_ADDR));
@@ -11590,7 +11587,6 @@ force_output:
 			else
 #endif
 				amhevc_stop();
-			reset_process_time(hevc);
 			if (aux_data_is_available(hevc))
 				dolby_get_meta(hevc);
 			if (hevc->cur_pic && hevc->cur_pic->slice_type == 2 &&
@@ -11627,8 +11623,7 @@ force_output:
 		hevc->error_watchdog_count = 0;
 		hevc->error_skip_nal_wt_cnt = 0;
 #ifdef MULTI_INSTANCE_SUPPORT
-		if (hevc->m_ins_flag)
-			reset_process_time(hevc);
+
 #endif
 		if (slice_parse_begin > 0 &&
 			get_dbg_flag(hevc) & H265_DEBUG_DISCARD_NAL) {
@@ -11819,7 +11814,6 @@ force_output:
 	} else if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
 #ifdef MULTI_INSTANCE_SUPPORT
 		if (hevc->m_ins_flag) {
-			reset_process_time(hevc);
 			read_decode_info(hevc);
 		}
 #endif
@@ -12005,7 +11999,6 @@ force_output:
 					}
 #endif
 					restore_decode_state(hevc);
-					reset_process_time(hevc);
 					vdec_schedule_work(&hevc->work);
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
 					return IRQ_HANDLED;
@@ -12030,7 +12023,6 @@ force_output:
 #endif
 					amhevc_stop();
 				restore_decode_state(hevc);
-				reset_process_time(hevc);
 				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
 			}
@@ -12171,7 +12163,6 @@ force_output:
 #endif
 					amhevc_stop();
 				restore_decode_state(hevc);
-				reset_process_time(hevc);
 				vdec_schedule_work(&hevc->work);
 				return IRQ_HANDLED;
 			}
@@ -12287,7 +12278,6 @@ force_output:
 			else
 #endif
 				amhevc_stop();
-			reset_process_time(hevc);
 			if (vdec_frame_based(hw_to_vdec(hevc)))
 				vdec_v4l_post_error_frame_event(ctx);
 			vdec_schedule_work(&hevc->work);
@@ -12542,6 +12532,7 @@ static irqreturn_t vh265_isr(int irq, void *data)
 			READ_VREG(HEVC_DEC_STATUS_DBE));
 	}
 
+
 	if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
 		ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_HEAD_DONE);
 	}
@@ -12555,6 +12546,9 @@ static irqreturn_t vh265_isr(int irq, void *data)
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_2, dec_status);
 
 	hevc->dec_status = dec_status;
+
+	if (hevc->m_ins_flag)
+		reset_process_time(hevc);
 
 	if (hevc->pic_list_init_flag == 1)
 		return IRQ_HANDLED;
