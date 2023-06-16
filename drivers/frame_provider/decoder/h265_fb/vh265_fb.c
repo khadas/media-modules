@@ -246,6 +246,8 @@ static int start_decode_buf_level = 0x8000;
 static unsigned int decode_timeout_val = 200;
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 200;
+static unsigned int decode_timeout_back_fast_check = 1;
+static unsigned int decode_timeout_back_fast_check_threshold = 3;
 #endif
 
 static u32 run_ready_min_buf_num = 2;
@@ -2198,6 +2200,8 @@ struct hevc_state_s {
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
 	int mmu_fb_4k_number;
+	int back_timer_check_count;
+	int back_timer_check_value;
 #endif
 	uint32_t ASSIST_MBOX0_IRQ_REG;
 	uint32_t ASSIST_MBOX0_CLR_REG;
@@ -2224,6 +2228,7 @@ struct hevc_state_s {
 	u32 muti_frame_flag;
 	u32 stream_multi_frame_offset;
 	u32 stream_multi_frame_flag;
+	int start_decoder_flag;
 } /*hevc_stru_t */;
 
 static void init_buff_spec(struct hevc_state_s *hevc,
@@ -2438,10 +2443,12 @@ static int front_decpic_done_update(struct hevc_state_s *hevc, uint8_t reset_fla
 					pic->backend_ref++;
 					break;
 				}
+
 			}
 		}
 	}
-	cur_pic->backend_ref = 1;
+
+	cur_pic->backend_ref++;
 	mutex_unlock(&hevc->fb_mutex);
 
 	cur_pic->back_done_mark = 0;
@@ -7523,6 +7530,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 	if (hevc->front_back_mode)
 		hevc->frmbase_cont_flag = 0;
 #endif
+
 	if (hevc->wait_buf == 0) {
 		hevc->sps_num_reorder_pics_0 =
 			rpm_param->p.sps_num_reorder_pics_0;
@@ -7756,7 +7764,6 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 		//	|| hevc->front_back_mode == 3)
 		//	hevc->ins_offset = 0; #move to init_pic_list_hw_fb()
 #endif
-
 		if (rpm_param->p.slice_segment_address == 0) {
 			struct PIC_s *pic = NULL;
 
@@ -7857,6 +7864,8 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 				return -1;
 			}
 		} else {
+			if (hevc->slice_count == 0)
+				return 4;
 			if (get_dbg_flag(hevc) & H265_DEBUG_HAS_AUX_IN_SLICE) {
 #ifdef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 				if (vdec->master == NULL &&
@@ -11241,6 +11250,8 @@ irqreturn_t vh265_back_irq_cb(struct vdec_s *vdec, int irq)
 		return IRQ_HANDLED;
 	}
 	/**/
+	reset_process_time_back(hevc);
+
 	return IRQ_WAKE_THREAD;
 }
 
@@ -11279,7 +11290,10 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		pic->back_done_mark = 1;
 #endif
 		mutex_lock(&hevc->fb_mutex);
-		pic->backend_ref--;
+		if (pic->backend_ref > 0)
+			pic->backend_ref--;
+		else
+			hevc_print(hevc, 0, "pic->backend_ref index %d error %d\n", pic->index, __LINE__);
 		for (i=0; i<MAX_REF_PIC_NUM; i++) {
 			ref_pic = pic->ref_pic[i];
 			if (ref_pic == NULL)
@@ -11287,7 +11301,20 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 			if (ref_pic->error_mark) {
 				pic->error_mark = 1;
 			}
-		ref_pic->backend_ref--;
+			if (ref_pic->backend_ref > 0)
+				ref_pic->backend_ref--;
+			else
+				hevc_print(hevc, 0, "ref_pic->backend_ref index %d error %d\n", ref_pic->index, __LINE__);
+		}
+
+		if (debug & H265_DEBUG_BUFMGR_MORE) {
+			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				PIC_t* ref_pic = pic->ref_pic[i];
+				if (ref_pic == NULL)
+					break;
+				hevc_print(hevc, 0, "pic index %d, ref index %d ref_pic backend_ref %d, %d\n",
+						pic->index, ref_pic->index, ref_pic->backend_ref, __LINE__);
+			}
 		}
 		mutex_unlock(&hevc->fb_mutex);
 		if (debug&H265_DEBUG_BUFMGR_MORE) dump_pic_list(hevc);
@@ -11806,7 +11833,7 @@ muti_output:
 					ATRACE_COUNTER(hevc->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
 					vdec_schedule_work(&hevc->work);
 					return IRQ_HANDLED;
-				} else if ((frmbase_muti_slice != 1) || (dec_status != HEVC_NAL_DECODE_DONE)) {
+				} else if ((frmbase_muti_slice != 1) || (hevc->slice_count != 0)) {
 					check_pic_decoded_error(hevc,
 						READ_VREG(HEVC_PARSER_LCU_START) & 0xffffff);
 
@@ -12189,7 +12216,6 @@ force_output:
 				hevc->have_sps, hevc->have_pps,
 				hevc->have_valid_start_slice);
 		}
-
 		WRITE_VREG(HEVC_DEC_STATUS_REG, parse_type);
 		/* Interrupt Amrisc to excute */
 		WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
@@ -12405,6 +12431,7 @@ force_output:
 					if ((hevc->pic_h == 96) && (hevc->pic_w == 160))
 						hevc->skip_nal_count++;
 					hevc->skip_flag = 1;
+					hevc->start_decoder_flag = 1;
 					WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
 					/* Interrupt Amrisc to excute */
 					WRITE_VREG(HEVC_MCPU_INTR_REQ,	AMRISC_MAIN_REQ);
@@ -12572,6 +12599,7 @@ force_output:
 			}
 #endif
 
+			hevc->start_decoder_flag = 1;
 			WRITE_VREG(HEVC_DEC_STATUS_REG,
 				HEVC_CODED_SLICE_SEGMENT_DAT);
 			/* Interrupt Amrisc to excute */
@@ -12621,6 +12649,7 @@ force_output:
 			}
 			WRITE_VREG(HEVC_WAIT_FLAG, READ_VREG(HEVC_WAIT_FLAG) & (~0x2));
 				hevc->skip_flag = 1;
+				hevc->start_decoder_flag = 1;
 			WRITE_VREG(HEVC_DEC_STATUS_REG,	HEVC_ACTION_DONE);
 			/* Interrupt Amrisc to excute */
 			WRITE_VREG(HEVC_MCPU_INTR_REQ, AMRISC_MAIN_REQ);
@@ -12638,14 +12667,16 @@ force_output:
 		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 	}
 	if (efficiency_mode == 1) {
-		if (hevc->pic_list_init_flag == 3) {
-#ifdef NEW_FB_CODE
-			if (hevc->front_back_mode == 1 || hevc->front_back_mode == 3)
-				init_pic_list_hw_fb(hevc);
-#endif
-		}
 
-		if (dec_status == HEVC_SLICE_SEGMENT_DONE) {
+
+		if ((hevc->start_decoder_flag == 1) && (dec_status == HEVC_SLICE_SEGMENT_DONE)) {
+
+			if (hevc->pic_list_init_flag == 3) {
+#ifdef NEW_FB_CODE
+				if (hevc->front_back_mode == 1 || hevc->front_back_mode == 3)
+					init_pic_list_hw_fb(hevc);
+#endif
+			}
 
 			if (hevc->wait_buf == 0 && hevc->param.p.slice_segment_address == 0) {
 				if ((hevc->m_nalUnitType != NAL_UNIT_CODED_SLICE_IDR &&
@@ -12950,6 +12981,22 @@ static void vh265_check_timer_back_func(struct timer_list *timer)
 		return;
 	}
 
+	WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (READ_VREG(HEVC_PATH_MONITOR_CTRL) & 0xfffffe0f) | 0x91);
+
+	if (hevc->back_timer_check_count == 0) {
+		hevc->back_timer_check_value = READ_VREG(HEVC_PATH_MONITOR_DATA);
+		hevc->back_timer_check_count++;
+	} else {
+		int tmp_ddr_data = READ_VREG(HEVC_PATH_MONITOR_DATA);
+
+		if (hevc->back_timer_check_value == tmp_ddr_data)
+			hevc->back_timer_check_count++;
+		else {
+			hevc->back_timer_check_count = 1;
+			hevc->back_timer_check_value = tmp_ddr_data;
+		}
+	}
+
 	if (((get_dbg_flag(hevc) &
 		H265_DEBUG_DIS_LOC_ERROR_PROC) == 0) &&
 		(decode_timeout_val_back > 0) &&
@@ -12961,6 +13008,13 @@ static void vh265_check_timer_back_func(struct timer_list *timer)
 			hevc->decode_timeout_count_back--;
 		if (hevc->decode_timeout_count_back == 0)
 			timeout_process_back(hevc);
+	} else if ((decode_timeout_back_fast_check) &&
+				(decode_timeout_val_back > 0) &&
+				(hevc->start_process_time_back > 0) &&
+				hevc->back_timer_check_count >= decode_timeout_back_fast_check_threshold) {
+		hevc_print(hevc, 0, "timer_back fast check timeout\n");
+		hevc->back_timer_check_count = 0;
+		timeout_process_back(hevc);
 	}
 
 	if (debug & HEVC_BE_SIMULATE_IRQ) {
@@ -12971,7 +13025,7 @@ static void vh265_check_timer_back_func(struct timer_list *timer)
 		//	avs3_back_threaded_irq_cb(vdec, 0);
 	}
 
-	mod_timer(timer, jiffies + PUT_INTERVAL);
+	mod_timer(timer, jiffies + 1);
 
 }
 #endif
@@ -14042,6 +14096,7 @@ static void reset_process_time_back(struct hevc_state_s *hevc)
 		hevc->start_process_time_back = 0;
 		if (process_time > max_process_time_back[hevc->index])
 			max_process_time_back[hevc->index] = process_time;
+		hevc->back_timer_check_count = 0;
 	}
 }
 
@@ -14049,6 +14104,7 @@ static void start_process_time_back(struct hevc_state_s *hevc)
 {
 	hevc->start_process_time_back = jiffies;
 	hevc->decode_timeout_count_back = 2;
+	hevc->back_timer_check_count = 0;
 }
 
 /*
@@ -15207,15 +15263,29 @@ static void vh265_work_back_implement(struct hevc_state_s *hevc,
 		hevc->backend_decoded_count++;
 		pic->error_mark = 1;
 		pic->back_done_mark = 1;
-		pic->backend_ref--;
+		if (pic->backend_ref > 0)
+			pic->backend_ref--;
+		else
+			hevc_print(hevc, 0, "pic->index %d error %d\n", pic->index, __LINE__);
 		for (i = 0; i < MAX_REF_PIC_NUM; i++) {
 			ref_pic = pic->ref_pic[i];
 			if (ref_pic == NULL)
 				break;
-			ref_pic->backend_ref--;
+			if (ref_pic->backend_ref > 0)
+				ref_pic->backend_ref--;
+			else
+				hevc_print(hevc, 0, "ref_pic->index %d error %d\n", ref_pic->index, __LINE__);
 		}
-		if (debug & H265_DEBUG_BUFMGR_MORE)
+		if (debug & H265_DEBUG_BUFMGR_MORE) {
+			for (i = 0; i < MAX_REF_PIC_NUM; i++) {
+				ref_pic = pic->ref_pic[i];
+				if (ref_pic == NULL)
+					break;
+				hevc_print(hevc, 0, "pic index %d, ref index %d ref_pic backend_ref %d\n",
+						pic->index, ref_pic->index, ref_pic->backend_ref);
+			}
 			dump_pic_list(hevc);
+		}
 
 		hevc->fb_rd_pos++;
 		if (hevc->fb_rd_pos >= hevc->fb_ifbuf_num)
@@ -15837,7 +15907,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 	WRITE_VREG(HEVC_DECODE_SIZE, r);
 	/*WRITE_VREG(HEVC_DECODE_COUNT, hevc->decode_idx);*/
 	hevc->init_flag = 1;
-
+	hevc->start_decoder_flag = 0;
 	if (hevc->pic_list_init_flag == 3) {
 		if (efficiency_mode == 0) {
 #ifdef NEW_FB_CODE
@@ -17453,6 +17523,16 @@ MODULE_PARM_DESC(fb_ifbuf_num, "\n amvdec_h265 fb_ifbuf_num\n");
 module_param(decode_timeout_val_back, uint, 0664);
 MODULE_PARM_DESC(decode_timeout_val_back,
 	"\n h265 decode_timeout_val_back\n");
+
+module_param(decode_timeout_back_fast_check, uint, 0664);
+MODULE_PARM_DESC(decode_timeout_back_fast_check,
+	"\n h265 decode_timeout_back_fast_check\n");
+
+
+module_param(decode_timeout_back_fast_check_threshold, uint, 0664);
+MODULE_PARM_DESC(decode_timeout_back_fast_check_threshold,
+	"\n h265 decode_timeout_back_fast_check_threshold\n");
+
 
 module_param_array(max_process_time_back, uint,
 	&max_decode_instance_num, 0664);
