@@ -2748,6 +2748,7 @@ int vdec_connect(struct vdec_s *vdec)
 		init_completion(&vdec->slave->inactive_done);
 	}
 
+	mutex_lock(&vdec_mutex);
 	flags = vdec_core_lock(vdec_core);
 
 	list_add_tail(&vdec->list, &vdec_core->connected_vdec_list);
@@ -2758,6 +2759,7 @@ int vdec_connect(struct vdec_s *vdec)
 	}
 
 	vdec_core_unlock(vdec_core, flags);
+	mutex_unlock(&vdec_mutex);
 
 	up(&vdec_core->sem);
 
@@ -4482,6 +4484,7 @@ static int vdec_core_thread(void *data)
 			/* elect next vdec to be scheduled */
 			vdec = vdec_get_last_vdec(i);
 			if (vdec) {
+				mutex_lock(&vdec_mutex);
 				vdec = list_entry(vdec->list.next, struct vdec_s, list);
 				list_for_each_entry_from(vdec, &core->connected_vdec_list, list) {
 					sched_mask = vdec_schedule_mask(vdec, core->sched_mask);
@@ -4494,7 +4497,7 @@ static int vdec_core_thread(void *data)
 					if (sched_mask)
 						break;
 				}
-
+				mutex_unlock(&vdec_mutex);
 				if (&vdec->list == &core->connected_vdec_list)
 					vdec = NULL;
 
@@ -4503,6 +4506,7 @@ static int vdec_core_thread(void *data)
 			}
 
 			if (!vdec) {
+				mutex_lock(&vdec_mutex);
 				/* search from beginning */
 				list_for_each_entry(vdec, &core->connected_vdec_list, list) {
 					sched_mask = vdec_schedule_mask(vdec, core->sched_mask);
@@ -4529,6 +4533,7 @@ static int vdec_core_thread(void *data)
 					if (sched_mask)
 						break;
 				}
+				mutex_unlock(&vdec_mutex);
 
 				if (&vdec->list == &core->connected_vdec_list)
 					vdec = NULL;
