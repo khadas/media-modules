@@ -9878,7 +9878,7 @@ static int userdata_prepare(struct hevc_state_s *hevc)
 				}
 			}
 		}
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s: id = %x, offset: %x, vpts: %d, pts_valid: %d\n",
 			__func__, vdec->pts_server_id, pic->stream_offset, vpts, pts_valid);
 		vh265_userdata_fill_vpts(hevc, vpts, pts_valid, pic->POC);
