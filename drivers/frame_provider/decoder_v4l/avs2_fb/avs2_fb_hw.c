@@ -305,7 +305,7 @@ static int32_t config_mc_buffer_fb(struct AVS2Decoder_s *dec)
 			if (pic->error_mark)
 				cur_pic->error_mark = 1;
 			avs2_print(dec, AVS2_DBG_BUFMGR_DETAIL,
-			"	refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
+				"refid %x mc_canvas_u_v %x mc_canvas_y %x\n", i, pic->mc_canvas_u_v, pic->mc_canvas_y);
 #if (defined NEW_FRONT_BACK_CODE) && (!defined FB_BUF_DEBUG_NO_PIPLINE)
 			for (j = 0; j < MAXREF; j++) {
 				if (pic == cur_pic->ref_pic[j])
@@ -431,9 +431,9 @@ static void copy_loopbufs_ptr(buff_ptr_t* trg, buff_ptr_t* src)
 
 static void print_loopbufs_ptr(struct AVS2Decoder_s *dec, char* mark, buff_ptr_t* ptr)
 {
-	avs2_print(dec, AVS2_DBG_BUFMGR, "==%s==:\n", mark);
 	avs2_print(dec, AVS2_DBG_BUFMGR,
-		"mmu0_ptr 0x%x, mmu1_ptr 0x%x, scalelut_ptr 0x%x (changed %d) pre_ptr 0x%x, vcpu_imem_ptr 0x%x, sys_imem_ptr 0x%x (vir 0x%x), lmem0_ptr 0x%x, lmem1_ptr 0x%x, parser_sao0_ptr 0x%x, parser_sao1_ptr 0x%x, mpred_imp0_ptr 0x%x, mpred_imp1_ptr 0x%x\n",
+		"%s:mmu0_ptr 0x%x, mmu1_ptr 0x%x, scalelut_ptr 0x%x (changed %d) pre_ptr 0x%x, vcpu_imem_ptr 0x%x, sys_imem_ptr 0x%x (vir 0x%x), lmem0_ptr 0x%x, lmem1_ptr 0x%x, parser_sao0_ptr 0x%x, parser_sao1_ptr 0x%x, mpred_imp0_ptr 0x%x, mpred_imp1_ptr 0x%x\n",
+		mark,
 		ptr->mmu0_ptr,
 		ptr->mmu1_ptr,
 		ptr->scalelut_ptr,
@@ -531,6 +531,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUF_SCALELUT_ID, avs2_dec->fb_buf_scalelut.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_scalelut.buf_size);
+	}
+
 	avs2_dec->fb_buf_scalelut.buf_start = tmp_adr;
 	avs2_dec->fb_buf_scalelut.buf_end = avs2_dec->fb_buf_scalelut.buf_start + avs2_dec->fb_buf_scalelut.buf_size;
 
@@ -538,6 +545,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUF_VCPU_IMEM_ID, avs2_dec->fb_buf_vcpu_imem.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_vcpu_imem.buf_size);
+	}
+
 	avs2_dec->fb_buf_vcpu_imem.buf_start = tmp_adr;
 	avs2_dec->fb_buf_vcpu_imem.buf_end = avs2_dec->fb_buf_vcpu_imem.buf_start + avs2_dec->fb_buf_vcpu_imem.buf_size;
 
@@ -555,6 +569,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUF_LMEM0_ID, avs2_dec->fb_buf_lmem0.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_lmem0.buf_size);
+	}
+
 	avs2_dec->fb_buf_lmem0.buf_start = tmp_adr;
 	avs2_dec->fb_buf_lmem0.buf_end = avs2_dec->fb_buf_lmem0.buf_start + avs2_dec->fb_buf_lmem0.buf_size;
 
@@ -562,6 +583,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUF_LMEM1_ID, avs2_dec->fb_buf_lmem1.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_lmem1.buf_size);
+	}
+
 	avs2_dec->fb_buf_lmem1.buf_start = tmp_adr;
 	avs2_dec->fb_buf_lmem1.buf_end = avs2_dec->fb_buf_lmem1.buf_start + avs2_dec->fb_buf_lmem1.buf_size;
 
@@ -569,6 +597,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUF_PARSER_SAO0_ID, avs2_dec->fb_buf_parser_sao0.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_parser_sao0.buf_size);
+	}
+
 	avs2_dec->fb_buf_parser_sao0.buf_start = tmp_adr;
 	avs2_dec->fb_buf_parser_sao0.buf_end = avs2_dec->fb_buf_parser_sao0.buf_start + avs2_dec->fb_buf_parser_sao0.buf_size;
 
@@ -576,6 +611,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUF_PARSER_SAO1_ID, avs2_dec->fb_buf_parser_sao1.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_parser_sao1.buf_size);
+	}
+
 	avs2_dec->fb_buf_parser_sao1.buf_start = tmp_adr;
 	avs2_dec->fb_buf_parser_sao1.buf_end = avs2_dec->fb_buf_parser_sao1.buf_start + avs2_dec->fb_buf_parser_sao1.buf_size;
 
@@ -583,6 +625,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUFF_MPRED_IMP0_ID, avs2_dec->fb_buf_mpred_imp0.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_mpred_imp0.buf_size);
+	}
+
 	avs2_dec->fb_buf_mpred_imp0.buf_start = tmp_adr;
 	avs2_dec->fb_buf_mpred_imp0.buf_end = avs2_dec->fb_buf_mpred_imp0.buf_start + avs2_dec->fb_buf_mpred_imp0.buf_size;
 
@@ -590,6 +639,13 @@ static void init_fb_bufstate(struct AVS2Decoder_s *dec)
 	ret = decoder_bmmu_box_alloc_buf_phy(dec->bmmu_box,
 		BMMU_IFBUFF_MPRED_IMP1_ID, avs2_dec->fb_buf_mpred_imp1.buf_size,
 		DRIVER_NAME, &tmp_adr);
+	if (ret) {
+		avs2_print(dec, 0, "%s: failed to alloc buffer, %d\n", __func__, __LINE__);
+	} else {
+		if (!vdec_secure(hw_to_vdec(dec)))
+			codec_mm_memset(tmp_adr, 0, avs2_dec->fb_buf_mpred_imp1.buf_size);
+	}
+
 	avs2_dec->fb_buf_mpred_imp1.buf_start = tmp_adr;
 	avs2_dec->fb_buf_mpred_imp1.buf_end = avs2_dec->fb_buf_mpred_imp1.buf_start + avs2_dec->fb_buf_mpred_imp1.buf_size;
 
@@ -1630,6 +1686,10 @@ void avs2_restore_pbi_fb(struct avs2_decoder *dec, struct avs2_decoder_fb *dec_f
 static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
 {
 	int ii;
+
+	if (!(dec->error_proc_policy & 0x2))
+		return ;
+
 	for (ii = 0; ii < dec->avs2_dec.ref_maxbuffer; ii++) {
 		struct avs2_frame_s *pic = dec->avs2_dec.fref[ii];
 		if (pic->bg_flag == 0 &&
@@ -1672,10 +1732,12 @@ static void release_free_mmu_buffers(struct AVS2Decoder_s *dec)
 	}
 }
 
-static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
+static int BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 {
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	struct avs2_frame_s *pic = avs2_dec->next_be_decode_pic[avs2_dec->fb_rd_pos];
+	int i = 0;
+
 	avs2_print(dec, PRINT_FLAG_VDEC_STATUS,
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d)\n",
 		avs2_dec->backend_decoded_count, avs2_dec->fb_wr_pos, avs2_dec->fb_rd_pos);
@@ -1685,7 +1747,7 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 		print_loopbufs_ptr(dec, "bk", &avs2_dec->bk);
 		avs2_hw_init(dec, 0, 1);
 		WRITE_VREG(dec->backend_ASSIST_MBOX0_IRQ_REG, 1);
-		return;
+		return 0;
 	}
 #if 0
 #ifdef AVS2_10B_MMU
@@ -1698,6 +1760,22 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 	pic->mmu_alloc_flag = 1;
 #endif
 #else
+
+	for (i = 0; i < MAXREF; i++) {
+		if ((pic->ref_pic[i]) && (pic->ref_pic[i]->error_mark)) {
+			avs2_print(dec, AVS2_DBG_BUFMGR,
+				"%s ref pic(%d) has error_mark, skip\n", __func__, i);
+			pic->error_mark = 1;
+			break;
+		}
+	}
+
+	if ((dec->error_proc_policy & 0x2) && pic->error_mark) {
+		avs2_print(dec, AVS2_DBG_BUFMGR, "%s pic has error_mark, skip\n", __func__);
+		pic_backend_ref_operation(dec, 0);
+		return 1;
+	}
+
 	if (dec->front_back_mode == 1) {
 		struct aml_buf *aml_buf = index_to_aml_buf(dec, pic->index);
 
@@ -1747,6 +1825,8 @@ static void BackEnd_StartDecoding(struct AVS2Decoder_s *dec)
 		amhevc_start_b();
 		vdec_profile(hw_to_vdec(dec), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC_BACK);
 	}
+
+	return 0;
 }
 
 static void init_pic_list_hw_fb(struct AVS2Decoder_s *dec)

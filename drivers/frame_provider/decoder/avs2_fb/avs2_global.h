@@ -800,6 +800,9 @@ struct avs2_frame_s {
 
 	u32 triple_write_mode;
 #endif
+#ifdef AML
+	u64 time;
+#endif
 };
 
 struct ImageParameters_s {
@@ -1692,6 +1695,9 @@ struct avs2_decoder {
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
 #endif
+#ifdef AML
+	u64 start_time;
+#endif
 };
 
 extern void write_frame(struct avs2_decoder *avs2_dec, int32_t pos);
@@ -1710,5 +1716,6 @@ extern int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec);
 
 extern bool is_avs2_print_param(void);
 extern bool is_avs2_print_bufmgr_detail(void);
+extern int get_error_policy(struct avs2_decoder *avs2_dec);
 #endif
 

@@ -2351,7 +2351,7 @@ static void dump_pic_list(struct AVS2Decoder_s *dec)
 	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 	for (ii = 0; ii < avs2_dec->ref_maxbuffer; ii++) {
 		avs2_print(dec, 0,
-		"fref[%d]: index %d decode_id %d mvbuf %d imgcoi_ref %d imgtr_fwRefDistance %d referred %d, pre %d is_out %d, bg %d, vf_ref %d error %d lcu %d ref_pos(%d,%d,%d,%d,%d,%d,%d)\n",
+		"fref[%d]: index %d decode_id %d mvbuf %d imgcoi_ref %d imgtr_fwRefDistance %d referred %d, pre %d is_out %d, bg %d, vf_ref %d error %d lcu %d ref_pos(%d,%d,%d,%d,%d,%d,%d), time %lld\n",
 		ii, avs2_dec->fref[ii]->index,
 		avs2_dec->fref[ii]->decode_idx,
 		avs2_dec->fref[ii]->mv_buf_index,
@@ -2370,7 +2370,8 @@ static void dump_pic_list(struct AVS2Decoder_s *dec)
 		avs2_dec->fref[ii]->ref_poc[3],
 		avs2_dec->fref[ii]->ref_poc[4],
 		avs2_dec->fref[ii]->ref_poc[5],
-		avs2_dec->fref[ii]->ref_poc[6]);
+		avs2_dec->fref[ii]->ref_poc[6],
+		avs2_dec->fref[ii]->time);
 	}
 	return;
 }
@@ -6324,6 +6325,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	int fw_size = 0x1000 * 16;
 	struct firmware_s *fw = NULL;
 	struct AVS2Decoder_s *dec = (struct AVS2Decoder_s *)vdec->private;
+	struct avs2_decoder *avs2_dec = &dec->avs2_dec;
 
 	timer_setup(&dec->timer, vavs2_put_timer_func, 0);
 
@@ -6331,6 +6333,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 	if (vavs2_local_init(dec) < 0)
 		return -EBUSY;
 
+	avs2_dec->start_time = div64_u64(local_clock(), 1000);
 	vdec_set_vframe_comm(vdec, DRIVER_NAME);
 
 	fw = vmalloc(sizeof(struct firmware_s) + fw_size);

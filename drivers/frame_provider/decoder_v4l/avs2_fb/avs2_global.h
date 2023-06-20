@@ -824,6 +824,9 @@ struct avs2_frame_s {
 	uint32_t luma_size;
 	uint32_t chroma_size;
 	int is_display;
+#ifdef AML
+	u64 time;
+#endif
 };
 
 
@@ -1740,6 +1743,9 @@ struct avs2_decoder {
 	uint32_t  instruction[256*4]; //avoid code crash, but only 256 used
 	uint32_t  ins_offset;
 #endif
+#ifdef AML
+	u64 start_time;
+#endif
 };
 
 struct avs2_decoder_fb {
@@ -1792,5 +1798,6 @@ extern int32_t avs2_init_global_buffers(struct avs2_decoder *avs2_dec);
 extern bool is_avs2_print_param(void);
 extern bool is_avs2_print_bufmgr_detail(void);
 extern int get_free_frame_buffer(struct avs2_decoder *avs2_dec);
+extern int get_error_policy(struct avs2_decoder *avs2_dec);
 #endif
 

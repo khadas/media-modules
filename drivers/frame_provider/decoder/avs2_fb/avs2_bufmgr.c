@@ -940,10 +940,11 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 			}
 		}
 	}
-	if (img->type == B_IMG &&
+	if ((img->type == B_IMG &&
 		(avs2_dec->fref[0]->imgtr_fwRefDistance <= img->tr
 		|| avs2_dec->fref[1]->imgtr_fwRefDistance >= img->tr
-		|| avs2_dec->fref[1]->imgtr_fwRefDistance == -256)) {
+		|| avs2_dec->fref[1]->imgtr_fwRefDistance == -256)) &&
+		(get_error_policy(avs2_dec) & 0x2)) {
 
 		pr_info("wrong reference configuration for B frame\n");
 		pr_info("fref0 imgtr_fwRefDistance %d, fref1 imgtr_fwRefDistance %d, img->tr %d\n",
@@ -1014,7 +1015,9 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 #ifdef AML
 	hc->f_rec->error_mark = 0;
 	hc->f_rec->decoded_lcu = 0;
+	hc->f_rec->back_done_mark = 1;
 	hc->f_rec->slice_type = img->type;
+	hc->f_rec->time = div64_u64(local_clock(), 1000) - avs2_dec->start_time;
 #endif
 	hc->f_rec->referred_by_others = hd->curr_RPS.referred_by_others;
 	if (is_avs2_print_bufmgr_detail())

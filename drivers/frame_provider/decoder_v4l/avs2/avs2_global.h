@@ -793,6 +793,9 @@ struct avs2_frame_s {
 	char *cuva_data_buf;
 	int  cuva_data_size;
 	u64 timestamp;
+#ifdef AML
+	u64 time;
+#endif
 };
 
 
@@ -1641,6 +1644,9 @@ struct avs2_decoder {
 	int8_t bufmgr_error_flag;
 #endif
 	uint8_t init_fref_flag;
+#ifdef AML
+	u64 start_time;
+#endif
 };
 
 

@@ -1009,6 +1009,7 @@ void prepare_RefInfo(struct avs2_decoder *avs2_dec)
 	hc->f_rec->error_mark = 0;
 	hc->f_rec->decoded_lcu = 0;
 	hc->f_rec->slice_type = img->type;
+	hc->f_rec->time = div64_u64(local_clock(), 1000) - avs2_dec->start_time;
 #endif
 	hc->f_rec->referred_by_others = hd->curr_RPS.referred_by_others;
 	if (is_avs2_print_bufmgr_detail())

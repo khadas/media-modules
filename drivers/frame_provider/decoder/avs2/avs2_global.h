@@ -795,6 +795,9 @@ struct avs2_frame_s {
 
 	char *cuva_data_buf;
 	int  cuva_data_size;
+#ifdef AML
+	u64 time;
+#endif
 };
 
 
@@ -1641,6 +1644,9 @@ struct avs2_decoder {
 	int32_t ref_maxbuffer;
 	int32_t to_prepare_disp_count;
 	int8_t bufmgr_error_flag;
+#endif
+#ifdef AML
+	u64 start_time;
 #endif
 };
 
