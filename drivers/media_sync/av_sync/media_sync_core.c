@@ -3078,11 +3078,11 @@ long mediasync_ins_set_first_queue_audio_info(MediaSyncManager* pSyncManage, med
 		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
+	pInstance->mSyncInfo.firstAudioPacketsInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = info.frameSystemTime;
 	if (media_sync_calculate_cache_enable) {
 		pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.framePts = info.framePts;
 		pInstance->frame_table[PTS_TYPE_AUDIO].mFirstPacket.frameSystemTime = info.frameSystemTime;
-		pInstance->mSyncInfo.firstAudioPacketsInfo.framePts = info.framePts;
-		pInstance->mSyncInfo.firstAudioPacketsInfo.frameSystemTime = info.frameSystemTime;
 		if (info.framePts == -1 && info.frameSystemTime == -1) {
 			clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_AUDIO]);
 		}
@@ -3131,11 +3131,11 @@ long mediasync_ins_set_first_queue_video_info(MediaSyncManager* pSyncManage, med
 		spin_unlock_irqrestore(&(pSyncManage->m_lock),flags);
 		return -1;
 	}
+	pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.framePts;
+	pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = info.frameSystemTime;
 	if (media_sync_calculate_cache_enable) {
 		pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.framePts = info.framePts;
 		pInstance->frame_table[PTS_TYPE_VIDEO].mFirstPacket.frameSystemTime = info.frameSystemTime;
-		pInstance->mSyncInfo.firstVideoPacketsInfo.framePts = info.framePts;
-		pInstance->mSyncInfo.firstVideoPacketsInfo.frameSystemTime = info.frameSystemTime;
 		if (info.framePts == -1 && info.frameSystemTime == -1) {
 			clear_frame_list(pInstance, &pInstance->frame_table[PTS_TYPE_VIDEO]);
 		}
