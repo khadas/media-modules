@@ -3294,7 +3294,7 @@ static int v4l_alloc_buf(struct hevc_state_s *hevc, struct PIC_s *pic)
 	struct aml_buf *aml_buf = hevc->aml_buf;
 
 	if (!aml_buf) {
-		hevc_print(hevc, 0,
+		hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s aml_buf is NULL\n",
 			__func__);
 		return -1;
@@ -5564,7 +5564,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 
 		pic = hevc->m_PIC[pos];
 		if (pic && v4l_alloc_buf(hevc, pic)) {
-			hevc_print(hevc, 0,
+			hevc_print(hevc, H265_DEBUG_BUFMGR,
 			"%s pic %px or v4l_alloc_buf fail!\n",
 			__func__, pic);
 			return NULL;
@@ -12553,7 +12553,8 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 		__func__, hevc->aml_buf, hevc->aml_buf->index);
 	}
 
-	if (save_buffer && free_count < run_ready_min_buf_num &&
+	if (hevc->dec_result != DEC_RESULT_EOS && !hevc->resolution_change &&
+		save_buffer && free_count < run_ready_min_buf_num &&
 		!hevc->head_pre_parsed) {
 		hevc->try_parsing = 1;
 		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
