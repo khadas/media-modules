@@ -3536,9 +3536,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			vf->frame_type |= V4L2_BUF_FLAG_BFRAME;
 		}
 
-		dpb_print(DECODE_ID(hw), 0,
-			"%s %d slice_type = %d\n", __func__, __LINE__, slice_type);
-
 		/*vf->ratio_control |= (0x3FF << DISP_RATIO_ASPECT_RATIO_BIT);*/
 		vf->sar_width = hw->width_aspect_ratio;
 		vf->sar_height = hw->height_aspect_ratio;
