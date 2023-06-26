@@ -6916,7 +6916,7 @@ static void vav1_vf_put(struct vframe_s *vf, void *op_arg)
 				pool->frame_bufs[index].buf.vf_ref--;
 		}
 #ifdef NEW_FB_CODE
-		pool->frame_bufs[index].buf.back_done_mark = 0;
+		//pool->frame_bufs[index].buf.back_done_mark = 0;
 #endif
 		if (hw->wait_buf)
 			WRITE_VREG(hw->ASSIST_MBOX0_IRQ_REG, 0x1);
