@@ -314,25 +314,6 @@ int get_clk_with_source(int format, int w_x_h_fps)
 }
 EXPORT_SYMBOL(get_clk_with_source);
 
-bool is_hevc_front_back_clk_combined(void)
-{
-	int cpu_id = get_cpu_major_id();
-
-	if (cpu_id == AM_MESON_CPU_MAJOR_ID_T5 ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5D) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_S4) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_S4D) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5W) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_T3X) ||
-		(cpu_id == AM_MESON_CPU_MAJOR_ID_TXHD2))
-		return true;
-
-	return false;
-}
-EXPORT_SYMBOL(is_hevc_front_back_clk_combined);
-
 int vdec_source_changed_for_clk_set(int format, int width, int height, int fps)
 {
 	int clk = get_clk_with_source(format, width * height * fps);
@@ -362,7 +343,7 @@ int vdec_source_changed_for_clk_set(int format, int width, int height, int fps)
 		ret_clk = hevc_clock_set(clk);
 		clock_source_wxhxfps_saved[VDEC_HEVC] = width * height * fps;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A &&
-			!is_hevc_front_back_clk_combined()) {
+			!is_hevc_clk_combined()) {
 			ret_clk = hevc_back_clock_set(clk);
 			clock_source_wxhxfps_saved[VDEC_HEVCB] = width * height * fps;
 		}

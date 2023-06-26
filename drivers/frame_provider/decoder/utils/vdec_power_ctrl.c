@@ -150,6 +150,8 @@ static void pm_vdec_power_domain_release(struct device *dev)
 
 static void pm_vdec_clock_on(int id)
 {
+	int ret = 0;
+
 	if (id == VDEC_1) {
 		amports_switch_gate("clk_vdec_mux", 1);
 		vdec_clock_hi_enable();
@@ -157,23 +159,17 @@ static void pm_vdec_clock_on(int id)
 		hcodec_clock_enable();
 	} else if (id == VDEC_HEVC) {
 		/* enable hevc clock */
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SC2 &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5D) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_S5) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T3X) &&
-			(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2))
-			amports_switch_gate("clk_hevcf_mux", 1);
-		else
+		ret = amports_switch_gate("clk_hevcf_mux", 1);
+		if (ret == -ENODEV)
 			amports_switch_gate("clk_hevc_mux", 1);
+
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-			!is_hevc_front_back_clk_combined())
+			!is_hevc_clk_combined())
 			amports_switch_gate("clk_hevcb_mux", 1);
 
 		hevc_clock_hi_enable();
 
-		if (!is_hevc_front_back_clk_combined())
+		if (!is_hevc_clk_combined())
 			hevc_back_clock_hi_enable();
 	}
 }
@@ -188,7 +184,7 @@ static void pm_vdec_clock_off(int id)
 		/* disable hevc clock */
 		hevc_clock_off();
 		if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) &&
-			!is_hevc_front_back_clk_combined())
+			!is_hevc_clk_combined())
 			hevc_back_clock_off();
 	}
 }
@@ -273,7 +269,7 @@ static void pm_vdec_power_domain_power_on(struct device *dev, int id)
 	pm_vdec_clock_on(id);
 	pm_vdec_power_switch(pm->pd_data, id, true);
 
-	if ((id == VDEC_HEVC) && dos_dev_get()->is_hevc_dual_core_mode_support) {
+	if ((id == VDEC_HEVC) && is_support_dual_core()) {
 		pm_vdec_power_switch(pm->pd_data, VDEC_HEVCB, true);
 	}
 
@@ -289,7 +285,7 @@ static void pm_vdec_power_domain_power_off(struct device *dev, int id)
 	pm_vdec_clock_off(id);
 	pm_vdec_power_switch(pm->pd_data, id, false);
 
-	if ((id == VDEC_HEVC) && dos_dev_get()->is_hevc_dual_core_mode_support) {
+	if ((id == VDEC_HEVC) && is_support_dual_core()) {
 		pm_vdec_power_switch(pm->pd_data, VDEC_HEVCB, false);
 	}
 

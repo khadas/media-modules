@@ -740,10 +740,6 @@ extern int vdec_set_dv_metawithel(struct vdec_s *vdec, int isdvmetawithel);
 
 extern void vdec_set_no_powerdown(int flag);
 
-extern int vdec_is_support_4k(void);
-
-extern int hevc_is_support_4k(enum vformat_e format);
-
 extern void vdec_set_flag(struct vdec_s *vdec, u32 flag);
 
 extern void vdec_set_eos(struct vdec_s *vdec, bool eos);
@@ -827,10 +823,6 @@ int show_stream_buffer_status(char *buf,
 	int (*callback) (struct stream_buf_s *, char *));
 
 extern int get_double_write_ratio(int dw_mode);
-
-bool is_support_no_parser(void);
-
-bool is_support_dual_core(void);
 
 bool is_support_interlace_avbc(void);
 

@@ -95,39 +95,44 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define AM_MESON_CPU_MINOR_ID_S4_S805X2  (REVX_MASK | AM_MESON_CPU_MAJOR_ID_S4)
 #define AM_MESON_CPU_MINOR_ID_T7C        (REVC_MASK | AM_MESON_CPU_MAJOR_ID_T7)
 
+/* for dos_of_dev_s max resolution define */
+#define RESOLUTION_1080P  (1920 * 1088)
+#define RESOLUTION_4K     (4302 * 2176)  //4k
+#define RESOLUTION_8K     (8192 * 4352)  //8k
+
 /* dos hardware feature define. */
 struct dos_of_dev_s {
 	enum AM_MESON_CPU_MAJOR_ID chip_id;
 
+	/* register*/
 	reg_compat_func reg_compat;
 
-	/* clock */
-	u32 max_vdec_clock;		//MHz
-
+	/* clock, Mhz. necessary!! */
+	u32 max_vdec_clock;
 	u32 max_hevcf_clock;
-
 	u32 max_hevcb_clock;
-
 	bool hevc_clk_combine_flag;
+
+	/* resolution. necessary!! */
+	u32 vdec_max_resolution;	//just for h264
+	u32 hevc_max_resolution;
 
 	/* esparser */
 	bool is_hw_parser_support;
 
+	/* vdec */
 	bool is_vdec_canvas_support;
-
 	bool is_support_h264_mmu;
 
-	bool is_hevc_dual_core_mode_support;
+	/* hevc */
+	bool is_support_dual_core;
+	bool is_support_p010;
+	bool is_support_triple_write;
+	bool is_support_rdma;
+	bool is_support_mmu_copy;
 
-	u32 vdec_max_resolution;	//just for h264
-
-	u32 hevc_max_resolution;
+	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
 };
-
-/* for dos_of_dev_s max resolution define */
-#define RESOLUTION_1080P  1088
-#define RESOLUTION_4K     2176  //4k
-#define RESOLUTION_8K     4352  //8k
 
 
 /* export functions */
@@ -149,5 +154,46 @@ bool is_cpu_t7c(void);
 inline bool is_support_new_dos_dev(void);
 
 struct dos_of_dev_s *dos_dev_get(void);
+
+/* clk get */
+inline u32 vdec_max_clk_get(void);
+
+inline u32 hevcf_max_clk_get(void);
+
+inline u32 hevcb_max_clk_get(void);
+
+inline bool is_hevc_clk_combined(void);
+
+/* resolution check */
+inline int vdec_is_support_4k(void);
+
+inline int hevc_is_support_4k(void);
+
+inline int hevc_is_support_8k(void);
+
+inline bool is_oversize_vdec(int w, int h);
+
+inline bool is_oversize_hevc(int w, int h);
+
+/* hardware features */
+inline bool is_support_no_parser(void);
+
+inline bool is_support_vdec_canvas(void);
+
+inline bool is_support_dual_core(void);
+
+inline bool is_support_p010_mode(void);
+
+inline bool is_support_triple_write(void);
+
+inline bool is_support_rdma(void);
+
+inline bool is_support_mmu_copy(void);
+
+inline bool is_support_axi_ctrl(void);
+
+void pr_dos_infos(void);
+
+void dos_info_debug(void);
 
 #endif

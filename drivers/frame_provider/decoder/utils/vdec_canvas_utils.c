@@ -29,28 +29,6 @@ static struct canvas_config_s *mdec_cav_pool = NULL;
 
 extern u32 vdec_get_debug(void);
 
-
-bool is_support_vdec_canvas(void)
-{
-	/* vdec canvas note:
-	 * 1. canvas params config to display, do not use
-	 *    vf->canvasxAddr, should use vf->canvasxconfig[].
-	 * 2. the endian can not config with canvas. and hevc
-	 *    core should not config canvas. config endian in
-	 *    probe function like h265/vp9/av1/avs2.
-	*/
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T7) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5W) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_C1))
-		return true;
-	return false;
-}
-EXPORT_SYMBOL(is_support_vdec_canvas);
-
 static int get_canvas(unsigned int index, unsigned int base)
 {
 	int start;

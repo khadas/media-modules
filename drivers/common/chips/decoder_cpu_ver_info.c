@@ -39,18 +39,6 @@ static bool codec_dos_dev = 0;		//to compat old dts
 
 static struct dos_of_dev_s *platform_dos_dev = NULL;
 
-inline bool is_support_new_dos_dev(void)
-{
-	return codec_dos_dev;
-}
-EXPORT_SYMBOL(is_support_new_dos_dev);
-
-struct dos_of_dev_s *dos_dev_get(void)
-{
-	return platform_dos_dev;
-}
-EXPORT_SYMBOL(dos_dev_get);
-
 static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_START] = {
 	[AM_MESON_CPU_MAJOR_ID_M8B - MAJOR_ID_START] = {
 		.chip_id = AM_MESON_CPU_MAJOR_ID_M8B,
@@ -62,9 +50,9 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = false,
-		.is_hevc_dual_core_mode_support = false,
-		.vdec_max_resolution = RESOLUTION_4K,
-		.hevc_max_resolution = RESOLUTION_4K,
+		.is_support_dual_core = false,
+		.vdec_max_resolution = RESOLUTION_1080P,
+		.hevc_max_resolution = RESOLUTION_1080P,
 	},
 
 	[AM_MESON_CPU_MAJOR_ID_GXL - MAJOR_ID_START] = {
@@ -77,7 +65,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 	},
@@ -92,7 +80,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 	},
@@ -107,7 +95,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu	= true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 	},
@@ -122,7 +110,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu	= true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 	},
@@ -137,7 +125,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,  //support 8kp24
 	},
@@ -152,7 +140,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K, //support 8kp24
 	},
@@ -167,7 +155,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -175,6 +163,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 	[AM_MESON_CPU_MAJOR_ID_C1 - MAJOR_ID_START] = {
 		.chip_id = AM_MESON_CPU_MAJOR_ID_C1,
 		.reg_compat = NULL,
+		.is_vdec_canvas_support = true,
 	},
 
 
@@ -188,7 +177,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -203,7 +192,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K, //unsupport vp9 & av1
 	},
@@ -218,7 +207,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,	//unsupport 4k and avs2
 	},
@@ -233,7 +222,8 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
+		.is_support_axi_ctrl = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -248,7 +238,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -263,7 +253,10 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
+		.is_support_rdma     = true,
+		.is_support_mmu_copy = true,
+		.is_support_axi_ctrl = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,	//8kp30, rdma, mmu copy
 	},
@@ -278,7 +271,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -293,7 +286,7 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -305,10 +298,11 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.max_hevcf_clock       = 800,
 		.max_hevcb_clock       = 800,
 		.hevc_clk_combine_flag = true,
-		.is_hw_parser_support   = false,
+		.is_hw_parser_support  = false,
 		.is_vdec_canvas_support = true,
-		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = true,
+		.is_support_h264_mmu   = true,
+		.is_support_dual_core  = true,
+		.is_support_axi_ctrl = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -323,7 +317,8 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
+		.is_support_axi_ctrl = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_4K,
 	},
@@ -338,7 +333,9 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
+		.is_support_rdma     = true,
+		.is_support_axi_ctrl = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -350,10 +347,10 @@ static struct dos_of_dev_s dos_dev_data[AM_MESON_CPU_MAJOR_ID_MAX - MAJOR_ID_STA
 		.max_hevcf_clock = 500,
 		.max_hevcb_clock = 500,
 		.hevc_clk_combine_flag  = true,
-		.is_hw_parser_support   = false,
+		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_4K,	//unsupport avs2,av1
 	},
@@ -371,7 +368,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu	= true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -386,7 +383,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_hw_parser_support   = true,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,
 	},
@@ -401,7 +398,7 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = false,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
 		.vdec_max_resolution = RESOLUTION_1080P,
 		.hevc_max_resolution = RESOLUTION_1080P,
 	},
@@ -416,7 +413,8 @@ static struct dos_of_dev_s dos_dev_sub_table[] = {
 		.is_hw_parser_support   = false,
 		.is_vdec_canvas_support = true,
 		.is_support_h264_mmu    = true,
-		.is_hevc_dual_core_mode_support = false,
+		.is_support_dual_core = false,
+		.is_support_axi_ctrl = true,
 		.vdec_max_resolution = RESOLUTION_4K,
 		.hevc_max_resolution = RESOLUTION_8K,  //fixed endian issue
 	}
@@ -632,27 +630,23 @@ struct platform_device *initial_dos_device(void)
 		cpu_sub_id = is_meson_rev_b() ? CHIP_REVB :
 					(is_meson_rev_c() ? CHIP_REVC : CHIP_REVA);
 
-		pr_info("get dos device failed, id %d(%d), try to search dos device data\n", cpu_ver_id, cpu_sub_id);
+		pr_info("get dos dev failed, id %d(%d), try to search\n",
+			cpu_ver_id, cpu_sub_id);
+
 		if (dos_device_search_data(cpu_ver_id, cpu_sub_id) < 0) {
 			pr_err("get dos device failed, dos maybe out of work\n");
 			//return NULL;
 		}
 	}
-	if ((cpu_ver_id == AM_MESON_CPU_MAJOR_ID_G12B) && (cpu_sub_id == CHIP_REVB))
+	if ((cpu_ver_id == AM_MESON_CPU_MAJOR_ID_G12B) &&
+		(cpu_sub_id == CHIP_REVB))
 		cpu_ver_id = AM_MESON_CPU_MAJOR_ID_TL1;
-
-	pr_debug("dos init chip %d(%d), device info :\n", cpu_ver_id, cpu_sub_id);
-	pr_debug("\t max_vdec_clock  : %03d MHz \n", platform_dos_dev->max_vdec_clock);
-	pr_debug("\t max_hevcf_clock : %03d MHz \n", platform_dos_dev->max_hevcf_clock);
-	pr_debug("\t max_hevcb_clock : %03d MHz \n", platform_dos_dev->max_hevcb_clock);
-	pr_debug("\t hw_esparser_support : %s \n", platform_dos_dev->is_hw_parser_support?"yes":"no");
-	pr_debug("\t vdec_canvas_support : %s \n", platform_dos_dev->is_vdec_canvas_support?"yes":"no");
-	/* to do print all ? */
 
 	if (pdev && of_dev_data)
 		dos_register_probe(pdev, of_dev_data->reg_compat);
 
-	pr_debug("initial_dos_device end\n");
+	pr_info("initial_dos_device end, chip %d(%d)\n",
+		cpu_ver_id, cpu_sub_id);
 
 	return pdev;
 }
@@ -709,4 +703,215 @@ bool is_cpu_t7c(void)
 		&& (get_cpu_sub_id() == CHIP_REVC));
 }
 EXPORT_SYMBOL(is_cpu_t7c);
+
+
+/*
+	feature from dos dev functions
+*/
+/*
+bit0: force support no_parser;
+*/
+#define FORCE_VDEC_NO_PARSER BIT(0)
+static u32 force_dos_support;
+
+inline bool is_support_new_dos_dev(void)
+{
+	return codec_dos_dev;
+}
+EXPORT_SYMBOL(is_support_new_dos_dev);
+
+inline struct dos_of_dev_s *dos_dev_get(void)
+{
+	return platform_dos_dev;
+}
+EXPORT_SYMBOL(dos_dev_get);
+
+
+/* vdec & hevc clock */
+inline u32 vdec_max_clk_get(void)
+{
+	return platform_dos_dev->max_vdec_clock;
+}
+EXPORT_SYMBOL(vdec_max_clk_get);
+
+inline u32 hevcf_max_clk_get(void)
+{
+	return platform_dos_dev->max_hevcf_clock;
+}
+EXPORT_SYMBOL(hevcf_max_clk_get);
+
+inline u32 hevcb_max_clk_get(void)
+{
+	return platform_dos_dev->max_hevcb_clock;
+}
+EXPORT_SYMBOL(hevcb_max_clk_get);
+
+inline bool is_hevc_clk_combined(void)
+{
+	return (platform_dos_dev->hevc_clk_combine_flag);
+}
+EXPORT_SYMBOL(is_hevc_clk_combined);
+
+/* ressolution */
+inline int vdec_is_support_4k(void)
+{
+	if (platform_dos_dev->vdec_max_resolution > RESOLUTION_1080P)
+		return true;
+	else
+		return false;
+}
+EXPORT_SYMBOL(vdec_is_support_4k);
+
+inline int hevc_is_support_4k(void)
+{
+	if (platform_dos_dev->hevc_max_resolution > RESOLUTION_1080P)
+		return true;
+	else
+		return false;
+}
+EXPORT_SYMBOL(hevc_is_support_4k);
+
+inline int hevc_is_support_8k(void)
+{
+	if (platform_dos_dev->hevc_max_resolution > RESOLUTION_4K)
+		return true;
+
+	return false;
+}
+
+inline bool is_oversize_vdec(int w, int h)
+{
+	if (w < 0 || h < 0)
+		return true;
+
+	if (h != 0 && (w > platform_dos_dev->vdec_max_resolution / h))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_oversize_vdec);
+
+inline bool is_oversize_hevc(int w, int h)
+{
+	if (w < 0 || h < 0)
+		return true;
+
+	if (h != 0 && (w > platform_dos_dev->hevc_max_resolution / h))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_oversize_hevc);
+
+inline bool is_support_no_parser(void)
+{
+	return ((force_dos_support & FORCE_VDEC_NO_PARSER) ||
+		(!platform_dos_dev->is_hw_parser_support));
+}
+EXPORT_SYMBOL(is_support_no_parser);
+
+/* vdec intra canvas feature */
+inline bool is_support_vdec_canvas(void)
+{
+	return (platform_dos_dev->is_vdec_canvas_support);
+}
+EXPORT_SYMBOL(is_support_vdec_canvas);
+
+inline bool is_support_dual_core(void)
+{
+	return (platform_dos_dev->is_support_dual_core);
+}
+EXPORT_SYMBOL(is_support_dual_core);
+
+inline bool is_support_p010_mode(void)
+{
+	return (platform_dos_dev->is_support_p010);
+}
+EXPORT_SYMBOL(is_support_p010_mode);
+
+inline bool is_support_triple_write(void)
+{
+	return (platform_dos_dev->is_support_triple_write);
+}
+EXPORT_SYMBOL(is_support_triple_write);
+
+inline bool is_support_rdma(void)
+{
+	return (platform_dos_dev->is_support_rdma);
+}
+EXPORT_SYMBOL(is_support_rdma);
+
+inline bool is_support_mmu_copy(void)
+{
+	return (platform_dos_dev->is_support_mmu_copy);
+}
+EXPORT_SYMBOL(is_support_mmu_copy);
+
+inline bool is_support_axi_ctrl(void)
+{
+	return platform_dos_dev->is_support_axi_ctrl;
+}
+EXPORT_SYMBOL(is_support_axi_ctrl);
+
+void pr_dos_infos(void)
+{
+	pr_info("dos device info:\n");
+	pr_info("chip id: 0x%x(0x%x)\n", cpu_ver_id, cpu_sub_id);
+
+	pr_info("max vdec  clock: %03d MHz\n", vdec_max_clk_get());
+	pr_info("max hevcf clock: %03d MHz\n", hevcf_max_clk_get());
+	if (!is_hevc_clk_combined()) {
+		pr_info("max hevcb clock: %03d MHz\n", hevcb_max_clk_get());
+	}
+
+	pr_info("max vdec resolution : %s\n",
+		platform_dos_dev->vdec_max_resolution > RESOLUTION_1080P ? "4K":"1080P");
+	pr_info("max hevc resolution : %s\n",
+		platform_dos_dev->hevc_max_resolution < RESOLUTION_4K ? "1080P" :
+		(platform_dos_dev->hevc_max_resolution > RESOLUTION_4K ? "8K":"4K"));
+
+	pr_info("support no parser   : %d\n", is_support_no_parser());
+	pr_info("support vdec canvas : %d\n", is_support_vdec_canvas());
+	pr_info("support dual core   : %d\n", is_support_dual_core());
+	pr_info("support p010 mode   : %d\n", is_support_p010_mode());
+	pr_info("support triple write: %d\n", is_support_triple_write());
+	pr_info("support rdma        : %d\n", is_support_rdma());
+	pr_info("support mmu copy    : %d\n", is_support_mmu_copy());
+	pr_info("support dos axi ctrl: %d\n", is_support_axi_ctrl());
+}
+EXPORT_SYMBOL(pr_dos_infos);
+
+void dos_info_debug(void)
+{
+	int i;
+	struct dos_of_dev_s *save = platform_dos_dev;
+	int save_major_id = cpu_ver_id;
+	int save_sub_id = cpu_sub_id;
+
+	for (i = 0; i < ARRAY_SIZE(dos_dev_data); i++) {
+		platform_dos_dev = &dos_dev_data[i];
+		if (platform_dos_dev->chip_id) {
+			cpu_ver_id = platform_dos_dev->chip_id;
+			pr_dos_infos();
+			pr_info("\n");
+		}
+	}
+	for (i = 0; i < ARRAY_SIZE(dos_dev_sub_table); i++) {
+		platform_dos_dev = &dos_dev_sub_table[i];
+		if (platform_dos_dev->chip_id) {
+			cpu_ver_id = platform_dos_dev->chip_id & MAJOR_ID_MASK;
+			cpu_sub_id = (platform_dos_dev->chip_id & SUB_ID_MASK) >> 8;
+			pr_dos_infos();
+			pr_info("\n");
+		}
+	}
+
+	platform_dos_dev = save;
+	cpu_ver_id = save_major_id;
+	cpu_sub_id = save_sub_id;
+}
+EXPORT_SYMBOL(dos_info_debug);
+
+
+module_param(force_dos_support, uint, 0664);
 

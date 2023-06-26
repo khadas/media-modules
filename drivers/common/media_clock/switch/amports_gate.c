@@ -158,6 +158,8 @@ int amports_switch_gate(const char *name, int enable)
 
 			if (gates[i].clk)
 				amports_gate_clk(&gates[i], enable);
+			else
+				return -ENODEV;
 		}
 	}
 	return 0;
