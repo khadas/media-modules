@@ -5520,10 +5520,10 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 	if (hw->dpb.dec_dpb_size != 0)
 		dec_dpb_size_change = hw->dpb.dec_dpb_size!= get_dec_dpb_size_active(hw, param1, param4);
 
-	if (((seq_info2 != 0 &&
+	if ((((seq_info2 != 0 &&
 		(hw->seq_info2_last & 0x80ffffff) != (param1 & 0x80ffffff)) || dec_dpb_size_change) &&
 		hw->seq_info2_last != 0
-		) { /*picture size changed*/
+		) && (!hw->res_ch_flag)) { /*picture size changed*/
 		h264_reconfig(hw);
 	} else {
 		/*someting changes and not including dpb_size, width, height, ...*/
