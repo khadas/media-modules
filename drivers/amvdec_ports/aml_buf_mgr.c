@@ -106,6 +106,7 @@ static int aml_buf_box_init(struct aml_buf_mgr_s *bm)
 			return -ENOMEM;
 		if (aml_buf_box_alloc(bm, &bm->mmu, &bm->mmu_1, &bm->bmmu)) {
 			vfree(bm->fbc_array);
+			bm->fbc_array = NULL;
 			return -EINVAL;
 		}
 		buff_alloc_done = true;
@@ -282,6 +283,7 @@ static int aml_buf_fbc_release(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 
 	fbc->used[fbc->index] = 0;
 	fbc->ref = 0;
+	buf->fbc = NULL;
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, fbc:%d, haddr:%lx, hsize:%d, frm size:%d "
@@ -316,8 +318,10 @@ static void aml_buf_get_fbc_info(struct aml_buf_mgr_s *bm,
 static void aml_buf_fbc_destroy(struct aml_buf_mgr_s *bm)
 {
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR, "%s %d\n", __func__, __LINE__);
-	decoder_bmmu_box_free(bm->bmmu);
-	decoder_mmu_box_free(bm->mmu);
+	if (bm->bmmu)
+		decoder_bmmu_box_free(bm->bmmu);
+	if (bm->mmu)
+		decoder_mmu_box_free(bm->mmu);
 
 	if (bm->mmu_dw)
 		decoder_mmu_box_free(bm->mmu_dw);
@@ -325,12 +329,14 @@ static void aml_buf_fbc_destroy(struct aml_buf_mgr_s *bm)
 		decoder_bmmu_box_free(bm->bmmu_dw);
 
 #ifdef NEW_FB_CODE
-	decoder_mmu_box_free(bm->mmu_1);
+	if (bm->mmu_1)
+		decoder_mmu_box_free(bm->mmu_1);
 	if (bm->mmu_dw_1)
 		decoder_mmu_box_free(bm->mmu_dw_1);
 #endif
-
-	vfree(bm->fbc_array);
+	if (bm->fbc_array)
+		vfree(bm->fbc_array);
+	bm->fbc_array = NULL;
 }
 
 static void aml_buf_mgr_destroy(struct kref *kref)
@@ -338,7 +344,7 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 	struct aml_buf_mgr_s *bm =
 		container_of(kref, struct aml_buf_mgr_s, ref);
 
-	if (bm->config.enable_fbc) {
+	if (bm->fbc_array) {
 		aml_buf_fbc_destroy(bm);
 	}
 }
@@ -541,7 +547,7 @@ static void aml_buf_free(struct buf_core_mgr_s *bc,
 		kref_read(&bc->core_ref));
 
 	/* afbc free */
-	if (bm->config.enable_fbc) {
+	if (buf->fbc) {
 		aml_buf_fbc_release(bm, buf);
 	}
 
@@ -592,6 +598,7 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct aml_buf_fbc_info fbc_info;
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -608,17 +615,18 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 		task_chain_clean(buf->task);
 	}
 
-	/* afbc update */
-	if (bm->config.enable_fbc) {
-		struct aml_buf_fbc_info fbc_info;
+	bm->get_fbc_info(bm, &fbc_info);
 
-		bm->get_fbc_info(bm, &fbc_info);
-		if (buf->fbc &&
-			((fbc_info.frame_size != buf->fbc->frame_size) ||
-			(fbc_info.header_size != buf->fbc->hsize))) {
-			aml_buf_fbc_release(bm, buf);
-			aml_buf_fbc_init(bm, buf);
-		}
+	if (buf->fbc &&
+		((fbc_info.frame_size != buf->fbc->frame_size) ||
+		(fbc_info.header_size != buf->fbc->hsize) ||
+		!bm->config.enable_fbc)) {
+		aml_buf_fbc_release(bm, buf);
+	}
+
+	if (bm->config.enable_fbc &&
+		!buf->fbc) {
+		aml_buf_fbc_init(bm, buf);
 	}
 
 	if (bm->config.enable_extbuf) {

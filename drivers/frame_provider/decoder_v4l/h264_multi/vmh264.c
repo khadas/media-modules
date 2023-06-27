@@ -969,6 +969,7 @@ struct vdec_h264_hw_s {
 	u32 consume_byte;
 	u32 reserved_byte;
 	u32 sei_present_flag;
+	int set_mmu_flag;
 };
 
 static u32 again_threshold;
@@ -9323,6 +9324,7 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 	hw->mmu_enable = 1;
+	hw->set_mmu_flag = 1;
 	{
 		hw->canvas_mode = CANVAS_BLKMODE_LINEAR;
 		hw->double_write_mode &= 0xffff;
@@ -9379,6 +9381,51 @@ int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 	else
 		vdec_core_request(vdec, CORE_MASK_VDEC_1 | CORE_MASK_HEVC
 			| CORE_MASK_COMBINE);
+
+	return 0;
+}
+
+static int clear_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
+{
+	hw->mmu_enable = 0;
+	hw->set_mmu_flag = 0;
+
+	amhevc_stop();
+	hevc_reset_core(vdec);
+
+	if (is_cpu_t7() && hw->enable_fence) {
+		hw->canvas_mode = CANVAS_BLKMODE_32X32;
+	}
+
+	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_TXLX) {
+		vdec_poweroff(VDEC_HEVC);
+	}
+
+
+	if (hw->extif_addr) {
+		decoder_bmmu_box_free_idx(hw->bmmu_box,BMMU_EXTIF_IDX);
+	}
+
+	if (hw->frame_mmu_map_addr != NULL) {
+		decoder_dma_free_coherent(hw->frame_mmu_map_handle,
+			FRAME_MMU_MAP_SIZE, hw->frame_mmu_map_addr,
+				hw->frame_mmu_map_phy_addr);
+		hw->frame_mmu_map_addr = NULL;
+	}
+
+	if (hw->fw_mmu) {
+		vfree(hw->fw_mmu);
+		hw->fw_mmu = NULL;
+	}
+
+	vdec_source_changed(VFORMAT_H264, 3840, 2160, 60);
+
+	vdec_core_request(vdec, CORE_MASK_VDEC_1);
+
+	if (is_support_dual_core())
+		vdec_core_finish_run(vdec, CORE_MASK_HEVC | CORE_MASK_HEVC_BACK);
+	else
+		vdec_core_finish_run(vdec, CORE_MASK_HEVC);
 
 	return 0;
 }
@@ -9555,6 +9602,19 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 			vdec_v4l_set_cfg_infos(ctx, &cfg_info);
 		}
 		hw->dw_para_set_flag = true;
+	}
+
+	if ((ps->field == V4L2_FIELD_INTERLACED) &&
+		hw->dw_para_set_flag &&
+		hw->set_mmu_flag) {
+		struct aml_vdec_cfg_infos cfg_info = { 0 };
+		clear_mmu_config(hw, vdec);
+		hw->double_write_mode = DM_YUV_ONLY;
+		dpb_print(DECODE_ID(hw), 0, "h264 interlace, mmu force disable\n");
+		vdec_v4l_get_cfg_infos(ctx, &cfg_info);
+		cfg_info.double_write_mode = DM_YUV_ONLY;
+		vdec_v4l_set_cfg_infos(ctx, &cfg_info);
+		hw->dw_para_set_flag = false;
 	}
 
 	ctx->force_report_interlace = false;
