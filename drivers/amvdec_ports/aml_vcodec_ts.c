@@ -76,12 +76,12 @@ int aml_vcodec_pts_checkin(s32 ptsserver_id, u32 pkt_size, u64 pts_val)
 	checkin_pts_size mCheckinPtsSize;
 
 	mCheckinPtsSize.size =pkt_size;
-	mCheckinPtsSize.pts = 0;
+	mCheckinPtsSize.pts = (u32)div64_u64(pts_val * 9, 100);
 	mCheckinPtsSize.pts_64 = pts_val;
 	ptsserver_checkin_pts_size(ptsserver_id,&mCheckinPtsSize);
 
-	pr_debug("%s pkt_size:%d chekin pts: %llu\n",
-		__func__, pkt_size, pts_val);
+	pr_debug("%s pkt_size:%d chekin pts: %d, pts64: %llu\n",
+		__func__, pkt_size, mCheckinPtsSize.pts, pts_val);
 
 	return 0;
 }
