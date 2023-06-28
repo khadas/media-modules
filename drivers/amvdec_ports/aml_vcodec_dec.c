@@ -833,36 +833,47 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 	}
 }
 
-void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx)
+ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 {
-	 struct cma_sys_size_info *info = &ctx->mem_size_info;
-	 int cma_size = codec_mm_alloc_cma_size();
-	 int sys_size = codec_mm_alloc_sys_size();
-	 int total_size = cma_size + sys_size;
+	struct cma_sys_size_info *info = &ctx->mem_size_info;
+	int cma_size = codec_mm_alloc_cma_size();
+	int sys_size = codec_mm_alloc_sys_size();
+	int total_size = cma_size + sys_size;
+	char *pbuf = buf;
 
-	 if (total_size > info->max_total_size) {
-		 info->max_total_size = total_size;
-		 info->cma_part = cma_size;
-		 info->sys_part = sys_size;
-	 }
+	if (total_size > info->max_total_size) {
+		info->max_total_size = total_size;
+		info->cma_part = cma_size;
+		info->sys_part = sys_size;
+	}
 
-	 info->max_cma_size = cma_size > info->max_cma_size ?
-			 cma_size : info->max_cma_size;
+	info->max_cma_size = cma_size > info->max_cma_size ?
+	cma_size : info->max_cma_size;
 
-	 info->max_sys_size = sys_size > info->max_sys_size ?
-			 sys_size : info->max_sys_size;
+	info->max_sys_size = sys_size > info->max_sys_size ?
+	sys_size : info->max_sys_size;
 
-	 info->cur_cma_size = cma_size;
-	 info->cur_sys_size = sys_size;
+	info->cur_cma_size = cma_size;
+	info->cur_sys_size = sys_size;
 
-	 if (debug_mode & V4L_DEBUG_CODEC_COUNT)
-		 v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-			 "TOTAL[Max:%dM(CMA:%dM, SYS:%dM), CUR:%dM], "
-			 "CMA[%dM, Max:%dM], SYS[%dM, Max:%dM]\n",
-			 info->max_total_size, info->cma_part,
-			 info->sys_part, total_size,
-			 info->cur_cma_size, info->max_cma_size,
-			 info->cur_sys_size, info->max_sys_size);
+	if (pbuf) {
+		pbuf += sprintf(pbuf, "TOTAL[Max:%dM(CMA:%dM, SYS:%dM), CUR:%dM], "
+			"CMA[%dM, Max:%dM], SYS[%dM, Max:%dM]\n",
+			info->max_total_size, info->cma_part,
+			info->sys_part, total_size,
+			info->cur_cma_size, info->max_cma_size,
+			info->cur_sys_size, info->max_sys_size);
+	} else {
+		v4l_dbg(ctx, V4L_DEBUG_CODEC_COUNT,
+			"TOTAL[Max:%dM(CMA:%dM, SYS:%dM), CUR:%dM], "
+			"CMA[%dM, Max:%dM], SYS[%dM, Max:%dM]\n",
+			info->max_total_size, info->cma_part,
+			info->sys_part, total_size,
+			info->cur_cma_size, info->max_cma_size,
+			info->cur_sys_size, info->max_sys_size);
+	}
+
+	return pbuf - buf;
 }
 
  static void post_frame_to_upper(struct aml_vcodec_ctx *ctx,
@@ -876,7 +887,7 @@ void dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx)
 	struct aml_vdec_cfg_infos *cfg = &ctx->config.parm.dec.cfg;
 	struct aml_buf_plane *planes = aml_buf->planes; // DW def.
 
-	dump_cma_and_sys_memsize(ctx);
+	dump_cma_and_sys_memsize(ctx, NULL);
 
 	vf->index_disp = ctx->index_disp;
 	if ((vf->type & VIDTYPE_V4L_EOS) == 0)
@@ -1164,18 +1175,19 @@ static struct task_ops_s *get_v4l_sink_ops(void)
 	return &v4l_sink_ops;
 }
 
-void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
+ssize_t aml_vdec_basic_information(struct aml_vcodec_ctx *ctx, char *buf)
 {
 	struct aml_q_data *outq = NULL;
 	struct aml_q_data *capq = NULL;
 	struct vdec_pic_info pic;
 	u32 dw_mode = -1;
 	u32 tw_mode = -1;
+	char *pbuf = buf;
 
 	if (vdec_if_get_param(ctx, GET_PARAM_PIC_INFO, &pic)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"get pic info err\n");
-		return;
+		return 0;
 	}
 
 	vdec_if_get_param(ctx, GET_PARAM_DW_MODE, &dw_mode);
@@ -1184,29 +1196,19 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 	outq = aml_vdec_get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_OUTPUT);
 	capq = aml_vdec_get_q_data(ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
 
-	pr_info("\n==== Show Basic Information ==== \n");
-
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Format     : %s\n",
-		outq->fmt->name);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Color space: %s\n",
-		capq->fmt->name);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Scan type  : %s\n",
-		(pic.field == V4L2_FIELD_NONE) ?
-		"Progressive" : "Interlaced");
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Resolution : visible(%dx%d), coded(%dx%d), bitdepth:%u\n",
+	pbuf += sprintf(pbuf, "\n==== Show Basic Information ==== \n");
+	pbuf += sprintf(pbuf, "Format     : %s\n", outq->fmt->name);
+	pbuf += sprintf(pbuf, "Color space: %s\n", capq->fmt->name);
+	pbuf += sprintf(pbuf, "Scan type  : %s\n",
+		(pic.field == V4L2_FIELD_NONE) ? "Progressive" : "Interlaced");
+	pbuf += sprintf(pbuf, "Resolution : visible(%dx%d), coded(%dx%d)\n",
 		pic.visible_width, pic.visible_height,
-		pic.coded_width, pic.coded_height,
-		pic.bitdepth);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Buffer num : dec:%d, vpp:%d, ge2d:%d, margin:%d, total:%d\n",
+		pic.coded_width, pic.coded_height);
+	pbuf += sprintf(pbuf, "Buffer num : dec:%d, vpp:%d, ge2d:%d, margin:%d, total:%d\n",
 		ctx->picinfo.dpb_frames, ctx->vpp_size, ctx->ge2d_size,
 		ctx->picinfo.dpb_margin, CTX_BUF_TOTAL(ctx));
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"Config     : DW/TW:(0x%x, 0x%x), drm:%d, byp:%d, lc:%d, nr:%d, ge2d:%x\n",
+
+	pbuf += sprintf(pbuf, "Config     : DW/TW:(0x%x, 0x%x), drm:%d, byp:%d, lc:%d, nr:%d, ge2d:%x\n",
 		dw_mode,
 		tw_mode,
 		ctx->is_drm_mode,
@@ -1214,12 +1216,13 @@ void aml_vdec_basic_information(struct aml_vcodec_ctx *ctx)
 		ctx->vpp_cfg.enable_local_buf,
 		ctx->vpp_cfg.enable_nr,
 		ctx->ge2d_cfg.mode);
-	v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
-		"write frames : %d, out_buff : %d in_buff : %d\n",
+	pbuf += sprintf(pbuf, "write frames : %d, out_buff : %d in_buff : %d\n",
 		ctx->write_frames, ctx->out_buff_cnt, ctx->in_buff_cnt);
+
+	return pbuf - buf;
 }
 
-void aml_buffer_status(struct aml_vcodec_ctx *ctx)
+ssize_t aml_buffer_status(struct aml_vcodec_ctx *ctx, char *buf)
 {
 	struct vb2_v4l2_buffer *vb = NULL;
 	struct aml_v4l2_buf *aml_buff = NULL;
@@ -1227,6 +1230,7 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 	struct vb2_queue *q = NULL;
 	ulong flags;
 	int i;
+	char *pbuf = buf;
 
 	flags = aml_vcodec_ctx_lock(ctx);
 
@@ -1236,7 +1240,7 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 			"can't achieve buffers status before start streaming.\n");
 	}
 
-	pr_info("\n==== Show Pipeline Status ======== \n");
+	pbuf += sprintf(pbuf, "\n==== Show Buffer Status ======== \n");
 	for (i = 0; i < q->num_buffers; ++i) {
 		vb = to_vb2_v4l2_buffer(q->bufs[i]);
 		aml_buff = container_of(vb, struct aml_v4l2_buf, vb);
@@ -1244,13 +1248,15 @@ void aml_buffer_status(struct aml_vcodec_ctx *ctx)
 
 		/* print out task chain status. */
 		if (aml_buf)
-			task_chain_show(aml_buf->task);
+			pbuf += task_chain_show(aml_buf->task, pbuf);
 	}
 
 	aml_vcodec_ctx_unlock(ctx, flags);
 
-	pr_info("\n==== Show Buffer Status ======== \n");
-	buf_core_walk(&ctx->bm.bc);
+	pbuf += sprintf(pbuf, "\n==== Show Buffer Status ======== \n");
+	pbuf += buf_core_walk(&ctx->bm.bc, pbuf);
+
+	return pbuf - buf;
 }
 
 void aml_compressed_info_show(struct aml_vcodec_ctx *ctx)

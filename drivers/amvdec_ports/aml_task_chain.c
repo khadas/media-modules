@@ -257,15 +257,16 @@ static enum task_type_e task_buffer_get_pre_user(struct task_chain_s *task,
 	return type2;
 }
 
-void task_chain_show(struct task_chain_s *task)
+ssize_t task_chain_show(struct task_chain_s *task, char *buf)
 {
 	struct task_item_s *item = NULL;
-	char buf[128] = {0};
+	char tempbuf[128] = {0};
+	char *ptbuf = tempbuf;
 	char *pbuf = buf;
 	ulong flags;
 
 	if (!task || !task->ctx)
-		return;
+		return 0;
 
 	spin_lock_irqsave(&task->slock, flags);
 
@@ -274,21 +275,22 @@ void task_chain_show(struct task_chain_s *task)
 			(struct aml_buf *)task->obj;
 
 		list_for_each_entry(item, &task->list_item, node) {
-			pbuf += sprintf(pbuf, "%s(%d)",
+			ptbuf += sprintf(ptbuf, "%s(%d)",
 				item->name, item->is_active);
 			if (item->node.next != &task->list_item) {
 				if (task->direction == TASK_DIR_SUBMIT)
-					pbuf += sprintf(pbuf, " ==> ");
+					ptbuf += sprintf(ptbuf, " ==> ");
 				else
-					pbuf += sprintf(pbuf, " <== ");
+					ptbuf += sprintf(ptbuf, " <== ");
 			}
 		}
-		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_PRINFO,
-			"vb:%2d, phy:%lx  %s\n",
-			task->id, aml_buf->planes[0].addr, buf);
+		pbuf += sprintf(pbuf, "vb:%2d, phy:%lx  %s\n",
+			task->id, aml_buf->planes[0].addr, tempbuf);
 	}
 
 	spin_unlock_irqrestore(&task->slock, flags);
+
+	return pbuf - buf;
 }
 EXPORT_SYMBOL(task_chain_show);
 

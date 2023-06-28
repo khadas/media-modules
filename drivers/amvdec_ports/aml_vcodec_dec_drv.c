@@ -36,6 +36,8 @@
 #include "aml_vcodec_dec.h"
 #include "aml_vcodec_util.h"
 #include "aml_vcodec_vpp.h"
+#include "../frame_provider/decoder/utils/decoder_report.h"
+
 #include <linux/file.h>
 #include <linux/anon_inodes.h>
 
@@ -490,17 +492,22 @@ static ssize_t status_show(struct class *cls,
 
 	list_for_each_entry(ctx, &dev->ctx_list, list) {
 		/* basic information. */
-		aml_vdec_basic_information(ctx);
+		pbuf += aml_vdec_basic_information(ctx, pbuf);
 
 		/* buffers status. */
-		aml_buffer_status(ctx);
-		dump_cma_and_sys_memsize(ctx);
+		pbuf += aml_buffer_status(ctx, pbuf);
+		pbuf += dump_cma_and_sys_memsize(ctx, pbuf);
 	}
 out:
 	mutex_unlock(&dev->dev_mutex);
 
 	return pbuf - buf;
 }
+
+ssize_t show_v4ldec_state(struct aml_vcodec_dev *dev, char *buf) {
+	return status_show(&dev->v4ldec_class, NULL, buf);
+}
+EXPORT_SYMBOL(show_v4ldec_state);
 
 static ssize_t mmu_mem_info_show(struct class *cls,
 	struct class_attribute *attr, char *buf)
@@ -654,7 +661,7 @@ static int aml_vcodec_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "v4l dec alloc canvas fail.\n");
 		goto err_alloc_canvas;
 	}
-
+	register_dump_v4ldec_state_func(dev, show_v4ldec_state);
 	dev_info(&pdev->dev, "v4ldec registered as /dev/video%d\n", vfd_dec->num);
 
 	return 0;

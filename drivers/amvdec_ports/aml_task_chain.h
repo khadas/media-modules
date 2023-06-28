@@ -119,7 +119,7 @@ void task_order_attach(struct task_chain_s *task,
 		       void *caller);
 void task_chain_clean(struct task_chain_s *task);
 void task_chain_release(struct task_chain_s *task);
-void task_chain_show(struct task_chain_s *task);
+ssize_t task_chain_show(struct task_chain_s *task, char *buf);
 void task_chain_update_object(struct task_chain_s *task, void *obj);
 bool task_chain_empty(struct task_chain_s *task);
 

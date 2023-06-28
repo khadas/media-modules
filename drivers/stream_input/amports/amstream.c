@@ -86,6 +86,7 @@
 #include <linux/syscalls.h>
 #include "../../common/media_utils/media_utils.h"
 #include "../parser/stream_parser.h"
+#include "../../frame_provider/decoder/utils/decoder_report.h"
 
 //#define G12A_BRINGUP_DEBUG
 
@@ -3922,6 +3923,11 @@ static ssize_t bufs_show(struct class *class, struct class_attribute *attr,
 	return pbuf - buf;
 }
 
+ssize_t show_amstream_bufs(char *buf) {
+	return bufs_show(NULL, NULL, buf);
+}
+EXPORT_SYMBOL(show_amstream_bufs);
+
 static ssize_t videobufused_show(struct class *class,
 			struct class_attribute *attr, char *buf)
 {
@@ -4331,6 +4337,7 @@ static int amstream_probe(struct platform_device *pdev)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A)
 		vdec_power_reset();
 
+	register_dump_amstream_bufs_func(show_amstream_bufs);
 	return 0;
 
 	/*

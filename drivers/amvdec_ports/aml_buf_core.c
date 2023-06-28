@@ -545,7 +545,7 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 	mutex_unlock(&bc->mutex);
 }
 
-void buf_core_walk(struct buf_core_mgr_s *bc)
+ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 {
 	struct buf_core_entry *entry, *tmp;
 	struct hlist_node *h_tmp;
@@ -554,12 +554,13 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 	int ge2d_holders = 0;
 	int vpp_holders = 0;
 	int vsink_holders = 0;
+	char *pbuf = buf;
 
 	mutex_lock(&bc->mutex);
 
-	pr_info("\nFree queue elements:\n");
+	pbuf += sprintf(pbuf, "\nFree queue elements:\n");
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
-		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO,
+		pbuf += sprintf(pbuf,
 			"--> key:%lx, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 			entry->key,
 			entry->user,
@@ -571,7 +572,7 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 			bc->free_num);
 	}
 
-	pr_info("\nHash table elements:\n");
+	pbuf += sprintf(pbuf, "\nHash table elements:\n");
 	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
 		if (entry->holder == BUF_HOLDER_DEC)
 			dec_holders++;
@@ -581,7 +582,7 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 			vpp_holders++;
 		if (entry->holder == BUF_HOLDER_VSINK)
 			vsink_holders++;
-		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO,
+		pbuf += sprintf(pbuf,
 			"--> key:%lx, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d, ref_map:0x%x\n",
 			entry->key,
 			entry->user,
@@ -593,10 +594,12 @@ void buf_core_walk(struct buf_core_mgr_s *bc)
 			bc->free_num,
 			entry->ref_bit_map);
 	}
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_PRINFO, "holders: dec(%d), ge2d(%d), vpp(%d), vsink(%d)\n",
+	pbuf += sprintf(pbuf, "holders: dec(%d), ge2d(%d), vpp(%d), vsink(%d)\n",
 		dec_holders, ge2d_holders, vpp_holders, vsink_holders);
 
 	mutex_unlock(&bc->mutex);
+
+	return pbuf - buf;
 }
 EXPORT_SYMBOL(buf_core_walk);
 

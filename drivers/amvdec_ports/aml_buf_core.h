@@ -238,7 +238,7 @@ struct buf_core_mgr_s {
  * the Free queue and managed buffers attached to the hash table,
  * and their states are iterated and printed out.
  */
-void buf_core_walk(struct buf_core_mgr_s *bc);
+ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf);
 
 /*
  * buf_core_mgr_init() - buffer core management initialization.

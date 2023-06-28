@@ -5401,6 +5401,10 @@ static ssize_t debug_show(struct class *class,
 	return pbuf - buf;
 
 }
+
+ssize_t dump_vdec_debug(char *buf) {
+	return debug_show(NULL, NULL, buf);
+}
 #endif
 
 #ifdef PXP_DEBUG
@@ -5965,6 +5969,10 @@ static ssize_t core_show(struct class *class, struct class_attribute *attr,
 	return pbuf - buf;
 }
 
+ssize_t dump_vdec_core(char *buf) {
+	return core_show(NULL, NULL, buf);
+}
+
 static ssize_t vdec_status_show(struct class *class,
 			struct class_attribute *attr, char *buf)
 {
@@ -6062,6 +6070,11 @@ static ssize_t dump_vdec_blocks_show(struct class *class,
 
 	return pbuf - buf;
 }
+
+ssize_t dump_vdec_blocks(char *buf) {
+	return dump_vdec_blocks_show(NULL, NULL, buf);
+}
+
 static ssize_t dump_vdec_chunks_show(struct class *class,
 			struct class_attribute *attr, char *buf)
 {
@@ -6081,6 +6094,10 @@ static ssize_t dump_vdec_chunks_show(struct class *class,
 	vdec_core_unlock(vdec_core, flags);
 
 	return pbuf - buf;
+}
+
+ssize_t dump_vdec_chunks(char *buf) {
+	return dump_vdec_chunks_show(NULL, NULL, buf);
 }
 
 static ssize_t dump_decoder_state_show(struct class *class,
@@ -6105,6 +6122,10 @@ static ssize_t dump_decoder_state_show(struct class *class,
 	vdec_core_unlock(vdec_core, flags);
 
 	return pbuf - buf;
+}
+
+ssize_t dump_decoder_state(char *buf) {
+	return dump_decoder_state_show(NULL, NULL, buf);
 }
 
 static ssize_t dump_fps_show(struct class *class,

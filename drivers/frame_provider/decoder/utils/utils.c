@@ -36,6 +36,7 @@
 #include "decoder_mmu_box.h"
 #include "decoder_bmmu_box.h"
 #include "vdec_profile.h"
+#include "decoder_report.h"
 
 static int __init decoder_common_init(void)
 {
@@ -44,6 +45,8 @@ static int __init decoder_common_init(void)
 
 	/*amvdec init.*/
 	amvdec_init();
+
+	report_module_init();
 
 	/*mmu box init.*/
 	decoder_mmu_box_init();/*exit?*/
@@ -61,6 +64,8 @@ static void __exit decoder_common_exit(void)
 
 	/*amvdec exit.*/
 	amvdec_exit();
+
+	report_module_exit();
 
 	decoder_mmu_box_exit();
 	decoder_bmmu_box_exit();

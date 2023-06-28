@@ -803,6 +803,7 @@ struct vdec_s *vdec_get_vdec_by_id(int vdec_id);
 
 #ifdef VDEC_DEBUG_SUPPORT
 extern void vdec_set_step_mode(void);
+ssize_t dump_vdec_debug(char *buf);
 #endif
 int vdec_get_debug_flags(void);
 
@@ -889,6 +890,15 @@ extern dbg_info_up debug_port_func_info_up;
 void vdec_debug_port_register(dbg_data_wr data_write, dbg_info_up info_update);
 
 void vdec_debug_port_unregister(void);
+
+ssize_t dump_decoder_state(char *buf);
+
+ssize_t dump_vdec_blocks(char *buf);
+
+ssize_t dump_vdec_chunks(char *buf);
+
+ssize_t dump_vdec_core(char *buf);
+
 #endif
 
 #endif				/* VDEC_H */
