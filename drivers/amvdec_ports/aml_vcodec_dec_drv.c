@@ -752,6 +752,10 @@ u32 debug_mode;
 EXPORT_SYMBOL(debug_mode);
 module_param(debug_mode, uint, 0644);
 
+int t3x_tw_output;
+EXPORT_SYMBOL(t3x_tw_output);
+module_param(t3x_tw_output, int, 0644);
+
 u32 disable_vpp_dw_mmu;
 EXPORT_SYMBOL(disable_vpp_dw_mmu);
 module_param(disable_vpp_dw_mmu, uint, 0644);

@@ -424,14 +424,16 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 			}
 
 			aml_buf->planes_tw[i].addr = (cfg->dw_mode == DM_AVBC_ONLY) ?
-							vb2_dma_contig_plane_dma_addr(vb, i):
-							codec_mm_alloc_for_dma_ex("tw_buf",
-								(cfg->luma_length_tw +
-								cfg->chroma_length_tw) / PAGE_SIZE,
-								4,
-								CODEC_MM_FLAGS_FOR_VDECODER,
-								bm->bc.id,
-								i);
+				vb2_dma_contig_plane_dma_addr(vb, i):
+				(aml_buf->planes_tw[i].addr ?
+					aml_buf->planes_tw[i].addr:
+					codec_mm_alloc_for_dma_ex("tw_buf",
+						(cfg->luma_length_tw +
+						cfg->chroma_length_tw) / PAGE_SIZE,
+						4,
+						CODEC_MM_FLAGS_FOR_VDECODER,
+						bm->bc.id,
+						i));
 			aml_buf->planes_tw[i].dbuf = vb->planes[i].dbuf;
 
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,

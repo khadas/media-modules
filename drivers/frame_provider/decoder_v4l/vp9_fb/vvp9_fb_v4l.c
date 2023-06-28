@@ -7371,10 +7371,23 @@ static void uninit_mmu_buffers(struct VP9Decoder_s *pbi)
 static int vdec_parms_setup_and_sanity_check(struct VP9Decoder_s *pbi)
 {
 	/* Collect and check configurations before playback. */
+	struct aml_vcodec_ctx * v4l2_ctx = pbi->v4l2_ctx;
+	unsigned int dw_mode = get_double_write_mode(pbi);
+	unsigned int tw_mode = get_triple_write_mode(pbi);
 
-	pbi->endian = is_p010_mode(pbi) ?
-		HEVC_CONFIG_P010_LE :
-		HEVC_CONFIG_LITTLE_ENDIAN;
+	/* Both of DW/TW are valid, but only select one of them to output */
+	if (dw_mode && tw_mode) {
+		if (v4l2_ctx->force_tw_output)
+			pbi->endian = is_tw_p010(pbi) ?
+				HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+		else
+			pbi->endian = is_dw_p010(pbi) ?
+				HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+	} else {
+		/* Only one valid value of DW/TW */
+		pbi->endian = is_p010_mode(pbi) ?
+			HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+	}
 
 	return 0;
 }
@@ -7948,8 +7961,23 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 			data32 &= (~0xfff); /* clr endian, blkmod and align */
 			data32 |= ((pbi->endian >> 12) & 0xff);
 			data32 |= ((pbi->mem_map_mode & 0x3) << 8);
+			/* swap uv */
+			if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+				(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+				data32 &= ~(1 << 4); /* NV21 */
+			else
+				data32 |= (1 << 4); /* NV12 */
+
+			data32 |= is_tw_p010(pbi) ? (1 << 4) : 1;
 			/* Linear_LineAlignment 00:16byte 01:32byte 10:64byte */
 			data32 |= (2 << 10);
+			/*
+			 * [31:12]     Reserved
+			 * [11:10]     triple write axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes (default=1)
+			 * [09:08]    triple write axi_format, 0-Linear, 1-32x32, 2-64x32
+			 * [07:04]    triple write axi_lendian_C
+			 * [03:00]    triple write axi_lendian_Y
+			 */
 			WRITE_VREG(HEVC_SAO_CTRL32, data32);
 
 			data32 = READ_VREG(HEVC_SAO_CTRL3);
@@ -8009,8 +8037,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	else
 		data32 |= (1 << 8); /* NV12 */
 
-	if (is_dw_p010(pbi))
-		data32 |= (1 << 8);
+	data32 |= is_dw_p010(pbi) ? (1 << 8) : 0;
 
 	/*
 	*  [31:24] ar_fifo1_axi_thread
@@ -8066,8 +8093,15 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 	else
 		data32 &= ~(1 << 12); /* NV12 */
 
-	if (is_dw_p010(pbi))
-		data32 &= ~(1 << 12);
+	if (dw_mode && tw_mode) {
+		if (v4l2_ctx->force_tw_output)
+			data32 &= is_tw_p010(pbi) ? ~(1 << 12) : data32;
+		else
+			data32 &= is_dw_p010(pbi) ? ~(1 << 12) : data32;
+	} else {
+		/* Only one valid value of DW/TW */
+		data32 &= is_p010_mode(pbi) ? ~(1 << 12) : data32;
+	}
 
 	data32 &= (~(3 << 8));
 	data32 |= (2 << 8);		/* line align with 64 for dw only */
@@ -10110,6 +10144,12 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				if (pbi->mmu_enable)
 					vf->type |= VIDTYPE_SCATTER;
 			}
+
+			if (is_dw_p010(pbi)) {
+				vf->type &= ~VIDTYPE_VIU_NV21;
+				vf->type |= VIDTYPE_VIU_NV12;
+			}
+
 			if (dw_mode != 16 &&
 				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
 				!IS_8K_SIZE(pic_config->y_crop_width, pic_config->y_crop_height)))
@@ -10146,12 +10186,17 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 			vf->height = pic_config->y_crop_height;
 		}
 
-		if (!dw_mode && tw_mode) {
+		if ((!dw_mode && tw_mode) || (v4l2_ctx->force_tw_output && tw_mode)) {
 			vf->type |= nv_order;
 			vf->type |= VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD |
 				VIDTYPE_COMPRESS |
 				VIDTYPE_SCATTER;
+			if (is_tw_p010(pbi)) {
+				vf->type &= ~VIDTYPE_VIU_NV21;
+				vf->type |= VIDTYPE_VIU_NV12;
+			}
+
 			vf->plane_num = 2;
 			vf->canvas0Addr = vf->canvas1Addr = -1;
 			vf->canvas0_config[0] = pic_config->tw_canvas_config[0];
@@ -10163,7 +10208,6 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				get_double_write_ratio(tw_mode & 0xf);	//tw same ratio defined with dw
 			vf->height = pic_config->y_crop_height /
 				get_double_write_ratio(tw_mode & 0xf);
-
 			vp9_print(pbi, VP9_DEBUG_BUFMGR_MORE,
 				"output triple write w %d, h %d bitdepth %s\n",
 				vf->width, vf->height,

@@ -3060,10 +3060,23 @@ static void uninit_mmu_buffers(struct AV1HW_s *hw)
 static int vdec_parms_setup_and_sanity_check(struct AV1HW_s *pbi)
 {
 	/* Collect and check configurations before playback. */
+	struct aml_vcodec_ctx * v4l2_ctx = pbi->v4l2_ctx;
+	unsigned int dw_mode = get_double_write_mode(pbi);
+	unsigned int tw_mode = get_triple_write_mode(pbi);
 
-	pbi->endian = is_p010_mode(pbi) ?
-		HEVC_CONFIG_P010_LE :
-		HEVC_CONFIG_LITTLE_ENDIAN;
+	/* Both of DW/TW are valid, but only select one of them for output */
+	if (dw_mode && tw_mode) {
+		if (v4l2_ctx->force_tw_output)
+			pbi->endian = is_tw_p010(pbi) ?
+				HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+		else
+			pbi->endian = is_dw_p010(pbi) ?
+				HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+	} else {
+		/* Only one valid value of DW/TW */
+		pbi->endian = is_p010_mode(pbi) ?
+			HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+	}
 
 	return 0;
 }
@@ -4146,8 +4159,23 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 			data32 &= (~0xfff); /* clr endian, blkmod and align */
 			data32 |= ((hw->endian >> 12) & 0xff);
 			data32 |= ((hw->mem_map_mode & 0x3) << 8);
+			/* swap uv */
+			if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+				(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+				data32 &= ~(1 << 4); /* NV21 */
+			else
+				data32 |= (1 << 4); /* NV12 */
+
+			data32 |= is_tw_p010(hw) ? (1 << 4) : 0;
 			/* Linear_LineAlignment 00:16byte 01:32byte 10:64byte */
 			data32 |= (2 << 10);
+			/*
+			 * [31:12]     Reserved
+			 * [11:10]     triple write axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes (default=1)
+			 * [09:08]    triple write axi_format, 0-Linear, 1-32x32, 2-64x32
+			 * [07:04]    triple write axi_lendian_C
+			 * [03:00]    triple write axi_lendian_Y
+			 */
 			WRITE_VREG(HEVC_SAO_CTRL32, data32);
 
 			data32 = READ_VREG(HEVC_SAO_CTRL3);
@@ -4205,9 +4233,7 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	else
 		data32 |= (1 << 8); /* NV12 */
 
-	if (is_dw_p010(hw))
-		data32 |= (1 << 8);
-
+	data32 |= is_dw_p010(hw) ? (1 << 8) : 0;
 	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 	/*
@@ -4263,8 +4289,15 @@ static void config_sao_hw(struct AV1HW_s *hw, union param_u *params)
 	else
 		data32 &= ~(1 << 12); /* NV12 */
 
-	if (is_dw_p010(hw))
-		data32 &= ~(1 << 12);
+	if (dw_mode && tw_mode) {
+		if (v4l2_ctx->force_tw_output)
+			data32 &= is_tw_p010(hw) ? ~(1 << 12) : data32;
+		else
+			data32 &= is_dw_p010(hw) ? ~(1 << 12) : data32;
+	} else {
+		/* Only one valid value of DW/TW */
+		data32 &= is_p010_mode(hw) ? ~(1 << 12) : data32;
+	}
 
 	data32 &= (~(3 << 8));
 	data32 |= (2 << 8);
@@ -5916,7 +5949,7 @@ static void set_canvas(struct AV1HW_s *hw,
 		pic_config->canvas_config[1].height     = canvas_h;
 		pic_config->canvas_config[1].block_mode = blkmode;
 		pic_config->canvas_config[1].endian     = 0;
-		pic_config->canvas_config[0].bit_depth  = is_dw_p010(hw);
+		pic_config->canvas_config[1].bit_depth  = is_dw_p010(hw);
 #endif
 	}
 
@@ -6561,6 +6594,10 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 			vf->type = VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD;
 			vf->type |= nv_order;
+			if (is_dw_p010((hw))) {
+				vf->type &= ~VIDTYPE_VIU_NV21;
+				vf->type |= VIDTYPE_VIU_NV12;
+			}
 
 			if ((pic_config->double_write_mode != 16) &&
 				((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S5) ||
@@ -6665,12 +6702,18 @@ static int prepare_display_buf(struct AV1HW_s *hw,
 
 		vf->type_original = vf->type;
 
-		if (!pic_config->double_write_mode && pic_config->triple_write_mode) {
+		if ((!pic_config->double_write_mode && pic_config->triple_write_mode) ||
+			(v4l2_ctx->force_tw_output && pic_config->triple_write_mode)) {
 			vf->type |= nv_order;
 			vf->type |= VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD |
 				VIDTYPE_COMPRESS |
 				VIDTYPE_SCATTER;
+			if (is_tw_p010(hw)) {
+				vf->type &= ~VIDTYPE_VIU_NV21;
+				vf->type |= VIDTYPE_VIU_NV12;
+			}
+
 			vf->plane_num = 2;
 			vf->canvas0Addr = vf->canvas1Addr = -1;
 			vf->canvas0_config[0] = pic_config->tw_canvas_config[0];

@@ -898,7 +898,8 @@ ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf)
 		vf->timestamp = vf->pts_us64;
 	}
 
-	if (cfg->double_write_mode == DM_AVBC_ONLY) {
+	if ((cfg->double_write_mode == DM_AVBC_ONLY) ||
+		(ctx->force_tw_output && cfg->triple_write_mode)) {
 		if (aml_buf->planes_tw[0].bytes_used)
 			planes = aml_buf->planes_tw;
 	}
@@ -2329,6 +2330,9 @@ void aml_vcodec_dec_set_default_params(struct aml_vcodec_ctx *ctx)
 	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) {
 		ctx->dev->dec_capability = VCODEC_CAPABILITY_4K_DISABLED;
 	}
+
+	if (t3x_tw_output && (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T3X))
+		ctx->force_tw_output = 1;
 
 	q_data = &ctx->q_data[AML_Q_DATA_SRC];
 	memset(q_data, 0, sizeof(struct aml_q_data));
@@ -4897,16 +4901,6 @@ static int vidioc_vdec_s_parm(struct file *file, void *fh,
 		ctx->no_fbc_output = dec->cfg.metadata_config_flag & (1 << 19);
 		if (force_di_permission)
 			ctx->force_di_permission = true;
-
-		if (dec->cfg.double_write_mode && dec->cfg.triple_write_mode) {
-			v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
-				"Not supports setting DW:(%x) and TW:(%x)\n",
-				dec->cfg.double_write_mode,
-				dec->cfg.triple_write_mode);
-			dec->cfg.triple_write_mode = DM_INVALID; /*TODO*/
-
-			return -EINVAL;
-		}
 
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PROT, "%s parms:%x metadata_config_flag: 0x%x\n",
 				__func__, in->parms_status, dec->cfg.metadata_config_flag);

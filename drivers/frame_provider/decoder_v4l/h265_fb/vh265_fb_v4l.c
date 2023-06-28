@@ -3769,10 +3769,23 @@ static int hevc_get_header_size(int w, int h)
 static int vdec_parms_setup_and_sanity_check(struct hevc_state_s *hevc)
 {
 	/* Collect and check configurations before playback. */
+	struct aml_vcodec_ctx * v4l2_ctx = hevc->v4l2_ctx;
+	unsigned int dw_mode = get_double_write_mode(hevc);
+	unsigned int tw_mode = get_triple_write_mode(hevc);
 
-	hevc->endian = is_p010_mode(hevc) ?
-		HEVC_CONFIG_P010_LE :
-		HEVC_CONFIG_LITTLE_ENDIAN;
+	/* Both of DW/TW are valid, but only select one of them for output */
+	if (dw_mode && tw_mode) {
+		if (v4l2_ctx->force_tw_output)
+			hevc->endian = is_tw_p010(hevc) ?
+				HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+		else
+			hevc->endian = is_dw_p010(hevc) ?
+				HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+	} else {
+		/* Only one valid value of DW/TW */
+		hevc->endian = is_p010_mode(hevc) ?
+			HEVC_CONFIG_P010_LE : HEVC_CONFIG_LITTLE_ENDIAN;
+	}
 
 	return 0;
 }
@@ -5917,9 +5930,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	else
 		data32 |= (1 << 8); /* NV12 */
 
-	if (is_dw_p010(hevc))
-		data32 |= (1 << 8);
-
+	data32 |= is_dw_p010(hevc) ? (1 << 8) : 0;
 	data32 &= (~(3 << 14));
 	data32 |= (2 << 14);
 	/*
@@ -5963,8 +5974,25 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 		data32 &= (~0xfff); /* clr endian, blkmod and align */
 		data32 |= ((hevc->endian >> 12) & 0xff);
 		data32 |= ((hevc->mem_map_mode & 0x3) << 8);
+
+		/* swap uv */
+		if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
+			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
+			data32 &= ~(1 << 4); /* NV21 */
+		else
+			data32 |= (1 << 4); /* NV12 */
+
+		data32 |= is_tw_p010(hevc) ? (1 << 4) : 0;
+
 		/* Linear_LineAlignment 00:16byte 01:32byte 10:64byte */
 		data32 |= (2 << 10);
+		/*
+		 * [31:12]     Reserved
+		 * [11:10]     triple write axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes (default=1)
+		 * [09:08]    triple write axi_format, 0-Linear, 1-32x32, 2-64x32
+		 * [07:04]    triple write axi_lendian_C
+		 * [03:00]    triple write axi_lendian_Y
+		 */
 		WRITE_VREG(HEVC_SAO_CTRL32, data32);
 
 		data32 = READ_VREG(HEVC_SAO_CTRL3);
@@ -5997,8 +6025,15 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	else
 		data32 &= ~(1 << 12); /* NV12 */
 
-	if (is_dw_p010(hevc))
-		data32 &= ~(1 << 12);
+	if (dw_mode && tw_mode) {
+		if (v4l2_ctx->force_tw_output)
+			data32 &= is_tw_p010(hevc) ? ~(1 << 12) : data32;
+		else
+			data32 &= is_dw_p010(hevc) ? ~(1 << 12) : data32;
+	} else {
+		/* Only one valid value of DW/TW */
+		data32 &= is_p010_mode(hevc) ? ~(1 << 12) : data32;
+	}
 
 	data32 &= (~(3 << 8));
 	data32 |= (2 << 8);
@@ -9903,6 +9938,11 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					vf->type |= VIDTYPE_SCATTER;
 			}
 
+			if (is_dw_p010((hevc))) {
+				vf->type &= ~VIDTYPE_VIU_NV21;
+				vf->type |= VIDTYPE_VIU_NV12;
+			}
+
 #ifdef MULTI_INSTANCE_SUPPORT
 			if (hevc->m_ins_flag &&
 				(get_dbg_flag(hevc)
@@ -9999,12 +10039,18 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		vf->height = vf->height /
 			get_double_write_ratio(pic->double_write_mode);
 
-		if (!pic->double_write_mode && pic->triple_write_mode) {
+		if ((!pic->double_write_mode && pic->triple_write_mode) ||
+			(v4l2_ctx->force_tw_output && pic->triple_write_mode)) {
 			vf->type |= nv_order;
 			vf->type |= VIDTYPE_PROGRESSIVE |
 				VIDTYPE_VIU_FIELD |
 				VIDTYPE_COMPRESS |
 				VIDTYPE_SCATTER;
+			if (is_tw_p010(hevc)) {
+				vf->type &= ~VIDTYPE_VIU_NV21;
+				vf->type |= VIDTYPE_VIU_NV12;
+			}
+
 			vf->plane_num = 2;
 			vf->canvas0Addr = vf->canvas1Addr = -1;
 			vf->canvas0_config[0] = pic->tw_canvas_config[0]; //todo
