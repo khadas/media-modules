@@ -2517,6 +2517,7 @@ static void vavs_work(struct work_struct *work)
 			msleep(delay);
 #endif
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		hw->chunk = NULL;
 	} else if (hw->dec_result == DEC_RESULT_AGAIN
 	&& (hw_to_vdec(hw)->next_status !=
 		VDEC_STATUS_DISCONNECTED)) {
@@ -2545,6 +2546,7 @@ static void vavs_work(struct work_struct *work)
 		READ_VREG(VLD_MEM_VIFIFO_WP),
 		READ_VREG(VLD_MEM_VIFIFO_RP));
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		hw->chunk = NULL;
 		vdec_clean_input(hw_to_vdec(hw));
 		return;
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
@@ -2566,6 +2568,7 @@ static void vavs_work(struct work_struct *work)
 		}
 		hw->eos = 1;
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		hw->chunk = NULL;
 		vdec_clean_input(hw_to_vdec(hw));
 	}
 	if (hw->stat & STAT_VDEC_RUN) {
@@ -2840,7 +2843,7 @@ static void check_timer_func(struct timer_list *timer)
 		hw->last_vld_level = READ_VREG(VLD_MEM_VIFIFO_LEVEL);
 	}
 
-	if (READ_VREG(AVS_SOS_COUNT)) {
+	if (!atomic_read(&hw->error_handler_run) && !work_busy(&hw->work) && READ_VREG(AVS_SOS_COUNT)) {
 		if (!error_recovery_mode) {
 			amvdec_stop();
 			if (error_handle_policy & 0x1) {
@@ -2862,6 +2865,7 @@ static void check_timer_func(struct timer_list *timer)
 			__func__, vdec->status, READ_VREG(VLD_MEM_VIFIFO_LEVEL),
 			READ_VREG(AVS_SOS_COUNT));
 			reset_process_time(hw);
+			atomic_set(&hw->error_handler_run, 1);
 			vdec_schedule_work(&hw->work);
 		}
 	}
@@ -3145,7 +3149,7 @@ void (*callback)(struct vdec_s *, void *, int),
 	hw->stat |= STAT_VDEC_RUN;
 
 	hw->stat |= STAT_TIMER_ARM;
-
+	atomic_set(&hw->error_handler_run, 0);
 	mod_timer(&hw->check_timer, jiffies + CHECK_INTERVAL);
 	hw->run_flag = 0;
 }
