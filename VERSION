@@ -1,9 +1,12 @@
+#Developing Version
 Major_V=6
-Minor_V=6
-BaseChangeId=Ib91c69023bac4a33bcb93c474c9a7bd3107d688e
+Minor_V=7
+DevelopingChangeId=Ibfd8ecfe687b2d9ea907f3a4dfc202501de41502
 
 
 #history version
+#V6.6 Release Notes
+#Release_ChangeId_V6_6=I7906e7fb1fc9cd2ae2f5e3b35a85146077f647ed
 #V6.5 Release Notes
 #Release_ChangeId_V6_5=I1fb4d74a26b20c810af5fabe70d11b30038f52cd
 #V6.4 Release Notes
