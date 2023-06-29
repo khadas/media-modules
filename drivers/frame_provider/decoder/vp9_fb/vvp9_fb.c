@@ -4642,8 +4642,6 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi, struct PIC_BUFFER_CONFIG_
 //pyx wait rain 265 modify
 	WRITE_VREG(HEVC_SAO_Y_START_ADDR, pic_config->dw_y_adr);
 	WRITE_VREG(HEVC_SAO_Y_START_ADDR_DBE1, pic_config->dw_y_adr);
-	WRITE_VREG(HEVC_CM_BODY_START_ADDR, pic_config->mc_y_adr);
-	WRITE_VREG(HEVC_CM_BODY_START_ADDR_DBE1, pic_config->mc_y_adr);
 	if (pbi->mmu_enable) {
 		WRITE_VREG(HEVC_CM_HEADER_START_ADDR, pic_config->header_adr);
 		WRITE_VREG(HEVC_CM_HEADER_START_ADDR_DBE1, pic_config->header_adr);
@@ -4975,7 +4973,8 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1, (0 << 8) | (0<<1) | 1);
 	for (i = 0; i < REFS_PER_FRAME; ++i) {
 		struct PIC_BUFFER_CONFIG_s *pic_config = cur_pic_config->pic_refs[i];
-
+		if (!pic_config)
+			continue;
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
 		if (debug & VP9_DEBUG_BUFMGR_MORE)
@@ -4987,7 +4986,8 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 	WRITE_VREG(HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1, (16 << 8) | (0<<1) | 1);
 	for (i = 0; i < REFS_PER_FRAME; ++i) {
 		struct PIC_BUFFER_CONFIG_s *pic_config = cur_pic_config->pic_refs[i];
-
+		if (!pic_config)
+			continue;
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
 		WRITE_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
 	}
@@ -5049,7 +5049,7 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 		cur_pic_config->y_crop_height);
 	losless_comp_body_size =
 		compute_losless_comp_body_size(cur_pic_config->y_crop_width,
-		cur_pic_config->y_crop_height, (buf_alloc_depth == VPX_BITS_10));
+		cur_pic_config->y_crop_height, (bit_depth == VPX_BITS_10));
 	cur_pic_config->comp_body_size = losless_comp_body_size;
 	losless_comp_header_size_dw = losless_comp_header_size;
 	losless_comp_body_size_dw = losless_comp_body_size;
@@ -5070,8 +5070,13 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 	data32 &= ~(1<<9);
 	else
 	data32 |= (1<<9);
-
 	WRITE_VREG(HEVC_SAO_CTRL5, data32);
+
+	data32 = READ_VREG(HEVC_SAO_CTRL5_DBE1);
+	if (bit_depth == VPX_BITS_10)
+		data32 &= ~(1<<9);
+	else
+		data32 |= (1<<9);
 	WRITE_VREG(HEVC_SAO_CTRL5_DBE1, data32);
 
 	if (pbi->mmu_enable) {
@@ -5103,7 +5108,11 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 		WRITE_VREG(HEVC_CM_BODY_LENGTH2_DBE1,losless_comp_body_size_dw);
 		WRITE_VREG(HEVC_CM_HEADER_OFFSET2_DBE1,losless_comp_body_size_dw);
 		WRITE_VREG(HEVC_CM_HEADER_LENGTH2_DBE1,losless_comp_header_size_dw);
-}
+	}
+	if (cur_pic_config->double_write_mode & 0x10) {
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1,  0x1 << 31);
+	}
 #else
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,0x1 << 31);
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1,0x1 << 31);
@@ -5204,7 +5213,7 @@ void BackEnd_StartDecoding(struct VP9Decoder_s *pbi)
 	;
 }*/
 
-static void vp9_init_decoder_hw_fb(int32_t decode_pic_begin, int32_t decode_pic_num, int first_flag, int front_flag, int back_flag)
+static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_begin, int32_t decode_pic_num, int first_flag, int front_flag, int back_flag)
 {
 	uint32_t data32;
 	int32_t i;
@@ -5410,10 +5419,12 @@ static void vp9_init_decoder_hw_fb(int32_t decode_pic_begin, int32_t decode_pic_
 			(1 << 1) | // enable ipp
 			(0 << 0)   // software reset ipp and mpp
 			);
-#ifdef VP9_10B_NV21
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
-#endif
+
+		if (get_double_write_mode(pbi) & 0x10) {
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31); // Enable NV21 reference read mode for MC
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31); // Enable NV21 reference read mode for MC
+		}
+
 		WRITE_VREG(HEVCD_IPP_MULTICORE_CFG, 0x1);// muti core enable
 		WRITE_VREG(HEVCD_IPP_MULTICORE_CFG_DBE1, 0x1);// muti core enable
 
@@ -5439,26 +5450,30 @@ static void init_pic_list_hw_fb(struct VP9Decoder_s *pbi, int first_flag)
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_DBE1, (0x1 << 1) | (0x1 << 2));
 
 	for (i=0; i<FRAME_BUFFERS; i++) {
-	pic_config = &cm->buffer_pool->frame_bufs[i].buf;
-	if (pic_config->index >= 0) {
-		if (pbi->mmu_enable && ((pic_config->double_write_mode & 0x10) == 0)) {
-			//WRITE_VREG(P_HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR, pic_config->header_adr|(pic_config->mc_canvas_y<<8)|0x1);
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->header_adr>>5);
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->header_adr>>5);
-		} else {
-	//pyx mc_y_adr ?? need check again
-			//WRITE_VREG(P_HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR, pic_config->mc_y_adr|(pic_config->mc_canvas_y<<8)|0x1);
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->mc_y_adr>>5);
-			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->mc_y_adr>>5);
-		}
+		pic_config = &cm->buffer_pool->frame_bufs[i].buf;
+		if (pic_config->index < 0)
+			break;
+		if (pic_config->index >= 0) {
+			if (pbi->mmu_enable && ((pic_config->double_write_mode & 0x10) == 0)) {
+				WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->header_adr>>5);
+				WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->header_adr>>5);
+			} else {
+				WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->dw_y_adr>>5);
+				WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->dw_y_adr>>5);
+			}
 
-	#ifndef LOSLESS_COMPRESS_MODE
-	//pyx no mc_u_v_adr need check again
-	//WRITE_VREG(P_HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR, pic_config->mc_u_v_adr|(pic_config->mc_canvas_u_v<<8)|0x1);
-	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->mc_u_v_adr>>5);
-	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->mc_u_v_adr>>5);
-	#endif
-	}
+#ifndef LOSLESS_COMPRESS_MODE
+			//pyx no mc_u_v_adr need check again
+			//WRITE_VREG(P_HEVCD_MPP_ANC2AXI_TBL_CMD_ADDR, pic_config->mc_u_v_adr|(pic_config->mc_canvas_u_v<<8)|0x1);
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->mc_u_v_adr>>5);
+			WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->mc_u_v_adr>>5);
+#else
+			if (get_double_write_mode(pbi) & 0x10) {
+					WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->dw_u_v_adr >> 5);
+					WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->dw_u_v_adr >> 5);
+			}
+#endif
+		}
 	}
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
 	WRITE_VREG(HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_DBE1, 0x1);
@@ -5654,9 +5669,9 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 	struct VP9_Common_s *const cm = &pbi->common;
 	uint32_t data32;
 	int losless_comp_header_size = compute_losless_comp_header_size(cm->width, cm->height);
-	int losless_comp_body_size = compute_losless_comp_body_size(cm->width, cm->height, cm->bit_depth);
+	int losless_comp_body_size = compute_losless_comp_body_size(cm->width, cm->height, cm->bit_depth == 10);
 	int losless_comp_header_size_dw = compute_losless_comp_header_size(cm->width, cm->height);
-	int losless_comp_body_size_dw = compute_losless_comp_body_size(cm->width, cm->height, cm->bit_depth);
+	int losless_comp_body_size_dw = compute_losless_comp_body_size(cm->width, cm->height, cm->bit_depth == 10);
 
 	if (cm->width == 0) {
 		losless_comp_header_size = compute_losless_comp_header_size(pbi->init_pic_w, pbi->init_pic_h);
@@ -5749,6 +5764,10 @@ static void vp9_config_work_space_hw_fb(struct VP9Decoder_s *pbi, int front_flag
 		WRITE_VREG(HEVC_CM_BODY_LENGTH2_DBE1,losless_comp_body_size_dw);
 		WRITE_VREG(HEVC_CM_HEADER_OFFSET2_DBE1,losless_comp_body_size_dw);
 		WRITE_VREG(HEVC_CM_HEADER_LENGTH2_DBE1,losless_comp_header_size_dw);
+	}
+	if (get_double_write_mode(pbi) & 0x10) {
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
+		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31);
 	}
 #else
 	WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,0x1 << 31);
@@ -5878,7 +5897,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 	}
 	}
 
-	vp9_init_decoder_hw_fb(0, 0, first_flag, front_flag, back_flag);
+	vp9_init_decoder_hw_fb(pbi, 0, 0, first_flag, front_flag, back_flag);
 	if (test_debug == 12) {
 
 			test_debug = 10;
@@ -12225,7 +12244,8 @@ irqreturn_t vp9_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		}
 		mutex_unlock(&pbi->fb_mutex);
 
-		if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {
+		if ((pbi->front_back_mode == 1 || pbi->front_back_mode == 3) &&
+			((get_double_write_mode(pbi) & 0x10) == 0)) {
 			if (pbi->is_used_v4l) {
 				/* to do */
 			} else {
