@@ -9319,6 +9319,14 @@ static void vmh264_wakeup_userdata_poll(struct vdec_s *vdec)
 
 #endif
 
+bool is_over_interlace_size(int w, int h, int size)
+{
+	if (h != 0 && (w > size / h))
+		return true;
+
+	return false;
+}
+
 int set_mmu_config(struct vdec_h264_hw_s *hw, struct vdec_s *vdec)
 {
 	struct aml_vcodec_ctx *ctx =
@@ -9452,6 +9460,7 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 	u32 frame_width, frame_height;
 	u32 used_reorder_dpb_size_margin
 		= hw->reorder_dpb_size_margin;
+	int interlace_size = 1920 * 1088;
 
 	level_idc = param4 & 0xff;
 	max_reference_size = (param4 >> 8) & 0xff;
@@ -9617,8 +9626,15 @@ static int vmh264_get_ps_info(struct vdec_h264_hw_s *hw,
 		hw->dw_para_set_flag = false;
 	}
 
+	/*
+	 * 4K H264 interlace(MBAFF) streams require conversion field
+	 * VDEC use V4L2_FIELD_NONE
+	 * upper layer use V4L2_FIELD_INTERLACED
+	 */
 	ctx->force_report_interlace = false;
-	if (is_cpu_t7()) {
+	if (is_cpu_t7() && (((ps->field == V4L2_FIELD_INTERLACED) &&
+		is_over_interlace_size(ps->coded_width, ps->coded_height, interlace_size)) ||
+		ps->field != V4L2_FIELD_INTERLACED)) {
 		ps->field = V4L2_FIELD_NONE;
 		ctx->force_report_interlace = true;
 		dpb_print(DECODE_ID(hw), 0,"%s force_report_interlace %d\n",
