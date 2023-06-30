@@ -350,7 +350,7 @@ void task_order_attach(struct task_chain_s *task,
 	struct task_item_s *item;
 	int i;
 
-	item = kzalloc(sizeof(struct task_item_s), GFP_ATOMIC);
+	item = kzalloc(sizeof(struct task_item_s), GFP_KERNEL);
 	if (!item) {
 		v4l_dbg(task->ctx, V4L_DEBUG_CODEC_ERROR,
 			"TSK(%px):%d alloc item fail.\n", task, task->id);
@@ -400,7 +400,7 @@ int task_chain_init(struct task_chain_s **task_out,
 {
 	struct task_chain_s *task;
 
-	task = kzalloc(sizeof(struct task_chain_s), GFP_ATOMIC);
+	task = kzalloc(sizeof(struct task_chain_s), GFP_KERNEL);
 	if (!task) {
 		v4l_dbg(v4l_ctx, V4L_DEBUG_CODEC_ERROR,
 			"%s alloc task %d fail.\n", __func__, vb_idx);
