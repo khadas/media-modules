@@ -269,6 +269,7 @@ static u32 decode_timeout_val = 200;
 #ifdef NEW_FB_CODE
 static unsigned int decode_timeout_val_back = 200;
 static unsigned int efficiency_mode = 1;
+static unsigned int back_timer_check_count = 3;
 
 static void avs2_work_back(struct work_struct *work);
 static void avs2_timeout_work_back(struct work_struct *work);
@@ -941,6 +942,8 @@ struct AVS2Decoder_s {
 	struct trace_decoder_name trace;
 	u32 error_proc_policy;
 	struct mutex slice_header_lock;
+	u32 last_monitor_data;
+	u32 back_timer_check_count;
 };
 
 static int  compute_losless_comp_body_size(
@@ -1084,6 +1087,7 @@ static void start_process_time_back(struct AVS2Decoder_s *dec)
 {
 	dec->start_process_time_back = jiffies;
 	dec->decode_timeout_count_back = 2;
+	dec->back_timer_check_count = back_timer_check_count;
 }
 
 /*
@@ -1490,6 +1494,7 @@ int avs2_bufmgr_init(struct AVS2Decoder_s *dec, struct BuffInfo_s *buf_spec_i,
 	dec->start_process_time_back = 0;
 	dec->decode_timeout_count_back = 0;
 	dec->timeout_num_back = 0;
+	dec->back_timer_check_count = 0;
 #endif
 	return 0;
 }
@@ -7260,7 +7265,26 @@ static void avs2_check_timer_back_func(struct timer_list *timer)
 		//	avs3_back_threaded_irq_cb(vdec, 0);
 	}
 
-	mod_timer(timer, jiffies + PUT_INTERVAL);
+	if ((dec->back_timer_check_count != 0) &&
+		!(dec->error_proc_policy & 0x2) &&
+		(decode_timeout_val_back > 0)) {
+		int current_monitor_data = 0;
+
+		WRITE_VREG(HEVC_PATH_MONITOR_CTRL, (READ_VREG(HEVC_PATH_MONITOR_CTRL) & 0xfffffe0f) | 0x91);
+		current_monitor_data = READ_VREG(HEVC_PATH_MONITOR_DATA);
+		if (dec->last_monitor_data == current_monitor_data) {
+			if (dec->back_timer_check_count > 0)
+				dec->back_timer_check_count--;
+			if (dec->back_timer_check_count == 0) {
+				timeout_process_back(dec);
+			}
+		} else {
+			dec->back_timer_check_count = back_timer_check_count;
+		}
+		dec->last_monitor_data = current_monitor_data;
+		mod_timer(timer, jiffies + 1);
+	} else
+		mod_timer(timer, jiffies + PUT_INTERVAL);
 }
 #endif
 
@@ -9667,6 +9691,10 @@ MODULE_PARM_DESC(fb_ifbuf_num, "\n amvdec_avs2 fb_ifbuf_num\n");
 module_param(decode_timeout_val_back, uint, 0664);
 MODULE_PARM_DESC(decode_timeout_val_back,
 	"\n avs2 decode_timeout_val_back\n");
+
+module_param(back_timer_check_count, uint, 0664);
+MODULE_PARM_DESC(back_timer_check_count,
+	"\n avs2 back_timer_check_count\n");
 
 module_param(dump_yuv_frame, uint, 0664);
 MODULE_PARM_DESC(dump_yuv_frame, "\n amvdec_avs2 dump_yuv_frame\n");
