@@ -5546,6 +5546,9 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 		max_reference_size = (reg_val >> 8) & 0xff;
 
 		hw->cfg_param1 = param1;
+		hw->cfg_param2 = param2;
+		hw->cfg_param3 = param3;
+		hw->cfg_param4 = param4;
 
 		hw->seq_info2 = seq_info2;
 		hw->seq_info3 = seq_info3;
