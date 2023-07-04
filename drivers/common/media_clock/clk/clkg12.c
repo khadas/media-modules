@@ -760,8 +760,7 @@ static int vdec_clock_set(int clk)
 		get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)
 		clk = 800;
 
-	if (is_cpu_s4_s805x2() ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
+	if (is_cpu_s4_s805x2())
 		clk = 500;
 
 	if (set_frq_enable && vdec_frq) {
