@@ -9054,9 +9054,15 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 
 static bool v4l_output_dw_with_compress(struct hevc_state_s *hevc, int dw)
 {
+	struct aml_vcodec_ctx *ctx = (struct aml_vcodec_ctx *)(hevc->v4l2_ctx);
+
 	if ((dw == 0x10) ||
-		IS_8K_SIZE(hevc->frame_width, hevc->frame_height) ||
-		hevc->interlace_flag)
+		IS_8K_SIZE(hevc->frame_width, hevc->frame_height))
+		return false;
+	if (hevc->interlace_flag &&
+		(!(is_support_interlace_avbc() &&
+		(ctx->vpp_cfg.enable_nr == 1) &&
+		(ctx->vpp_cfg.enable_local_buf == 1))))
 		return false;
 
 	return true;
@@ -9578,7 +9584,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			pic->pic_struct = 0;
 
 		vf->height <<= hevc->interlace_flag;
-		/* vf->compHeight <<= hevc->interlace_flag; */
+		vf->compHeight <<= hevc->interlace_flag;
 		vf->canvas0_config[0].height <<= hevc->interlace_flag;
 		vf->canvas0_config[1].height <<= hevc->interlace_flag;
 
@@ -9604,14 +9610,14 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf2->timestamp = 0;
 			}
 			if (pic->pic_struct == 3) {
-				vf->type = VIDTYPE_INTERLACE_TOP
+				vf->type |= VIDTYPE_INTERLACE_TOP
 				| nv_order;
-				vf2->type = VIDTYPE_INTERLACE_BOTTOM
+				vf2->type |= VIDTYPE_INTERLACE_BOTTOM
 				| nv_order;
 			} else {
-				vf->type = VIDTYPE_INTERLACE_BOTTOM
+				vf->type |= VIDTYPE_INTERLACE_BOTTOM
 				| nv_order;
-				vf2->type = VIDTYPE_INTERLACE_TOP
+				vf2->type |= VIDTYPE_INTERLACE_TOP
 				| nv_order;
 			}
 			if (pic->show_frame) {
@@ -9659,18 +9665,18 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 			}
 
 			if (pic->pic_struct == 5) {
-				vf->type = VIDTYPE_INTERLACE_TOP
+				vf->type |= VIDTYPE_INTERLACE_TOP
 					| nv_order;
-				vf2->type = VIDTYPE_INTERLACE_BOTTOM
+				vf2->type |= VIDTYPE_INTERLACE_BOTTOM
 					| nv_order;
-				vf3->type = VIDTYPE_INTERLACE_TOP
+				vf3->type |= VIDTYPE_INTERLACE_TOP
 					| nv_order;
 			} else {
-				vf->type = VIDTYPE_INTERLACE_BOTTOM
+				vf->type |= VIDTYPE_INTERLACE_BOTTOM
 					| nv_order;
-				vf2->type = VIDTYPE_INTERLACE_TOP
+				vf2->type |= VIDTYPE_INTERLACE_TOP
 					| nv_order;
-				vf3->type = VIDTYPE_INTERLACE_BOTTOM
+				vf3->type |= VIDTYPE_INTERLACE_BOTTOM
 					| nv_order;
 			}
 			if (pic->show_frame) {
@@ -9714,12 +9720,12 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				kfifo_put(&hevc->pending_q,
 				(const struct vframe_s *)vf);
 				if (pic->pic_struct == 9) {
-					vf->type = VIDTYPE_INTERLACE_TOP
+					vf->type |= VIDTYPE_INTERLACE_TOP
 						| nv_order | VIDTYPE_VIU_FIELD;
 					process_pending_vframe(hevc,
 					hevc->pre_bot_pic, 0);
 				} else {
-					vf->type = VIDTYPE_INTERLACE_BOTTOM |
+					vf->type |= VIDTYPE_INTERLACE_BOTTOM |
 						nv_order | VIDTYPE_VIU_FIELD;
 					vf->index = (pic->index << 8) | 0xff;
 					process_pending_vframe(hevc,
@@ -9749,10 +9755,10 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 			/* put current into pending q */
 			if (pic->pic_struct == 11)
-				vf->type = VIDTYPE_INTERLACE_TOP |
+				vf->type |= VIDTYPE_INTERLACE_TOP |
 				nv_order | VIDTYPE_VIU_FIELD;
 			else {
-				vf->type = VIDTYPE_INTERLACE_BOTTOM |
+				vf->type |= VIDTYPE_INTERLACE_BOTTOM |
 				nv_order | VIDTYPE_VIU_FIELD;
 				vf->index = (pic->index << 8) | 0xff;
 			}
@@ -9792,13 +9798,13 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				vf->duration = vf->duration * 3;
 				break;
 			case 1:
-				vf->type = VIDTYPE_INTERLACE_TOP |
+				vf->type |= VIDTYPE_INTERLACE_TOP |
 					nv_order | VIDTYPE_VIU_FIELD;
 				process_pending_vframe(hevc, pic, 1);
 				hevc->pre_top_pic = pic;
 				break;
 			case 2:
-				vf->type = VIDTYPE_INTERLACE_BOTTOM
+				vf->type |= VIDTYPE_INTERLACE_BOTTOM
 					| nv_order | VIDTYPE_VIU_FIELD;
 				process_pending_vframe(hevc, pic, 0);
 				hevc->pre_bot_pic = pic;
@@ -10438,6 +10444,7 @@ static int vh265_get_ps_info(struct hevc_state_s *hevc,
 		rpm_param->p.sps_num_reorder_pics_0;
 
 	height <<= hevc->interlace_flag;
+	coded_height <<= hevc->interlace_flag;
 	ps->visible_width 	= width;
 	ps->visible_height 	= height;
 	ps->coded_width 	= ALIGN(coded_width, 64);

@@ -397,6 +397,21 @@ bool is_support_dual_core(void)
 }
 EXPORT_SYMBOL(is_support_dual_core);
 
+bool is_support_interlace_avbc(void)
+{
+	enum AM_MESON_CPU_MAJOR_ID cpu_major_id = get_cpu_major_id();
+
+	if (cpu_major_id < AM_MESON_CPU_MAJOR_ID_TM2)
+		return false;
+	if (cpu_major_id == AM_MESON_CPU_MAJOR_ID_T5D
+		|| cpu_major_id == AM_MESON_CPU_MAJOR_ID_GXLX3
+		|| cpu_major_id == AM_MESON_CPU_MAJOR_ID_TXHD2)
+		return false;
+
+	return true;
+}
+EXPORT_SYMBOL(is_support_interlace_avbc);
+
 static const bool cores_with_input[VDEC_MAX] = {
 	true,   /* VDEC_1 */
 	false,  /* VDEC_HCODEC */

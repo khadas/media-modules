@@ -832,6 +832,8 @@ bool is_support_no_parser(void);
 
 bool is_support_dual_core(void);
 
+bool is_support_interlace_avbc(void);
+
 int vdec_resource_checking(struct vdec_s *vdec);
 
 void set_meta_data_to_vf(struct vframe_s *vf, u32 type, void *v4l2_ctx);
