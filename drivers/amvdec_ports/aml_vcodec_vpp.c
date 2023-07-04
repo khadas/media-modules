@@ -213,7 +213,8 @@ static void release_DI_buff(struct aml_v4l2_vpp* vpp)
 
 static void update_vpp_num_cache(struct aml_v4l2_vpp *vpp)
 {
-	atomic_set(&vpp->ctx->vpp_cache_num, VPP_FRAME_SIZE - kfifo_len(&vpp->input));
+	if (!vpp->ctx->is_stream_off)
+		atomic_set(&vpp->ctx->vpp_cache_num, VPP_FRAME_SIZE - kfifo_len(&vpp->input));
 }
 
 static int is_di_input_buff_full(struct aml_v4l2_vpp *vpp)

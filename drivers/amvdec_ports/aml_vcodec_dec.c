@@ -4211,8 +4211,6 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 	} else {
 		ctx->is_stream_off = true;
 		ctx->dst_queue_streaming = false;
-		atomic_set(&ctx->vpp_cache_num, 0);
-		atomic_set(&ctx->ge2d_cache_num, 0);
 		ctx->out_buff_cnt = 0;
 		ctx->in_buff_cnt = 0;
 		ctx->write_frames = 0;
@@ -4297,6 +4295,11 @@ static void vb2ops_vdec_stop_streaming(struct vb2_queue *q)
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_PRINFO,
 			"seek force reset to drop es frames.\n");
 		aml_vdec_reset(ctx);
+	}
+
+	if (!V4L2_TYPE_IS_OUTPUT(q->type)) {
+		atomic_set(&ctx->vpp_cache_num, 0);
+		atomic_set(&ctx->ge2d_cache_num, 0);
 	}
 }
 
