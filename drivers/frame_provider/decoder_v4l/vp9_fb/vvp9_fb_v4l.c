@@ -11537,6 +11537,9 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				vdec_v4l_get_pic_info(ctx, &pic);
 				pbi->used_buf_num = pic.dpb_frames +
 					pic.dpb_margin;
+				if (pbi->used_buf_num > MAX_BUF_NUM)
+					pbi->used_buf_num = MAX_BUF_NUM;
+
 				init_pic_list(pbi);
 #ifdef NEW_FB_CODE
 				if ((pbi->front_back_mode != 1) && (pbi->front_back_mode != 3))
@@ -13053,6 +13056,8 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 
 		vdec_v4l_get_pic_info(ctx, &pic);
 		pbi->used_buf_num = pic.dpb_frames + pic.dpb_margin;
+		if (pbi->used_buf_num > MAX_BUF_NUM)
+			pbi->used_buf_num = MAX_BUF_NUM;
 
 		if (pbi->used_buf_num == 0)
 			return false;
