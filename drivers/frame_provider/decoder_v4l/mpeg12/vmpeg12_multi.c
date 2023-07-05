@@ -2009,7 +2009,11 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 		int frame_width = READ_VREG(MREG_PIC_WIDTH);
 		int frame_height = READ_VREG(MREG_PIC_HEIGHT);
 		int info = READ_VREG(MREG_SEQ_INFO);
-		bool frame_prog = info & 0x10000;
+		bool frame_prog = true;
+
+		if ((info & SEQINFO_EXT_AVAILABLE) &&
+			((info & SEQINFO_PROG) == 0))
+			frame_prog = false;
 
 		if (hw->kpi_first_i_comming == 0) {
 			hw->kpi_first_i_comming = 1;
@@ -2287,11 +2291,14 @@ static irqreturn_t vmpeg12_isr_thread_handler(struct vdec_s *vdec, int irq)
 			hw->dec_num, index, info, seqinfo, offset, new_pic->poc);
 
 		hw->frame_prog = info & PICINFO_PROG;
-#if 1
+
+		if (hw->report_field == V4L2_FIELD_NONE)
+			hw->frame_prog |= PICINFO_PROG;
+
 		if ((seqinfo & SEQINFO_EXT_AVAILABLE) &&
 			((seqinfo & SEQINFO_PROG) == 0))
 			hw->frame_prog = 0;
-#endif
+
 		force_interlace_check(hw);
 		if (hw->force_prog_only)
 			hw->frame_prog = PICINFO_PROG;
