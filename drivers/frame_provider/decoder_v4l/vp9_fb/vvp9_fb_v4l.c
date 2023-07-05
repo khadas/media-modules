@@ -4138,9 +4138,6 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi, struct PIC_BUFFER_CONFIG_
 {
 	uint32_t data32;
 	//int32_t misc_flag0 = pbi->misc_flag0;
-	int32_t lcu_size = 64;
-	int32_t mc_buffer_size_u_v = pic_config->lcu_total*lcu_size*lcu_size/2;
-	int32_t mc_buffer_size_u_v_h = (mc_buffer_size_u_v + 0xffff)>>16; //64k alignment
 	struct aml_vcodec_ctx * v4l2_ctx = pbi->v4l2_ctx;
 	int dw_mode = get_double_write_mode(pbi);
 	//int tw_mode = get_triple_write_mode(pbi);
@@ -4174,27 +4171,15 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi, struct PIC_BUFFER_CONFIG_
 	WRITE_VREG(HEVC_SAO_C_START_ADDR_DBE1,pic_config->dw_u_v_adr);
 #endif
 
-	if (pbi->is_used_v4l) {
-		WRITE_VREG(HEVC_SAO_Y_LENGTH, pic_config->luma_size);
-		WRITE_VREG(HEVC_SAO_Y_LENGTH_DBE1, pic_config->luma_size);
-		WRITE_VREG(HEVC_SAO_C_LENGTH, pic_config->chroma_size);
-		WRITE_VREG(HEVC_SAO_C_LENGTH_DBE1, pic_config->chroma_size);
-		if (debug & PRINT_FLAG_V4L_DETAIL) {
-			pr_info("[%d] config pic, id: %d, Y:(%x, %d) C:(%x, %d).\n",
-				v4l2_ctx->id, pic_config->index,
-				pic_config->dw_y_adr, pic_config->luma_size,
-				pic_config->dw_u_v_adr, pic_config->chroma_size);
-		}
-	}  else {
-		data32 = (mc_buffer_size_u_v_h<<16)<<1;
-		//printk("data32 = %x, mc_buffer_size_u_v_h = %x, lcu_total = %x\n", data32, mc_buffer_size_u_v_h, pic_config->lcu_total);
-		WRITE_VREG(HEVC_SAO_Y_LENGTH ,data32);
-		WRITE_VREG(HEVC_SAO_Y_LENGTH_DBE1 ,data32);
-
-		data32 = (mc_buffer_size_u_v_h<<16);
-		WRITE_VREG(HEVC_SAO_C_LENGTH  ,data32);
-		WRITE_VREG(HEVC_SAO_C_LENGTH_DBE1  ,data32);
-	}
+	WRITE_VREG(HEVC_SAO_Y_LENGTH, pic_config->luma_size);
+	WRITE_VREG(HEVC_SAO_Y_LENGTH_DBE1, pic_config->luma_size);
+	WRITE_VREG(HEVC_SAO_C_LENGTH, pic_config->chroma_size);
+	WRITE_VREG(HEVC_SAO_C_LENGTH_DBE1, pic_config->chroma_size);
+	vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
+		"[%d] config pic, id: %d, Y:(%lx, %d) C:(%lx, %d).\n",
+		v4l2_ctx->id, pic_config->index,
+		pic_config->dw_y_adr, pic_config->luma_size,
+		pic_config->dw_u_v_adr, pic_config->chroma_size);
 
 #ifndef LOSLESS_COMPRESS_MODE
 	/* multi tile to do... */
