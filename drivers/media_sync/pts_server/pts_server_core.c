@@ -711,7 +711,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 		pInstance->mLastCheckoutIndex = find_index;
 
 		// Deal with all the key ptn
-		if (find) {
+		if (find && find_ptn) {
 			if (!invalid_mode) {
 				mCheckoutPtsOffset->pts = find_ptn->pts;
 				mCheckoutPtsOffset->pts_64 = find_ptn->pts_64;
