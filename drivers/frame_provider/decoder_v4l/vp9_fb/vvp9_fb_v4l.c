@@ -10853,6 +10853,11 @@ static void vvp9_get_comp_buf_info(struct VP9Decoder_s *pbi,
 					struct vdec_comp_buf_info *info)
 {
 	u16 bit_depth = pbi->vp9_param.p.bit_depth;
+	unsigned int height = pbi->frame_height;
+#ifdef NEW_FB_CODE
+	if (pbi->front_back_mode == 1)
+		height = pbi->frame_height / 2 + 64 + 8;
+#endif
 
 	info->max_size = vp9_max_mmu_buf_size(
 			pbi->max_pic_w,
@@ -10862,7 +10867,7 @@ static void vvp9_get_comp_buf_info(struct VP9Decoder_s *pbi,
 			pbi->frame_height);
 	info->frame_buffer_size = vp9_mmu_page_num(
 			pbi, pbi->frame_width,
-			pbi->frame_height,
+			height,
 			bit_depth == VPX_BITS_10);
 }
 
