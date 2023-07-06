@@ -9192,6 +9192,18 @@ static int parse_sei(struct hevc_state_s *hevc,
 					if (payload_size % 8)
 						data_len = ((payload_size + 8) >> 3) << 3;
 					hevc->sei_itu_data_len += data_len;
+					if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
+						user_data_buf = hevc->sei_itu_data_buf;
+						hevc_print(hevc, 0,
+							"CC data: (size %d)\n",
+							hevc->sei_itu_data_len);
+						for (i = 0; i < hevc->sei_itu_data_len; i++) {
+							hevc_print_cont(hevc, 0, "%02x ", user_data_buf[i]);
+							if (((i + 1) & 0xf) == 0)
+								hevc_print_cont(hevc, 0, "\n");
+						}
+						hevc_print_cont(hevc, 0, "\n");
+					}
 				}
 #endif
 				break;
