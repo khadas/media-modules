@@ -1103,6 +1103,9 @@ struct BuffInfo_s {
 /* necessary 4K page size align for t7/t3 decoder and after */
 #define WORKBUF_ALIGN(addr) (ALIGN(addr, PAGE_SIZE))
 
+#define short_term_rps_SIZE  (16*32*16*2)
+
+
 #define WORK_BUF_SPEC_NUM 6
 static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 	{
@@ -1432,7 +1435,7 @@ static struct BuffInfo_s amvh265_workbuff_spec[WORK_BUF_SPEC_NUM] = {
 		.ipp1			= {.buf_size = 0x4000*2}, // IPP work space calculation : 4096 * (Y+CbCr+Flags) = 12k, round to 16k
 		.sao_abv		= {.buf_size = 0}, //0x30000*2,
 		.sao_vb			= {.buf_size = 0}, //0x30000*2,
-		.short_term_rps		= {.buf_size = 0x800}, // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
+		.short_term_rps		= {.buf_size = short_term_rps_SIZE}, // SHORT_TERM_RPS - Max 64 set, 16 entry every set, total 64x16x2 = 2048 bytes (0x800)
 		.vps			= {.buf_size = 0x800}, //VPS STORE AREA - Max 16 VPS, each has 0x80 bytes, total 0x0800 bytes
 		.sps			= {.buf_size = 0x800}, // SPS STORE AREA - Max 16 SPS, each has 0x80 bytes, total 0x0800 bytes
 		.pps			= {.buf_size = 0x2000}, // PPS STORE AREA - Max 64 PPS, each has 0x80 bytes, total 0x2000 bytes
