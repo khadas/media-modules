@@ -2138,8 +2138,8 @@ int vdec_prepare_input(struct vdec_s *vdec, struct vframe_chunk_s **p)
 		}
 #endif
 		input->last_wp = wp;
+		ATRACE_COUNTER(vdec->stream_buffer_level, size);
 
-		ATRACE_COUNTER(vdec->stream_rp, rp);
 		return size;
 	}
 }
@@ -2455,10 +2455,49 @@ bool vdec_need_more_data(struct vdec_s *vdec)
 }
 EXPORT_SYMBOL(vdec_need_more_data);
 
+u64 vdec_get_stream_size(struct vdec_s *vdec)
+{
+	struct vdec_input_s *input = &vdec->input;
+	u64 total_rd_count_last = 0;
+	u64 stream_size = 0;
+
+	if (input_stream_based(input)) {
+		total_rd_count_last = vdec->input.total_rd_count;
+
+		if (input->target == VDEC_INPUT_TARGET_VLD) {
+			vdec->input.stream_cookie =
+				READ_VREG(VLD_MEM_VIFIFO_WRAP_COUNT);
+			vdec->input.swap_rp =
+				READ_VREG(VLD_MEM_VIFIFO_RP);
+			vdec->input.total_rd_count =
+				(u64)vdec->input.stream_cookie *
+				vdec->input.size + vdec->input.swap_rp -
+				READ_VREG(VLD_MEM_VIFIFO_BYTES_AVAIL);
+		} else if (input->target == VDEC_INPUT_TARGET_HEVC) {
+
+			vdec->input.stream_cookie =
+				READ_VREG(HEVC_SHIFT_BYTE_COUNT);
+			vdec->input.swap_rp =
+				READ_VREG(HEVC_STREAM_RD_PTR);
+			if (((vdec->input.stream_cookie & 0x80000000) == 0) &&
+				(vdec->input.streaming_rp & 0x80000000))
+				vdec->input.streaming_rp += 1ULL << 32;
+			vdec->input.streaming_rp &= 0xffffffffULL << 32;
+			vdec->input.streaming_rp |= vdec->input.stream_cookie;
+			vdec->input.total_rd_count = vdec->input.streaming_rp;
+		}
+
+		stream_size = vdec->input.total_rd_count - total_rd_count_last;
+	}
+	return stream_size;
+}
+EXPORT_SYMBOL(vdec_get_stream_size);
 
 void vdec_save_input_context(struct vdec_s *vdec)
 {
 	struct vdec_input_s *input = &vdec->input;
+	u64 total_rd_count_last = 0;
+	u64 stream_size = 0;
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vdec_profile(vdec, VDEC_PROFILE_EVENT_SAVE_INPUT, 0);
@@ -2468,6 +2507,7 @@ void vdec_save_input_context(struct vdec_s *vdec)
 		WRITE_VREG(VLD_MEM_VIFIFO_CONTROL, 1<<15);
 
 	if (input_stream_based(input) && (input->swap_needed)) {
+		total_rd_count_last = vdec->input.total_rd_count;
 		if (input->target == VDEC_INPUT_TARGET_VLD) {
 			WRITE_VREG(VLD_MEM_SWAP_ADDR,
 				input->swap_page_phys);
@@ -2505,6 +2545,9 @@ void vdec_save_input_context(struct vdec_s *vdec)
 			if ((vdec->core_mask & CORE_MASK_HEVC_BACK) == 0)
 				hevc_wait_ddr();
 		}
+
+		stream_size = vdec->input.total_rd_count - total_rd_count_last;
+		ATRACE_COUNTER(vdec->stream_mode_size, stream_size);
 
 		input->swap_valid = true;
 		input->swap_needed = false;
@@ -2990,9 +3033,9 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 
 	snprintf(vdec->frame_mode_size, sizeof(vdec->frame_mode_size),
 			 "0.frame_mode_size-%d", vdec->id);
+	snprintf(vdec->stream_mode_size, sizeof(vdec->stream_mode_size),
+		 "0.stream_mode_size-%d", vdec->id);
 
-	snprintf(vdec->stream_rp, sizeof(vdec->stream_rp),
-			 "0.stream_rp-%d", vdec->id);
 	snprintf(vdec->decode_hw_front_time_name, sizeof(vdec->decode_hw_front_time_name),
 		"decode_%s_time-%d", is_support_dual_core()?"hw_front":"hw", vdec->id);
 	snprintf(vdec->decode_hw_back_time_name, sizeof(vdec->decode_hw_back_time_name),

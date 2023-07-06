@@ -525,12 +525,14 @@ struct vdec_s {
 #ifdef NEW_FB_CODE
 	bool front_pic_done;
 	bool back_pic_done;
+	u64 hw_front_decode_start;
+	u64 hw_back_decode_start;
 #endif
+	char stream_mode_size[32];
 	char decode_hw_front_time_name[32];
 	char decode_hw_back_time_name[32];
 	char decode_hw_front_spend_time_avg[32];
 	char decode_hw_back_spend_time_avg[32];
-
 };
 
 #define CODEC_MODE(a, b, c, d)\
@@ -900,5 +902,7 @@ ssize_t dump_vdec_chunks(char *buf);
 ssize_t dump_vdec_core(char *buf);
 
 #endif
+
+u64 vdec_get_stream_size(struct vdec_s *vdec);
 
 #endif				/* VDEC_H */

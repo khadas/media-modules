@@ -960,7 +960,8 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		}
 	}
 	mutex_unlock(&hevc->fb_mutex);
-	if ((pic->error_mark) ||(hevc->front_back_mode != 1 &&
+
+	if ((pic->error_mark && (hevc->nal_skip_policy != 0)) ||(hevc->front_back_mode != 1 &&
 		hevc->front_back_mode != 3)) {
 		copy_loopbufs_ptr(&hevc->bk, &hevc->next_bk[hevc->fb_rd_pos]);
 		print_loopbufs_ptr(hevc, "bk", &hevc->bk);
