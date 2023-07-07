@@ -538,7 +538,7 @@ void av1_store_pbi_fb(AV1Decoder *pbi, AV1Decoder_fb *pbi_fb, u32 res_ch_flag)
 			pbi_fb->params[i] = pbi->params[i];
 		}
 
-		for (i = 0; i < 256; i++)
+		for (i = 0; i < 256 * 4; i++)
 			pbi_fb->instruction[i] = pbi->instruction[i];
 		pbi_fb->ins_offset = pbi->ins_offset;
 
@@ -564,6 +564,9 @@ void av1_store_pbi_fb(AV1Decoder *pbi, AV1Decoder_fb *pbi_fb, u32 res_ch_flag)
 	pbi_fb->fb_buf_tldat_data1 = pbi->fb_buf_tldat_data1;
 	pbi_fb->fb_buf_tile_header_param = pbi->fb_buf_tile_header_param;
 	pbi_fb->fb_buf_fgs_ucode = pbi->fb_buf_fgs_ucode;
+	pbi_fb->fb_buf_sys_imem = pbi->fb_buf_sys_imem;
+	pbi_fb->fb_buf_sys_imem_addr = pbi->fb_buf_sys_imem_addr;
+	pbi_fb->sys_imem_ptr_v = pbi->sys_imem_ptr_v;
 
 	pbi_fb->fr = pbi->fr;
 	pbi_fb->bk = pbi->bk;
@@ -577,7 +580,7 @@ void av1_restore_pbi_fb(AV1Decoder *pbi, AV1Decoder_fb *pbi_fb, u32 res_ch_flag)
 		pbi->fb_wr_pos = pbi_fb->fb_wr_pos;
 		pbi->fb_rd_pos = pbi_fb->fb_rd_pos;
 
-		for (i = 0; i < 256; i++)
+		for (i = 0; i < 256 * 4; i++)
 			pbi->instruction[i] = pbi_fb->instruction[i];
 		pbi->ins_offset = pbi_fb->ins_offset;
 
@@ -611,6 +614,9 @@ void av1_restore_pbi_fb(AV1Decoder *pbi, AV1Decoder_fb *pbi_fb, u32 res_ch_flag)
 	pbi->fb_buf_tldat_data1 = pbi_fb->fb_buf_tldat_data1;
 	pbi->fb_buf_tile_header_param = pbi_fb->fb_buf_tile_header_param;
 	pbi->fb_buf_fgs_ucode = pbi_fb->fb_buf_fgs_ucode;
+	pbi->fb_buf_sys_imem = pbi_fb->fb_buf_sys_imem;
+	pbi->fb_buf_sys_imem_addr = pbi_fb->fb_buf_sys_imem_addr;
+	pbi->sys_imem_ptr_v = pbi_fb->sys_imem_ptr_v;
 
 	pbi->fr = pbi_fb->fr;
 	pbi->bk = pbi_fb->bk;
