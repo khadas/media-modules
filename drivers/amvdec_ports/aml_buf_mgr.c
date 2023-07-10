@@ -598,7 +598,7 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct aml_buf *buf = entry_to_aml_buf(entry);
-	struct aml_buf_fbc_info fbc_info;
+	struct aml_buf_fbc_info fbc_info = { 0 };
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -615,7 +615,8 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 		task_chain_clean(buf->task);
 	}
 
-	bm->get_fbc_info(bm, &fbc_info);
+	if (bm->config.enable_fbc)
+		bm->get_fbc_info(bm, &fbc_info);
 
 	if (buf->fbc &&
 		((fbc_info.frame_size != buf->fbc->frame_size) ||
