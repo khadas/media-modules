@@ -422,6 +422,22 @@ static void aml_vdec_flush_decoder(struct aml_vcodec_ctx *ctx)
 	aml_decoder_flush(ctx->ada_ctx);
 }
 
+static bool is_di_support(int width, int height)
+{
+	int di_max_width = 1920;
+	int di_max_height = 1088;
+	int di_min_width = 128;
+	int di_min_height = 16;
+
+	if (width > di_max_width || height > di_max_height) {
+		return false;
+	} else if (width < di_min_width || height < di_min_height) {
+		return false;
+	}
+
+	return true;
+}
+
 /* Conditions:
  * Always connect VPP for mpeg2 and h264 when the stream size is under 2K.
  * Always connect VPP for hevc/av1/vp9 when color space is not SDR and
@@ -434,7 +450,6 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 {
 	int width = ctx->picinfo.coded_width;
 	int height = ctx->picinfo.coded_height;
-	int size = 1920 * 1088;
 
 	if (bypass_vpp)
 		return false;
@@ -452,14 +467,14 @@ static bool vpp_needed(struct aml_vcodec_ctx *ctx, u32* mode)
 
 	if (!ctx->vpp_cfg.enable_nr &&
 		(ctx->output_pix_fmt == V4L2_PIX_FMT_HEVC)) {
-		if (is_over_size(width, height, size)) {
+		if (!is_di_support(width, height)) {
 			return false;
 		}
 	}
 
 	if ((ctx->output_pix_fmt == V4L2_PIX_FMT_H264) &&
 		(ctx->picinfo.field != V4L2_FIELD_NONE)) {
-		if (is_over_size(width, height, size)) {
+		if (!is_di_support(width, height)) {
 			return false;
 		}
 	}
