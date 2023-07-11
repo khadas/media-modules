@@ -11297,19 +11297,6 @@ static int ammvdec_av1_probe(struct platform_device *pdev)
 
 	video_signal_type = hw->video_signal_type;
 
-	if (pdata->sys_info) {
-		hw->vav1_amstream_dec_info = *pdata->sys_info;
-		if ((unsigned long) hw->vav1_amstream_dec_info.param
-				& 0x08) {
-				hw->low_latency_flag = 1;
-			} else
-				hw->low_latency_flag = 0;
-	} else {
-		hw->vav1_amstream_dec_info.width = 0;
-		hw->vav1_amstream_dec_info.height = 0;
-		hw->vav1_amstream_dec_info.rate = 30;
-	}
-
 #ifdef AOM_AV1_MMU_DW
 	hw->dw_mmu_enable =
 		get_double_write_mode_init(hw) & 0x20 ? 1 : 0;
