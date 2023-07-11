@@ -495,7 +495,7 @@ long ptsserver_checkout_pts_offset(s32 pServerInsId, checkout_pts_offset* mCheck
 				//record the first fit pts minimum ptn node to record,this node is the key one normally even without
 				// check offset,this can double check if the key one right or not in some specially case.
 				if (fit_pts_ptn == NULL && pInstance->mLastCheckoutPts > 0) {
-					if (ptn->pts >= pInstance->mLastCheckoutPts || ptn->pts_64 >= pInstance->mLastCheckoutPts64) {
+					if (ptn->pts > pInstance->mLastCheckoutPts || ptn->pts_64 > pInstance->mLastCheckoutPts64) {
 						fit_pts_ptn = ptn;
 						fit_pts_number = i;
 						if (ptsserver_debuglevel >= 1) {
