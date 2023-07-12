@@ -1013,6 +1013,7 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 #endif
 	hc->f_rec->is_output = 1;
 #ifdef AML
+	hc->f_rec->poc = img->tr;
 	hc->f_rec->error_mark = 0;
 	hc->f_rec->decoded_lcu = 0;
 	hc->f_rec->back_done_mark = 1;

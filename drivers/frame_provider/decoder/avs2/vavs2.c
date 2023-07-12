@@ -428,7 +428,7 @@ struct MVBUF_s {
 #define AVS2_DBG_PIC_LEAK                 0x1000
 #define AVS2_DBG_PIC_LEAK_WAIT            0x2000
 #define AVS2_DBG_HDR_INFO                 0x4000
-#define AVS2_DBG_HDR_DATA                 0x8000
+#define AVS2_DBG_QOS_INFO                 0x8000
 #define AVS2_DBG_DIS_LOC_ERROR_PROC       0x10000
 #define AVS2_DBG_DIS_SYS_ERROR_PROC   0x20000
 #define AVS2_DBG_DUMP_PIC_LIST       0x40000
@@ -3320,7 +3320,7 @@ static void set_cuva_data(struct AVS2Decoder_s *dec)
 
 			avs2_print(dec, AVS2_DBG_BUFMGR_MORE,
 				"cuva: (size %d)\n", pic->cuva_data_size);
-			if (get_dbg_flag(dec) & AVS2_DBG_HDR_DATA) {
+			if (get_dbg_flag(dec) & AVS2_DBG_HDR_INFO) {
 				for (i = 0; i < pic->cuva_data_size; i++) {
 					pr_info("%02x ", pic->cuva_data_buf[i]);
 					if (((i + 1) & 0xf) == 0)

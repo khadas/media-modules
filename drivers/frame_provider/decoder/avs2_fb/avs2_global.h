@@ -20,6 +20,8 @@
 #ifndef _GLOBAL_H_
 #define _GLOBAL_H_
 
+#include <linux/amlogic/media/utils/amstream.h>
+
 #define NEW_FB_CODE
 #define NEW_FRONT_BACK_CODE
 /* #include <stdio.h>                              //!< for FILE */
@@ -764,15 +766,7 @@ struct avs2_frame_s {
 #endif
 
 	/* picture qos information*/
-	int max_qp;
-	int avg_qp;
-	int min_qp;
-	int max_skip;
-	int avg_skip;
-	int min_skip;
-	int max_mv;
-	int min_mv;
-	int avg_mv;
+	struct vframe_qos_s vqos;
 
 	u32 hw_decode_time;
 	u32 frame_size; // For frame base mode
@@ -802,6 +796,10 @@ struct avs2_frame_s {
 #endif
 #ifdef AML
 	u64 time;
+	s32 poc;
+	u32 hw_front_decode_time;
+	struct vdec_info vinfo;
+	u32 stream_size; // For stream base mode
 #endif
 };
 
