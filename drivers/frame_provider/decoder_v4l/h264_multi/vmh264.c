@@ -404,6 +404,12 @@ static void h264_recycle_dec_resource(void *priv, struct aml_buf *aml_buf);
 			 (frame->frame && (frame->frame->pic_struct == PIC_TOP_BOT || \
 			 frame->frame->pic_struct == PIC_TOP_BOT)))
 
+#define is_multi_frames(hw) \
+			((hw->frmbase_cont_flag &&\
+			!one_packet_multi_frames_multi_run) || \
+			(hw->multi_frame_unfinish &&\
+			one_packet_multi_frames_multi_run))
+
 static inline bool close_to(int a, int b, int m)
 {
 	return (abs(a - b) < m) ? true : false;
@@ -820,7 +826,7 @@ struct vdec_h264_hw_s {
 	struct dec_sysinfo vh264_amstream_dec_info;
 
 	int dec_result;
-	int multi_frame_unfinish; // for v4l res_change in one-packet of multi frames
+	int multi_frame_unfinish; // for v4l res_change in one-packet of multi frames  and  next dirty frame post 0x22 or 0x12
 	u32 timeout_processing;
 	struct work_struct work;
 	struct work_struct notify_work;
@@ -7461,7 +7467,7 @@ pic_done_proc:
 		if ((dec_dpb_status == H264_SEARCH_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_BUFEMPTY) ||
 			(dec_dpb_status == H264_DECODE_TIMEOUT) ||
-			((dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
+			(!is_multi_frames(hw) && (dec_dpb_status == H264_DATA_REQUEST) && input_frame_based(vdec))) {
 			hw->data_flag |= ERROR_FLAG;
 			mutex_lock(&hw->pic_mutex);
 			if (hw->dpb.mVideo.dec_picture)
@@ -7620,7 +7626,8 @@ empty_proc:
 		reset_process_time(hw);
 		if ((hw->error_proc_policy & 0x40000) &&
 			((dec_dpb_status == H264_DECODE_TIMEOUT) ||
-			(!hw->frmbase_cont_flag && (dec_dpb_status == H264_SEARCH_BUFEMPTY || dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec))))
+			((dec_dpb_status == H264_DECODE_BUFEMPTY) && input_frame_based(vdec)) ||
+			(((!is_multi_frames(hw) && (dec_dpb_status == H264_SEARCH_BUFEMPTY)) && input_frame_based(vdec)))))
 			goto pic_done_proc;
 		if (!hw->frmbase_cont_flag)
 			release_cur_decoding_buf(hw);
@@ -9970,7 +9977,6 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 		(hw->dec_result == DEC_RESULT_GET_DATA_RETRY))
 		&& (hw_to_vdec(hw)->next_status !=
 		VDEC_STATUS_DISCONNECTED)) {
-		hw->multi_frame_unfinish = 0;
 		if (!vdec_has_more_input(vdec)) {
 			hw->dec_result = DEC_RESULT_EOS;
 			vdec_schedule_work(&hw->work);
@@ -9991,6 +9997,7 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			if (ctx->es_free)
 				ctx->es_free(ctx, vdec->vbuf.buf_rp);
 			vdec_clean_input(vdec);
+			hw->multi_frame_unfinish = 0;
 		}
 		if ((hw->dec_result == DEC_RESULT_GET_DATA_RETRY) &&
 			((1000 * (jiffies - hw->get_data_start_time) / HZ)
@@ -10162,7 +10169,6 @@ result_done:
 			amhevc_stop();
 		hw->no_decoder_buffer_flag = 0;
 		hw->next_again_flag = 1;
-		hw->multi_frame_unfinish = 0;
 	} else if (hw->dec_result == DEC_RESULT_EOS) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -10195,7 +10201,6 @@ result_done:
 			vdec_free_irq(VDEC_IRQ_1, (void *)hw);
 			hw->stat &= ~STAT_ISR_REG;
 		}
-		hw->multi_frame_unfinish = 0;
 	} else if (hw->dec_result == DEC_RESULT_NEED_MORE_BUFFER) {
 		struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;
 		struct aml_vcodec_ctx *ctx =
@@ -10226,7 +10231,6 @@ result_done:
 			}
 			start_process_time(hw);
 		}
-		hw->multi_frame_unfinish = 0;
 		return;
 	} else if (hw->dec_result == DEC_RESULT_ERROR_DATA) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
@@ -10641,7 +10645,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		vdec_set_flag(vdec, VDEC_FLAG_SELF_INPUT_CONTEXT);
 #endif
 	if ((vdec_frame_based(vdec)) &&
-		(hw->dec_result == DEC_RESULT_UNFINISH || hw->multi_frame_unfinish)) {
+		(hw->multi_frame_unfinish)) {
 		u32 data_invalid = 0;
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_DEC_DETAIL,
 			"%s: DEC_RESULT_UNFINISH, before, chunk_offset:0x%x, chunk_size:0x%x, consume_byte:0x%x, reserved:0x%x, reserved*8:0x%x\n",
@@ -10699,8 +10703,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 
 	input_empty[DECODE_ID(hw)] = 0;
 
-	if (!(hw->dec_result == DEC_RESULT_UNFINISH ||
-		hw->multi_frame_unfinish)) {
+	if (!hw->multi_frame_unfinish) {
 		hw->get_data_count = 0;
 	}
 
@@ -10732,8 +10735,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			data[size - 3],	data[size - 2],
 			data[size - 1]);
 		}
-		if (hw->dec_result == DEC_RESULT_UNFINISH ||
-			hw->multi_frame_unfinish) {
+		if (hw->multi_frame_unfinish) {
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_DETAIL,
 			"DEC_RESULT_UNFINISH %s: %x %x %x %x %x size 0x%x\n",
 			__func__,
