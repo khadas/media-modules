@@ -2415,7 +2415,7 @@ static void copy_dv_data(struct AV1HW_s *hw,
 	if ((pic->aux_data_buf) &&
 		(pic->aux_data_size + hw->dv_data_size <= hw->aux_data_size) &&
 		(hw->dv_data_size > 0)) {
-		if (debug & AV1_DEBUG_BUFMGR_MORE) {
+		if (debug & AOM_DEBUG_AUX_DATA) {
 			av1_print(hw, 0, "%s: (size %d) pic index %d\n",
 				__func__, hw->dv_data_size, pic->index);
 		}
@@ -3202,8 +3202,8 @@ static void init_pic_list(struct AV1HW_s *hw)
 					struct PIC_BUFFER_CONFIG_s *pic;
 					pic = &cm->buffer_pool->frame_bufs[i].buf;
 					pic->vdec_data_index = index;
-					pic_config->aux_data_buf = vdec->vdata->data[index].aux_data_buf;
-					pic_config->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
+					pic->aux_data_buf = vdec->vdata->data[index].aux_data_buf;
+					pic->hdr10p_data_buf = vdec->vdata->data[index].hdr10p_data_buf;
 					vdec_data_buffer_count_increase((ulong)vdec->vdata, index, i);
 					INIT_LIST_HEAD(&vdec->vdata->release_callback[i].node);
 					decoder_bmmu_box_add_callback_func(hw->bmmu_box, HEADER_BUFFER_IDX(i),
