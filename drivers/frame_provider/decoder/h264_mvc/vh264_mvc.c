@@ -212,7 +212,6 @@ static int display_view_id;
 static int display_POC;
 static int stream_offset;
 
-#define video_domain_addr(adr) (adr&0x7fffffff)
 static unsigned long work_space_adr;
 
 struct buffer_spec_s {
@@ -916,8 +915,7 @@ static void do_alloc_work(struct work_struct *work)
 			return;
 		}
 
-		WRITE_VREG(REF_START_VIEW_0,
-				   video_domain_addr(ref_start_addr[0]));
+		WRITE_VREG(REF_START_VIEW_0, ref_start_addr[0]);
 		WRITE_VREG(MAILBOX_DATA_0,
 			   (max_dec_frame_buffering[0] << 8) |
 			   (total_dec_frame_buffering[0] << 0));
@@ -998,8 +996,7 @@ static void do_alloc_work(struct work_struct *work)
 			return;
 		}
 
-		WRITE_VREG(REF_START_VIEW_1,
-				   video_domain_addr(ref_start_addr[1]));
+		WRITE_VREG(REF_START_VIEW_1, ref_start_addr[1]);
 		WRITE_VREG(MAILBOX_DATA_0,
 			   (max_dec_frame_buffering[1] << 8) |
 			   (total_dec_frame_buffering[1] << 0));
@@ -1432,8 +1429,7 @@ static void H264_DECODE_INIT(void)
 		WRITE_VREG(CANVAS_START, CANVAS_INDEX_START);
 #if 1
 	/* Start Address of Workspace (UCODE, temp_data...) */
-	WRITE_VREG(WORKSPACE_START,
-			   video_domain_addr(work_space_adr));
+	WRITE_VREG(WORKSPACE_START, work_space_adr);
 #else
 	/* Start Address of Workspace (UCODE, temp_data...) */
 	WRITE_VREG(WORKSPACE_START,
