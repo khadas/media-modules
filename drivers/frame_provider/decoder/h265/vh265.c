@@ -6005,7 +6005,8 @@ static void set_aux_data(struct hevc_state_s *hevc,
 			aux_count, suffix_flag, dv_meta_flag);
 	}
 
-	if (aux_count > aux_size) {
+	if ((aux_count > aux_size) ||
+		(pic->aux_data_size + aux_count > AUX_DATA_SIZE1)) {
 		hevc_print(hevc, 0,
 			"%s:aux_count(%d) is over size\n", __func__, aux_count);
 		aux_count = 0;

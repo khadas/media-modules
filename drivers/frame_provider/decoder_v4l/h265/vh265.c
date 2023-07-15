@@ -5852,7 +5852,8 @@ static void set_aux_data(struct hevc_state_s *hevc,
 			aux_count, suffix_flag, dv_meta_flag);
 	}
 
-	if (aux_count > aux_size) {
+	if ((aux_count > aux_size) ||
+		(pic->aux_data_size + aux_count > AUX_DATA_SIZE1)) {
 		hevc_print(hevc, 0,
 			"%s:aux_count(%d) is over size\n", __func__, aux_count);
 		aux_count = 0;
@@ -7376,7 +7377,7 @@ static int hevc_local_init(struct hevc_state_s *hevc)
 		hevc->prefix_aux_size = AUX_BUF_ALIGN(prefix_aux_buf_size);
 		hevc->suffix_aux_size = AUX_BUF_ALIGN(suffix_aux_buf_size);
 		aux_buf_size = hevc->prefix_aux_size + hevc->suffix_aux_size;
-		hevc->aux_addr =decoder_dma_alloc_coherent(&hevc->aux_mem_handle,
+		hevc->aux_addr = decoder_dma_alloc_coherent(&hevc->aux_mem_handle,
 				aux_buf_size, &hevc->aux_phy_addr, "H265_AUX_BUF");
 		if (hevc->aux_addr == NULL) {
 			pr_err("%s: failed to alloc rpm buffer\n", __func__);
