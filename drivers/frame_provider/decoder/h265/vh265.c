@@ -11907,9 +11907,11 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		} else {
 			size = get_firmware_data(VIDEO_DEC_HEVC_MMU, fw->data);
 		}
-	} else
+	} else {
 		size = get_firmware_data(VIDEO_DEC_HEVC, fw->data);
-
+		if (size)
+			hevc->is_swap = true;	//local fw swap
+	}
 	if (size < 0) {
 		pr_err("get firmware fail.\n");
 		vfree(fw);
@@ -11920,24 +11922,22 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 
 #ifdef SWAP_HEVC_UCODE
 	if (!tee_enabled() && hevc->is_swap) {
-		if (hevc->mmu_enable) {
-			hevc->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
-			hevc->mc_cpu_addr =
-				decoder_dma_alloc_coherent(&hevc->mc_cpu_handle,
-					hevc->swap_size,
-					&hevc->mc_dma_handle, "H.265_MC_CPU_BUF");
-			if (!hevc->mc_cpu_addr) {
-				amhevc_disable();
-				pr_info("vh265 mmu swap ucode loaded fail.\n");
-				return -ENOMEM;
-			}
-
-			memcpy((u8 *) hevc->mc_cpu_addr, fw->data + SWAP_HEVC_OFFSET,
-				hevc->swap_size);
-
-			hevc_print(hevc, 0,
-				"vh265 mmu ucode swap loaded %x\n", hevc->mc_dma_handle);
+		hevc->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
+		hevc->mc_cpu_addr =
+			decoder_dma_alloc_coherent(&hevc->mc_cpu_handle,
+				hevc->swap_size,
+				&hevc->mc_dma_handle, "H.265_MC_CPU_BUF");
+		if (!hevc->mc_cpu_addr) {
+			amhevc_disable();
+			pr_info("vh265 mmu swap ucode loaded fail.\n");
+			return -ENOMEM;
 		}
+
+		memcpy((u8 *) hevc->mc_cpu_addr, fw->data + SWAP_HEVC_OFFSET,
+			hevc->swap_size);
+
+		hevc_print(hevc, 0,
+			"vh265 mmu ucode swap loaded %x\n", hevc->mc_dma_handle);
 	}
 #endif
 
@@ -11980,9 +11980,10 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		} else {
 			ret = amhevc_loadmc_ex(VFORMAT_HEVC, "h265_mmu", fw->data);
 		}
-	} else
+	} else {
 		ret = amhevc_loadmc_ex(VFORMAT_HEVC, NULL, fw->data);
-
+		hevc->is_swap = true;
+	}
 	if (ret < 0) {
 		amhevc_disable();
 		vfree(fw);
@@ -13633,10 +13634,11 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 				loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
 						"h265_mmu", hevc->fw->data);
 			}
-		} else
+		} else {
 			loadr = amhevc_vdec_loadmc_ex(VFORMAT_HEVC, vdec,
 					NULL, hevc->fw->data);
-
+			hevc->is_swap = true;
+		}
 		if (loadr < 0) {
 			amhevc_disable();
 			hevc_print(hevc, 0, "H265: the %s fw loading failed, err: %x\n",

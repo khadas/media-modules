@@ -587,8 +587,11 @@ s32 optee_load_fw(enum vformat_e type, const char *fw_name)
 		} else if (!strcmp(name, "h265_back")) {
 			format = VIDEO_DEC_HEVC_BACK;
 			vdec = OPTEE_VDEC_HEVCB;
-		} else
+		} else {
 			format = VIDEO_DEC_HEVC;
+			vdec = OPTEE_VDEC_HEVC;
+			is_swap = true;
+		}
 		break;
 
 	case VFORMAT_REAL:
