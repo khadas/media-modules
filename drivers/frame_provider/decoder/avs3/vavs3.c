@@ -5297,6 +5297,13 @@ static void update_vf_memhandle(struct AVS3Decoder_s *dec,
 			vf->mem_head_handle = decoder_bmmu_box_get_mem_handle(
 				dec->bmmu_box,
 				HEADER_BUFFER_IDX(pic->index));
+			if (dec->double_write_mode == 3)
+				vf->mem_dw_handle =
+					decoder_bmmu_box_get_mem_handle(
+						dec->bmmu_box,
+						VF_BUFFER_IDX(pic->BUF_index));
+			else
+				vf->mem_dw_handle = NULL;
 		}
 	} else {
 		vf->mem_handle = decoder_bmmu_box_get_mem_handle(
