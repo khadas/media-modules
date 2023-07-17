@@ -3089,6 +3089,14 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				vf->timestamp = frame->last_field_timestamp;
 			else
 				vf->timestamp = frame->timestamp;
+			if (!v4l2_ctx->vpp_is_need && vf_count == 1 &&
+				frame->last_field_timestamp != frame->timestamp) {
+				if (input_frame_based(vdec)) {
+					v4l2_ctx->current_timestamp =
+						frame->last_field_timestamp;
+					vdec_v4l_post_error_frame_event(v4l2_ctx);
+				}
+			}
 			vf->pts = frame->pts;
 			vf->pts_us64 = frame->pts64;
 			if ((i > 0) && v4l2_ctx->second_field_pts_mode) {

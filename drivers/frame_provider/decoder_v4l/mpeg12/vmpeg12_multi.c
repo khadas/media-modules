@@ -1660,6 +1660,15 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			else
 				vf->timestamp = pic->last_timestamp;
 		}
+
+		if (!v4l2_ctx->vpp_is_need && field_num == 1 &&
+			pic->last_timestamp != pic->timestamp) {
+			if (input_frame_based(vdec)) {
+				v4l2_ctx->current_timestamp =
+					pic->last_timestamp;
+				vdec_v4l_post_error_frame_event(v4l2_ctx);
+			}
+		}
 		vf->type_original = vf->type;
 
 		if ((error_skip(hw, pic->buffer_info, vf)) ||
