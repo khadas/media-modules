@@ -37,7 +37,6 @@
 #include <linux/string.h>
 #include <linux/amlogic/media/utils/log.h>
 #include <linux/firmware.h>
-#include <linux/amlogic/tee.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE == KERNEL_VERSION(5, 4, 0)
 #include <uapi/linux/major.h>
@@ -48,8 +47,10 @@
 #include <linux/crc32.h>
 #include "../chips/decoder_cpu_ver_info.h"
 
-#if !IS_ENABLED(CONFIG_AMLOGIC_TEE) && !IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
-static  inline bool tee_enabled(void) { return false; }
+#if (!IS_ENABLED(CONFIG_AMLOGIC_TEE) && \
+	!IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)) || \
+	(IS_ENABLED(CONFIG_AMLOGIC_ZAPPER_CUT))
+static inline bool tee_enabled(void) { return false; }
 static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
 {
 	return -1;

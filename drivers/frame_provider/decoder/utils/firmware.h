@@ -22,7 +22,9 @@
 
 #include "../../../common/firmware/firmware_type.h"
 #include <linux/amlogic/media/utils/vformat.h>
-#if IS_ENABLED(CONFIG_AMLOGIC_TEE) || IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
+#if (IS_ENABLED(CONFIG_AMLOGIC_TEE) || \
+	IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)) && \
+	!IS_ENABLED(CONFIG_AMLOGIC_ZAPPER_CUT)
 #include <linux/amlogic/tee.h>
 #else
 /* device ID used by tee_config_device_state() */
@@ -58,10 +60,6 @@ int __weak tee_check_in_mem(u32 pa, u32 size)
 int __weak tee_vp9_prob_free(u32 prob_addr)
 {
 	return -1;
-}
-
-void __weak vdec_profile(struct vdec_s *vdec, int event)
-{
 }
 
 int __weak tee_vp9_prob_malloc(u32 *prob_addr)
