@@ -1385,6 +1385,7 @@ static bool is_available_buffer(struct vdec_mjpeg_hw_s *hw)
 
 	if (hw->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		mmjpeg_debug_print(DECODE_ID(hw), PRINT_FLAG_BUFFER_DETAIL,
 		"%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hw->aml_buf, hw->aml_buf->index);

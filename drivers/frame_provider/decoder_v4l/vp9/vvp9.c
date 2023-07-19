@@ -10141,6 +10141,8 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 		__func__, pbi->aml_buf, pbi->aml_buf->index);
 	}
 
+	free_count += aml_buf_ready_num(&ctx->bm);
+
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return (free_count >= pbi->run_ready_min_buf_num) ? true : false;

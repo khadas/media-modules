@@ -14257,8 +14257,9 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 		return false;
 	}
 
-	if (is_interlace(hevc) &&
-		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
+	if ((is_interlace(hevc) &&
+		atomic_read(&ctx->vpp_cache_num) > 1) ||
+		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM){
 		hevc_print(hevc, H265_DEBUG_DETAIL,
 			"%s vpp cache: %d full!\n",
 			__func__, atomic_read(&ctx->vpp_cache_num));
@@ -14280,6 +14281,8 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 		hevc_print(hevc, H265_DEBUG_BUFMGR, "%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hevc->aml_buf, hevc->aml_buf->index);
 	}
+
+	free_count += aml_buf_ready_num(&ctx->bm);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 

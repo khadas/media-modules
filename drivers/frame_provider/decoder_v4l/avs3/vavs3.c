@@ -9192,6 +9192,10 @@ static bool is_available_buffer(struct AVS3Decoder_s *dec)
 			__func__, dec->aml_buf, dec->aml_buf->index);
 	}
 
+	free_count += aml_buf_ready_num(&ctx->bm);
+
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
+
 	return free_count >= dec->run_ready_min_buf_num ? true : false;
 }
 

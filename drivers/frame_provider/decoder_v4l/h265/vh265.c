@@ -12608,6 +12608,8 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 		__func__, hevc->aml_buf, hevc->aml_buf->index);
 	}
 
+	free_count += aml_buf_ready_num(&ctx->bm);
+
 	if (hevc->dec_result != DEC_RESULT_EOS && !hevc->resolution_change &&
 		save_buffer && free_count < run_ready_min_buf_num &&
 		!hevc->head_pre_parsed) {

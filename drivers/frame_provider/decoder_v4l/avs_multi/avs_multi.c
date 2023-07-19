@@ -767,24 +767,23 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 		return false;
 	}
 
-	for (i = 0; i < hw->vf_buf_num_used; ++i) {
-		if (((hw->interlace_flag) &&
-			atomic_read(&ctx->vpp_cache_num) > 1) ||
-			atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
-			debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
-				"%s vpp cache: %d full!\n",
-				__func__, atomic_read(&ctx->vpp_cache_num));
+	if (((hw->interlace_flag) &&
+		atomic_read(&ctx->vpp_cache_num) > 1) ||
+		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM ||
+		atomic_read(&ctx->ge2d_cache_num) > 1) {
+		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
+			"%s vpp or ge2d cache: %d/%d full!\n",
+		__func__, atomic_read(&ctx->vpp_cache_num), atomic_read(&ctx->ge2d_cache_num));
 
+		return false;
+	}
+	if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
+		hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
+		if (!hw->aml_buf) {
 			return false;
 		}
-		if (!hw->aml_buf && !aml_buf_empty(&ctx->bm)) {
-			hw->aml_buf = aml_buf_get(&ctx->bm, BUF_USER_DEC, false);
-			if (!hw->aml_buf) {
-				return false;
-			}
-			hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
-			hw->aml_buf->state = FB_ST_DECODER;
-		}
+		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
+		hw->aml_buf->state = FB_ST_DECODER;
 	}
 
 	if (hw->aml_buf) {
@@ -793,6 +792,10 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 		"%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
+
+	free_count += aml_buf_ready_num(&ctx->bm);
+
+	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= run_ready_min_buf_num ? 1 : 0;
 }

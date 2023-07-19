@@ -3544,10 +3544,11 @@ static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw)
 
 	if (((hw->report_field & V4L2_FIELD_INTERLACED) &&
 		atomic_read(&ctx->vpp_cache_num) > 1) ||
-		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM) {
+		atomic_read(&ctx->vpp_cache_num) >= MAX_VPP_BUFFER_CACHE_NUM ||
+		atomic_read(&ctx->ge2d_cache_num) > 1) {
 		debug_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
-			"%s vpp cache: %d full!\n",
-			__func__, atomic_read(&ctx->vpp_cache_num));
+			"%s vpp or ge2d cache: %d/%d full!\n",
+			__func__, atomic_read(&ctx->vpp_cache_num), atomic_read(&ctx->ge2d_cache_num));
 
 		return false;
 	}
@@ -3567,6 +3568,8 @@ static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw)
 		"%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
+
+	free_count += aml_buf_ready_num(&ctx->bm);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 

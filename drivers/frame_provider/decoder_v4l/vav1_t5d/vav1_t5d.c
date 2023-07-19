@@ -10032,6 +10032,8 @@ static bool is_available_buffer(struct AV1HW_s *hw)
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
 
+	free_count += aml_buf_ready_num(&ctx->bm);
+
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
 	return free_count >= hw->run_ready_min_buf_num ? true : false;
