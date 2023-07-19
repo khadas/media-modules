@@ -78,7 +78,7 @@
 
 #define MHz (1000000)
 
-#define VPU_INIT_VIDEO_MEMORY_SIZE_IN_BYTE (256 * SZ_1M)
+#define VPU_INIT_VIDEO_MEMORY_SIZE_IN_BYTE (100 * SZ_1M)
 
 #define LOG_ALL 0
 #define LOG_INFO 1
