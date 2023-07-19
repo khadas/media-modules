@@ -2747,7 +2747,7 @@ long mediasync_ins_set_audio_packets_info_implementation(MediaSyncManager* pSync
 
 	if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts != -1) {
 		int64_t PtsDiff = info.packetsPts - pInstance->mSyncInfo.audioPacketsInfo.packetsPts;
-		if (PtsDiff < 0 && get_llabs(PtsDiff) >= 45000 /*500000 us*/) {
+		if (get_llabs(PtsDiff) >= 45000 /*500000 us*/) {
 			pInstance->mAudioDiscontinueInfo.discontinuePtsBefore =
 				pInstance->mSyncInfo.audioPacketsInfo.packetsPts;
 			pInstance->mAudioDiscontinueInfo.discontinuePtsAfter = info.packetsPts;
@@ -2809,7 +2809,8 @@ void mediasync_ins_get_audio_cache_info_implementation(mediasync_ins* pInstance,
 		pInstance->mGetAudioCacheUpdateCount = pInstance->mAudioCacheUpdateCount;
 		if (pInstance->mSyncInfo.curAudioInfo.framePts != -1) {
 
-			if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts > pInstance->mSyncInfo.curAudioInfo.framePts) {
+			if (pInstance->mSyncInfo.audioPacketsInfo.packetsPts > pInstance->mSyncInfo.curAudioInfo.framePts &&
+				pInstance->mSyncInfo.curAudioInfo.framePts > pInstance->mAudioDiscontinueInfo.discontinuePtsAfter) {
 				info->cacheDuration = pInstance->mSyncInfo.audioPacketsInfo.packetsPts -
 										pInstance->mSyncInfo.curAudioInfo.framePts;
 				if (pInstance->mAudioDiscontinueInfo.isDiscontinue == 1) {
@@ -2916,7 +2917,7 @@ long mediasync_ins_set_video_packets_info_implementation(MediaSyncManager* pSync
 
 	if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts != -1) {
 		int64_t PtsDiff = info.packetsPts - pInstance->mSyncInfo.videoPacketsInfo.packetsPts;
-		if (PtsDiff < 0 && get_llabs(PtsDiff) >= 45000 /*500000 us*/) {
+		if (get_llabs(PtsDiff) >= 45000 /*500000 us*/) {
 			pInstance->mVideoDiscontinueInfo.discontinuePtsBefore =
 				pInstance->mSyncInfo.videoPacketsInfo.packetsPts;
 			pInstance->mVideoDiscontinueInfo.discontinuePtsAfter = info.packetsPts;
@@ -2979,7 +2980,8 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 		pInstance->mGetVideoCacheUpdateCount = pInstance->mVideoCacheUpdateCount;
 		if (pInstance->mSyncInfo.curVideoInfo.framePts != -1) {
 
-			if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts > pInstance->mSyncInfo.curVideoInfo.framePts) {
+			if (pInstance->mSyncInfo.videoPacketsInfo.packetsPts > pInstance->mSyncInfo.curVideoInfo.framePts &&
+				pInstance->mSyncInfo.curVideoInfo.framePts > pInstance->mVideoDiscontinueInfo.discontinuePtsAfter) {
 				info->cacheDuration = pInstance->mSyncInfo.videoPacketsInfo.packetsPts -
 										pInstance->mSyncInfo.curVideoInfo.framePts;
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
