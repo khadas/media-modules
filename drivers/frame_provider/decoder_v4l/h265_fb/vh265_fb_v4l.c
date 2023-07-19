@@ -12133,6 +12133,11 @@ force_output:
 
 		return IRQ_HANDLED;
 #endif
+	} else if (dec_status == HEVC_OVER_DECODE) {
+		hevc->over_decode = 1;
+		hevc->dec_result = DEC_RESULT_DONE;
+		vdec_schedule_work(&hevc->work);
+		return IRQ_HANDLED;
 	}
 
 #endif
