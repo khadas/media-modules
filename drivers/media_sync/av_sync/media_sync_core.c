@@ -3371,6 +3371,7 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 	s64 pcrCurpcrDiff = 0;
 	u32 UpdateSlop = 100;
 	mediasync_speed pcrslope;
+	u32 referenceAudioCache = 0;
 	if (pInstance->mSourceClockType != PCR_CLOCK ||
 		pInstance->mDemuxId < 0 ||
 		pInstance->mSyncInfo.state != MEDIASYNC_RUNNING ||
@@ -3462,11 +3463,23 @@ void mediasync_ins_check_pcr_slope(mediasync_ins* pInstance, mediasync_update_in
 						}
 					}
 				} else {
+					//mediasync_pr_info(0,pInstance,
+					//	"demux pts diff:%lld ms  cur pts : %lld ms vcache:%lld us achce:%lld us",
+					//			(pInstance->mSyncInfo.videoPacketsInfo.packetsPts - pInstance->mSyncInfo.audioPacketsInfo.packetsPts)/90,
+					//			(pInstance->mSyncInfo.curVideoInfo.framePts - pInstance->mSyncInfo.curAudioInfo.framePts) / 90,
+					//			mincache*100/9,
+					//			info->mAudioInfo.cacheDuration*100/9);
+					referenceAudioCache = 0;
+					if (pInstance->mHasAudio != 1 &&
+						info->mAudioInfo.cacheDuration > 0 &&
+						info->mAudioInfo.cacheDuration < 27000){
+						referenceAudioCache = 1;
+					}
 					if (mincache < 90000 ||
-						info->mAudioInfo.cacheDuration < 27000) {
+						referenceAudioCache == 1) {
 						if ((mincache < pInstance->mlastCheckVideocacheDuration &&
 							cacheDiffAbs > 18000) ||
-							info->mAudioInfo.cacheDuration < 27000) {
+							referenceAudioCache == 1) {
 							isUpdate = 1;
 							UpdateSlop = avgslope;
 						}
