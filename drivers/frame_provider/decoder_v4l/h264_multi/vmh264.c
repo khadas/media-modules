@@ -363,8 +363,9 @@ static unsigned int mb_count_threshold = 5; /*percentage*/
 static u32 double_write_mode;
 static u32 without_display_mode;
 
-static int loop_playback_poc_threshold = 400;
+static int loop_playback_poc_threshold = 300;
 static int poc_threshold = 50;
+static int loop_times = 5;
 
 //static u32 lookup_check_conut = 30;
 
@@ -6692,7 +6693,7 @@ static int vh264_pic_done_proc(struct vdec_s *vdec)
 				} else {
 					if ((p_H264_Dpb->mVideo.dec_picture->poc >= hw->loop_last_poc - poc_threshold) &&
 						(p_H264_Dpb->mVideo.dec_picture->poc <= hw->loop_last_poc + poc_threshold)) {
-						if (hw->loop_flag >= 5) {
+						if (hw->loop_flag >= loop_times) {
 							for (i = 0; i < p_Dpb->used_size; i++) {
 								if ((hw->loop_last_poc + loop_playback_poc_threshold < p_Dpb->fs[i]->poc) &&
 										!p_Dpb->fs[i]->is_output &&
@@ -11877,6 +11878,9 @@ MODULE_PARM_DESC(loop_playback_poc_threshold, "\n loop_playback_poc_threshold\n"
 
 module_param(poc_threshold, int, 0664);
 MODULE_PARM_DESC(poc_threshold, "\n poc_threshold\n");
+
+module_param(loop_times, int, 0664);
+MODULE_PARM_DESC(loop_times, "\n loop_times\n");
 
 module_param(force_config_fence, uint, 0664);
 MODULE_PARM_DESC(force_config_fence, "\n force enable fence\n");
