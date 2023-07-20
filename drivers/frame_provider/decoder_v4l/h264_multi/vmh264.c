@@ -3035,6 +3035,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int vf_count = 1;
 	int i;
 	u32 slice_type = 0;
+	u32 offset = 0;
 
 	/* swap uv */
 	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
@@ -3332,12 +3333,16 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		if ((vf->type && VIDTYPE_INTERLACE != 0) &&
 			(frame->bottom_field != NULL) &&
 			(frame->top_field != NULL)) {
-			if ((vf->type & VIDTYPE_INTERLACE_BOTTOM) == VIDTYPE_INTERLACE_BOTTOM)
+			if ((vf->type & VIDTYPE_INTERLACE_BOTTOM) == VIDTYPE_INTERLACE_BOTTOM) {
 				slice_type = frame->bottom_field->slice_type;
-			else
+				offset = frame->bottom_field->offset_delimiter;
+			} else {
 				slice_type = frame->top_field->slice_type;
+				offset = frame->top_field->offset_delimiter;
+			}
 		} else {
 			slice_type = frame->slice_type;
+			offset = frame->offset_delimiter;
 		}
 
 		if (slice_type == I_SLICE) {
@@ -3354,7 +3359,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 			/* offset for tsplayer pts lookup */
 			if (i == 0) {
 				vf->pts_us64 = (((u64)vf->duration << 32) &
-					0xffffffff00000000) | frame->offset_delimiter;
+					0xffffffff00000000) | offset;
 				vf->pts = 0;
 			} else {
 				vf->pts_us64 = (u64)-1;

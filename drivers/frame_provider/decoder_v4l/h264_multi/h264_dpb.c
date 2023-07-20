@@ -1218,6 +1218,11 @@ static void dpb_split_field(struct h264_dpb_stru *p_H264_Dpb,
 		fs_top->poc = frame->top_poc;
 		fs_btm->poc = frame->bottom_poc;
 
+		fs_top->offset_delimiter = frame->offset_delimiter;
+		fs_btm->offset_delimiter = frame->offset_delimiter;
+		fs_top->slice_type = frame->slice_type;
+		fs_btm->slice_type = frame->slice_type;
+
 #if (MVC_EXTENSION_ENABLE)
 		fs_top->view_id = frame->view_id;
 		fs_btm->view_id = frame->view_id;
