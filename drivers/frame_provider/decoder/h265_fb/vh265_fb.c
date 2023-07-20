@@ -13572,7 +13572,7 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 
 	hevc_init_decoder_hw(hevc, 0, 0xffffffff);
 
-	WRITE_VREG(HEVC_WAIT_FLAG, 1);
+	//WRITE_VREG(HEVC_WAIT_FLAG, 1);
 
 	/* WRITE_VREG(HEVC_MPSR, 1); */
 
@@ -15839,7 +15839,10 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc->data_size += (hevc->data_invalid - hevc->consume_byte);
 		r = hevc->data_size;
 		hevc->muti_frame_flag = 1;
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, hevc->data_invalid);
+		if (hevc->front_back_mode == 0)
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_E, hevc->data_invalid);
+		else
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_B, hevc->data_invalid);
 
 		hevc_print(hevc, PRINT_FLAG_VDEC_DETAIL,
 			"%s after, consume 0x%x, size 0x%x, offset 0x%x, invalid 0x%x, res 0x%x\n", __func__,
@@ -15865,12 +15868,16 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc->muti_frame_flag = 0;
 		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
 	}
-	if (hevc->stream_multi_frame_flag) {
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, hevc->stream_multi_frame_offset);
-		//hevc->stream_multi_frame_flag = 0;
-	} else {
-		WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
+
+	if (vdec_stream_based(vdec)) {
+		if (hevc->stream_multi_frame_flag) {
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_B, hevc->stream_multi_frame_offset);
+			//hevc->stream_multi_frame_flag = 0;
+		} else {
+			WRITE_VREG(HEVC_ASSIST_SCRATCH_B, 0);
+		}
 	}
+
 	input_empty[hevc->index] = 0;
 	hevc->dec_result = DEC_RESULT_NONE;
 	if (vdec_frame_based(vdec) &&
