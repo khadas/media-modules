@@ -11441,9 +11441,9 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 #endif
 #endif
 #else
-		if (hevc->front_back_mode == 1 ||
-			hevc->front_back_mode == 3
-			) {
+		if ((hevc->front_back_mode == 1 ||
+			hevc->front_back_mode == 3) &&
+			get_double_write_mode(hevc) != 0x10) {
 			if (hevc->is_used_v4l) {
 				/* to do */
 			} else {

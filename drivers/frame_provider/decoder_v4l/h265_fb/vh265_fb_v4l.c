@@ -11429,7 +11429,8 @@ irqreturn_t vh265_back_threaded_irq_cb(struct vdec_s *vdec, int irq)
 		if (debug & H265_DEBUG_BUFMGR_MORE)
 			dump_pic_list(hevc);
 
-		if (hevc->front_back_mode == 1 || hevc->front_back_mode == 3) {
+		if ((hevc->front_back_mode == 1 || hevc->front_back_mode == 3) &&
+			get_double_write_mode(hevc) != 0x10) {
 			unsigned used_4k_num0;
 			unsigned used_4k_num1;
 

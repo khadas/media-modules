@@ -945,6 +945,8 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 	int ret;
 	int cur_mmu_4k_number;
 	int i;
+	int dw_mode = get_double_write_mode(hevc);
+
 	hevc_print(hevc, PRINT_FLAG_VDEC_STATUS,
 		"Start BackEnd Decoding %d (wr pos %d, rd pos %d)\n",
 		hevc->backend_decoded_count, hevc->fb_wr_pos, hevc->fb_rd_pos);
@@ -969,47 +971,39 @@ void BackEnd_StartDecoding(struct hevc_state_s* hevc)
 		return;
 	}
 
-#if 0 //ndef FB_BUF_DEBUG_NO_PIPLINE
-#ifdef H265_10B_MMU
-	alloc_mmu(&hevc_mmumgr_0, pic->mc_canvas_y, pic->width, pic->height/2+32+4, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-	alloc_mmu(&hevc_mmumgr_1, pic->mc_canvas_y, pic->width, pic->height/2+32+4, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-#ifdef H265_10B_MMU_DW
-	alloc_mmu(&hevc_mmumgr_dw0, pic->mc_canvas_y, pic->width, pic->height/2+32+4, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-	alloc_mmu(&hevc_mmumgr_dw1, pic->mc_canvas_y, pic->width, pic->height/2+32+4, ((pic->depth == 0) ? 0 : DEPTH_BITS_10));
-#endif
-#endif
-#endif
-	cur_mmu_4k_number = hevc_mmu_page_num(hevc, pic->width, pic->height / 2 + 64 + 8, 0); // to do: !bit_depth_10);
-	if (cur_mmu_4k_number < 0)
-		return;
-	ret = decoder_mmu_box_alloc_idx(
-		hevc->mmu_box,
-		pic->index,
-		cur_mmu_4k_number,
-		hevc->frame_mmu_map_addr);
-	if (ret == 0)
+	if (dw_mode != 0x10) {
+		cur_mmu_4k_number = hevc_mmu_page_num(hevc, pic->width, pic->height / 2 + 64 + 8, 0); // to do: !bit_depth_10);
+		if (cur_mmu_4k_number < 0)
+			return;
 		ret = decoder_mmu_box_alloc_idx(
-			hevc->mmu_box_1,
+			hevc->mmu_box,
 			pic->index,
 			cur_mmu_4k_number,
-			hevc->frame_mmu_map_addr_1);
-	if (hevc->dw_mmu_enable) {
+			hevc->frame_mmu_map_addr);
 		if (ret == 0)
-		ret = decoder_mmu_box_alloc_idx(
-			hevc->mmu_box_dw,
-			pic->index,
-			cur_mmu_4k_number,
-			hevc->frame_dw_mmu_map_addr);
-		if (ret == 0)
-		ret = decoder_mmu_box_alloc_idx(
-			hevc->mmu_box_dw_1,
-			pic->index,
-			cur_mmu_4k_number,
-			hevc->frame_dw_mmu_map_addr_1);
-	}
-	if (ret != 0) {
-		pr_err("%s: can not alloc mmu\n", __func__);
-		return;
+			ret = decoder_mmu_box_alloc_idx(
+				hevc->mmu_box_1,
+				pic->index,
+				cur_mmu_4k_number,
+				hevc->frame_mmu_map_addr_1);
+		if (hevc->dw_mmu_enable) {
+			if (ret == 0)
+			ret = decoder_mmu_box_alloc_idx(
+				hevc->mmu_box_dw,
+				pic->index,
+				cur_mmu_4k_number,
+				hevc->frame_dw_mmu_map_addr);
+			if (ret == 0)
+			ret = decoder_mmu_box_alloc_idx(
+				hevc->mmu_box_dw_1,
+				pic->index,
+				cur_mmu_4k_number,
+				hevc->frame_dw_mmu_map_addr_1);
+		}
+		if (ret != 0) {
+			pr_err("%s: can not alloc mmu\n", __func__);
+			return;
+		}
 	}
 	ATRACE_COUNTER(hevc->trace.decode_back_run_time_name, TRACE_RUN_BACK_ALLOC_MMU_END);
 
@@ -1057,6 +1051,7 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 	int losless_comp_header_size =
 		compute_losless_comp_header_size(hevc->pic_w,
 		hevc->pic_h);
+	int dw_mode = get_double_write_mode(hevc);
 
 	if (front_flag) {
 		if ((debug & H265_DEBUG_SEND_PARAM_WITH_REG) == 0)
@@ -1085,20 +1080,16 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 		WRITE_VREG(HEVC_SAO_UP, buf_spec->sao_up.buf_start);
 
 	#ifdef H265_10B_MMU
-		//WRITE_VREG(HEVC_MMU_MAP_BUFFER, FRAME_MMU_MAP_ADDR);
-#if 0
-		WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, FRAME_MMU_MAP_ADDR_0);
-		WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, FRAME_MMU_MAP_ADDR_1); //new dual
-#else
-		WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, hevc->frame_mmu_map_phy_addr);
-		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-		"WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, 0x%x)\n",
-		hevc->frame_mmu_map_phy_addr);
-		WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, hevc->frame_mmu_map_phy_addr_1); //new dual
-		hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
-		"WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, 0x%x)\n",
-		hevc->frame_mmu_map_phy_addr_1);
-#endif
+			if (dw_mode != 0x10) {
+			WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, hevc->frame_mmu_map_phy_addr);
+			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+				"WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR, 0x%x)\n",
+				hevc->frame_mmu_map_phy_addr);
+			WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, hevc->frame_mmu_map_phy_addr_1); //new dual
+			hevc_print(hevc, H265_DEBUG_BUFMGR_MORE,
+				"WRITE_VREG(HEVC_ASSIST_MMU_MAP_ADDR_DBE1, 0x%x)\n",
+				hevc->frame_mmu_map_phy_addr_1);
+		}
 	#else
 		//WRITE_VREG(HEVC_STREAM_SWAP_BUFFER, buf_spec->swap_buf.buf_start);
 	#endif
@@ -1147,24 +1138,25 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 
 		WRITE_VREG(HEVC_SAO_CTRL5_DBE1, data32);
 
-	#ifdef H265_10B_MMU
+
+	if (dw_mode != 0x10) {
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,(0x1<< 4)); // bit[4] : paged_mem_mode
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2,0x0);
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1,(0x1<< 4)); // bit[4] : paged_mem_mode
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2_DBE1,0x0);
-	#else
-		// WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (0<<3)); // bit[3] smem mdoe
+	} else {
 		if (bit_depth != 0x00) {
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (0<<3)); // bit[3] smem mode
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, (0<<3)); // bit[3] smem mode
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (0<<3)); // bit[3] smem mode
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, (0<<3)); // bit[3] smem mode
 		}
 		else {
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (1<<3)); // bit[3] smem mdoe
-		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, (1<<3)); // bit[3] smem mdoe
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, (1<<3)); // bit[3] smem mdoe
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, (1<<3)); // bit[3] smem mdoe
 		}
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2,(hevc->losless_comp_body_size >> 5));
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL2_DBE1,(hevc->losless_comp_body_size >> 5));
-	#endif
+	}
+
 		//WRITE_VREG(HEVCD_MPP_DECOMP_CTL2,(hevc->losless_comp_body_size >> 5));
 		//WRITE_VREG(HEVCD_MPP_DECOMP_CTL3,(0xff<<20) | (0xff<<10) | 0xff); //8-bit mode
 		WRITE_VREG(HEVC_CM_BODY_LENGTH,hevc->losless_comp_body_size);
@@ -1173,38 +1165,36 @@ static void hevc_config_work_space_hw_fb(hevc_stru_t* hevc, uint8_t bit_depth, u
 		WRITE_VREG(HEVC_CM_BODY_LENGTH_DBE1,hevc->losless_comp_body_size);
 		WRITE_VREG(HEVC_CM_HEADER_OFFSET_DBE1,hevc->losless_comp_body_size);
 		WRITE_VREG(HEVC_CM_HEADER_LENGTH_DBE1,losless_comp_header_size);
+		if (dw_mode & 0x10) {
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
+			WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31);
+		}
 	#else
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1,0x1 << 31);
 		WRITE_VREG(HEVCD_MPP_DECOMP_CTL1_DBE1,0x1 << 31);
 	#endif
 	#ifdef H265_10B_MMU
-	#if 1
-		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR, buf_spec->mmu_vbh.buf_start);
-		WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR, buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size/4);
-		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR_DBE1, buf_spec->mmu_vbh.buf_start  + buf_spec->mmu_vbh.buf_size/2);
-		WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR_DBE1, buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size/2 + buf_spec->mmu_vbh.buf_size/4);
-	#else
-		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR, buf_spec->mmu_vbh.buf_start);
-		WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR, buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size/2);
-		WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR_DBE1, buf_spec->mmu_vbh.buf_start);
-		WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR_DBE1, buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size/2);
-	#endif
+		if (dw_mode != 0x10) {
+			WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR, buf_spec->mmu_vbh.buf_start);
+			WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR, buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size/4);
+			WRITE_VREG(HEVC_SAO_MMU_VH0_ADDR_DBE1, buf_spec->mmu_vbh.buf_start  + buf_spec->mmu_vbh.buf_size/2);
+			WRITE_VREG(HEVC_SAO_MMU_VH1_ADDR_DBE1, buf_spec->mmu_vbh.buf_start + buf_spec->mmu_vbh.buf_size/2 + buf_spec->mmu_vbh.buf_size/4);
 
-		data32 = READ_VREG(HEVC_SAO_CTRL9);
-		data32 |= 0x1;
-		WRITE_VREG(HEVC_SAO_CTRL9, data32);
-		data32 = READ_VREG(HEVC_SAO_CTRL9_DBE1);
-		data32 |= 0x1;
-		WRITE_VREG(HEVC_SAO_CTRL9_DBE1, data32);
+			data32 = READ_VREG(HEVC_SAO_CTRL9);
+			data32 |= 0x1;
+			WRITE_VREG(HEVC_SAO_CTRL9, data32);
+			data32 = READ_VREG(HEVC_SAO_CTRL9_DBE1);
+			data32 |= 0x1;
+			WRITE_VREG(HEVC_SAO_CTRL9_DBE1, data32);
 
-		/* use HEVC_CM_HEADER_START_ADDR */
-		data32 = READ_VREG(HEVC_SAO_CTRL5);
-		data32 |= (1<<10);
-		WRITE_VREG(HEVC_SAO_CTRL5, data32);
-		data32 = READ_VREG(HEVC_SAO_CTRL5_DBE1);
-		data32 |= (1<<10);
-		WRITE_VREG(HEVC_SAO_CTRL5_DBE1, data32);
-
+			/* use HEVC_CM_HEADER_START_ADDR */
+			data32 = READ_VREG(HEVC_SAO_CTRL5);
+			data32 |= (1<<10);
+			WRITE_VREG(HEVC_SAO_CTRL5, data32);
+			data32 = READ_VREG(HEVC_SAO_CTRL5_DBE1);
+			data32 |= (1<<10);
+			WRITE_VREG(HEVC_SAO_CTRL5_DBE1, data32);
+		}
 	#endif
 	#ifdef H265_10B_MMU_DW
 	if (hevc->dw_mmu_enable) {
@@ -2284,13 +2274,14 @@ static void config_sao_hw_fb(hevc_stru_t* hevc, param_t* params)
 	hevc->ins_offset++;
 	}
 #endif
-
-	//data32 = READ_VREG( P_HEVCD_IPP_AXIIF_CONFIG);
-	//data32 &= (~0x30);
-	//data32 |= (MEM_MAP_MODE << 4); // [5:4]    -- address_format 00:linear 01:32x32 10:64x32
-	//WRITE_VREG( P_HEVCD_IPP_AXIIF_CONFIG, data32);
-	READ_WRITE_DATA16(hevc, HEVCD_IPP_AXIIF_CONFIG, hevc->mem_map_mode, 4, 2);
-
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 &= (~0x30);
+	data32 |= (hevc->mem_map_mode << 4); // [5:4]    -- address_format 00:linear 01:32x32 10:64x32
+	data32 &= (~0xF);
+	data32 |= (hevc->endian & 0xf);  /* valid only when double write only */
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);
+	WRITE_BACK_32(hevc, HEVCD_IPP_AXIIF_CONFIG, data32);
 #else
 // m8baby test1902
 	//data32 = READ_VREG( HEVC_SAO_CTRL1);
@@ -2327,16 +2318,14 @@ static void config_sao_hw_fb(hevc_stru_t* hevc, param_t* params)
 	hevc->ins_offset++;
 	}
 #endif
-
-	//data32 = READ_VREG( P_HEVCD_IPP_AXIIF_CONFIG);
-	//data32 &= (~0x30);
-	//data32 |= (MEM_MAP_MODE << 4); // [5:4]    -- address_format 00:linear 01:32x32 10:64x32
-	//data32 &= (~0xF);
-	//data32 |= 0x8;    // Big-Endian per 64-bit
-	//WRITE_VREG( P_HEVCD_IPP_AXIIF_CONFIG, data32);
-	data32 = (hevc->mem_map_mode << 4) | 0x8;
-	READ_WRITE_DATA16(hevc, HEVCD_IPP_AXIIF_CONFIG, data32, 4, 6);
-
+	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
+	data32 &= (~0x30);
+	data32 |= (hevc->mem_map_mode << 4); // [5:4]    -- address_format 00:linear 01:32x32 10:64x32
+	data32 &= (~0xF);
+	data32 |= (hevc->endian & 0xf);  /* valid only when double write only */
+	data32 &= (~(3 << 8));
+	data32 |= (2 << 8);
+	WRITE_BACK_32(hevc, HEVCD_IPP_AXIIF_CONFIG, data32);
 #endif
 #if 0 // moved to same place config other VH0/1
 //ndef AVS2_10B_NV21
