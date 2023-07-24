@@ -80,6 +80,7 @@ module_param(debug_dvb, int, 0644);
 
 #define TSINB_DEGLITCH0 0xff646180
 #define TSINB_DEGLITCH1 0xff634590
+static int has_tsin_deglitch;
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
@@ -2433,6 +2434,7 @@ static int aml_dvb_probe(struct platform_device *pdev)
 			   pr_inf("TSINB_DEGLITCH0 is set %s: 0x%x\n", buf, value);
 			   dmx_phyreg_access(TSINB_DEGLITCH0, 0x40, NULL);
 			   dmx_phyreg_access(TSINB_DEGLITCH1, 0x1, NULL);
+			   has_tsin_deglitch = 1;
 			}
 		}
 	}
@@ -2577,6 +2579,11 @@ static int aml_dvb_remove(struct platform_device *pdev)
 
 static int aml_dvb_suspend(struct platform_device *dev, pm_message_t state)
 {
+	//close tsin_deglitch clk
+	if (has_tsin_deglitch) {
+		dmx_phyreg_access(TSINB_DEGLITCH0, 0x0, NULL);
+		dmx_phyreg_access(TSINB_DEGLITCH1, 0x0, NULL);
+	}
 	return 0;
 }
 
@@ -2587,6 +2594,12 @@ static int aml_dvb_resume(struct platform_device *dev)
 
 	for (i = 0; i < DMX_DEV_COUNT; i++)
 		dmx_reset_dmx_id_hw_ex(dvb, i, 0);
+
+	//open tsin_deglitch clk
+	if (has_tsin_deglitch) {
+		dmx_phyreg_access(TSINB_DEGLITCH0, 0x40, NULL);
+		dmx_phyreg_access(TSINB_DEGLITCH1, 0x1, NULL);
+	}
 
 	pr_inf("dvb resume\n");
 	return 0;
