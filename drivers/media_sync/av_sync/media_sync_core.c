@@ -910,7 +910,9 @@ long mediasync_static_ins_binder(s32 sSyncInsId,
 	MediaSyncManager* SyncManage = NULL;
 	if (sSyncInsId < MAX_DYNAMIC_INSTANCE_NUM && sSyncInsId >= 0) {
 		ret = mediasync_ins_binder(sSyncInsId, &SyncManage);
-	} else {
+	}
+
+	if (ret) {
 		SyncManage = get_media_sync_manager(sSyncInsId,__func__,__LINE__);
 		if (SyncManage == NULL) {
 			pInstance = kzalloc(sizeof(mediasync_ins), GFP_KERNEL);
