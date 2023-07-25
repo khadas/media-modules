@@ -5801,7 +5801,7 @@ static int get_dec_dpb_size(struct vdec_h264_hw_s *hw, int mb_width,
 
 	size /= pic_size;
 	size = imin(size, 16);
-	dpb_print(DECODE_ID(hw), 0,
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 				"level_idc = %d pic_size = %d size = %d\n",
 				level_idc, pic_size, size);
 	if (p_H264_Dpb->bitstream_restriction_flag) {
@@ -6105,8 +6105,8 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 
 		if (active_buffer_spec_num > MAX_VF_BUF_NUM) {
 			active_buffer_spec_num = MAX_VF_BUF_NUM;
-			hw->dpb.dec_dpb_size = active_buffer_spec_num
-				- used_reorder_dpb_size_margin;
+			//hw->dpb.dec_dpb_size = active_buffer_spec_num
+			//	- used_reorder_dpb_size_margin;
 			dpb_print(DECODE_ID(hw), 0,
 				"active_buffer_spec_num is larger than MAX %d, set dec_dpb_size to %d\n",
 				MAX_VF_BUF_NUM, hw->dpb.dec_dpb_size);
