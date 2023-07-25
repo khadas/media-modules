@@ -20,6 +20,12 @@
 #ifndef STREAMBUF_H
 #define STREAMBUF_H
 #include <linux/amlogic/media/utils/amports_config.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+#include <linux/../uapi/amlogic/amvdec_ioc.h>
+#else
+#include <uapi/linux/amlogic/amvdec_ioc.h>
+#endif
 
 #define BUF_FLAG_ALLOC          0x01
 #define BUF_FLAG_IN_USE         0x02
@@ -148,31 +154,6 @@ struct drm_info {
 	u32 handle;
 	u32 extpad[7];
 } /*drminfo_t */;
-
-struct stream_buffer_metainfo {
-	union {
-		u32 stbuf_start;
-		u32 stbuf_pktaddr; //stbuf_pktaddr + stbuf_pktsize = wp
-	};
-	union {
-		u32 stbuf_size;
-		u32 stbuf_pktsize;
-	};
-	u32 stbuf_flag;
-	u32 stbuf_private;
-	u32 jump_back_flag;
-	u32 pts_server_id;
-	u32 reserved[14];
-};
-
-struct stream_buffer_status {
-	u32 stbuf_wp;
-	u32 stbuf_rp;
-	u32 stbuf_start;
-	u32 stbuf_size;
-	u32 reserved[16];
-};
-
 
 #define TYPE_DRMINFO_V2  0x100
 #define TYPE_DRMINFO   0x80
