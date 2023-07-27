@@ -46,7 +46,7 @@
 #include <demux.h>
 #include <dvb_demux.h>
 #include <dmxdev.h>
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(5, 4, 210)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 #include <dvb_filter.h>
 #endif
 #include <dvb_net.h>
@@ -55,7 +55,7 @@
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 4, 210)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 #include "linux/dvb/aml_ca_ext.h"
 #endif
 
