@@ -2939,14 +2939,14 @@ static int vidioc_vdec_s_fmt(struct file *file, void *priv,
 	    vb2_is_busy(&ctx->m2m_ctx->out_q_ctx.q)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"out_q_ctx buffers already requested\n");
-		ret = -EBUSY;
+		return -EBUSY;
 	}
 
 	if ((!V4L2_TYPE_IS_OUTPUT(f->type)) &&
 	    vb2_is_busy(&ctx->m2m_ctx->cap_q_ctx.q)) {
 		v4l_dbg(ctx, V4L_DEBUG_CODEC_ERROR,
 			"cap_q_ctx buffers already requested\n");
-		ret = -EBUSY;
+		return -EBUSY;
 	}
 
 	fmt = aml_vdec_find_format(f);
