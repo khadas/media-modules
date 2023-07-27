@@ -6381,7 +6381,7 @@ static void get_qos_info(struct AVS3Decoder_s *dec, struct vframe_qos_s* vqos, i
 	value = div_s64(value * 10, blk22_mv_count);
 	avs3_print(dec, AVS3_DBG_QOS_INFO,
 		"[Picture %d Quality] MVX_L0 AVG:%d (%lld/%d)\n",
-		pic_number, (int)value / 10, value / 10, blk22_mv_count);
+		pic_number, div_s64(value, 10), div_s64(value, 10), blk22_mv_count);
 
 	vqos->avg_mv = value;
 
