@@ -1975,6 +1975,7 @@ struct hevc_state_s {
 #endif
 	int fatal_error;
 
+	u32 sei_hdr10_flag;
 	void *frame_mmu_map_addr;
 	dma_addr_t frame_mmu_map_phy_addr;
 #ifdef NEW_FB_CODE
@@ -2943,6 +2944,7 @@ static void hevc_init_stru(struct hevc_state_s *hevc,
 	hevc->pre_top_pic = NULL;
 	hevc->pre_bot_pic = NULL;
 
+	hevc->sei_hdr10_flag = 0;
 	hevc->valve_count = 0;
 	hevc->first_pic_flag = 0;
 #ifdef MULTI_INSTANCE_SUPPORT
@@ -8921,16 +8923,15 @@ static int parse_sei(struct hevc_state_s *hevc,
 						| (*(p_sei+1)<<16)
 						| (*(p_sei+2)<<8)
 						| *(p_sei+3);
+					if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI)
+						hevc_print_cont(hevc, 0, "luminance[%d] %d ", i, hevc->luminance[i]);
 					p_sei += 4;
 				}
-				pic->sei_present_flag |=
-					SEI_MASTER_DISPLAY_COLOR_MASK;
+				if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI)
+						hevc_print_cont(hevc, 0, "\n");
+				hevc->sei_hdr10_flag |= SEI_MASTER_DISPLAY_COLOR_MASK;
 				break;
 			case SEI_ContentLightLevel:
-				if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI)
-					hevc_print(hevc, 0,
-						"sei type: max content light level %d, size %d\n",
-					payload_type, payload_size);
 				/* content_light_level */
 				p_sei = p;
 				hevc->content_light_level[0]
@@ -8939,11 +8940,10 @@ static int parse_sei(struct hevc_state_s *hevc,
 				hevc->content_light_level[1]
 					= (*p_sei<<8) | *(p_sei+1);
 				p_sei += 2;
-				pic->sei_present_flag |=
-					SEI_CONTENT_LIGHT_LEVEL_MASK;
+				hevc->sei_hdr10_flag |= SEI_CONTENT_LIGHT_LEVEL_MASK;
 				if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI)
-					hevc_print(hevc, 0,
-						"\tmax cll = %04x, max_pa_cll = %04x\n",
+					hevc_print_cont(hevc, 0,
+						"max cll = %d, max_pa_cll = %d\n",
 					hevc->content_light_level[0],
 					hevc->content_light_level[1]);
 				break;
@@ -9124,7 +9124,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 	hevc->video_signal_type_debug = vf->signal_type;
 
 	/* master_display_colour */
-	if (pic->sei_present_flag & SEI_MASTER_DISPLAY_COLOR_MASK) {
+	if (hevc->sei_hdr10_flag & SEI_MASTER_DISPLAY_COLOR_MASK) {
 		for (i = 0; i < 3; i++)
 			for (j = 0; j < 2; j++)
 				vf_dp->primaries[i][j] = hevc->primaries[i][j];
@@ -9138,7 +9138,7 @@ static void set_frame_info(struct hevc_state_s *hevc, struct vframe_s *vf,
 		vf_dp->present_flag = 0;
 
 	/* content_light_level */
-	if (pic->sei_present_flag & SEI_CONTENT_LIGHT_LEVEL_MASK) {
+	if (hevc->sei_hdr10_flag & SEI_CONTENT_LIGHT_LEVEL_MASK) {
 		vf_dp->content_light_level.max_content
 			= hevc->content_light_level[0];
 		vf_dp->content_light_level.max_pic_average
@@ -10317,9 +10317,9 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 #endif
 
 		hevc_print(hevc, H265_DEBUG_PRINT_SEI,
-			"aux_data_size:%d signal_type:0x%x ext_signal_type 0x%x, sei_present_flag:%d inst_cnt:%d vf:%p\n",
-			hevc->m_PIC[index]->aux_data_size, hevc->video_signal_type, vf->ext_signal_type,
-			pic->sei_present_flag, vdec->inst_cnt, vf);
+			"aux_data_size:%d signal_type:0x%x ext_signal_type 0x%x sei_present_flag:%d/%d inst_cnt:%d vf:%p\n",
+			hevc->m_PIC[index]->aux_data_size, vf->signal_type, vf->ext_signal_type,
+			pic->sei_present_flag, hevc->sei_hdr10_flag, vdec->inst_cnt, vf);
 
 		if (get_dbg_flag(hevc) & H265_DEBUG_PRINT_SEI) {
 			int i = 0;
@@ -10609,7 +10609,7 @@ static void process_nal_sei(struct hevc_state_s *hevc,
 						"\t\tluminance[%1d] = %08x\n",
 						i, hevc->luminance[i]);
 			}
-			//hevc->sei_present_flag |= SEI_MASTER_DISPLAY_COLOR_MASK;
+			hevc->sei_hdr10_flag |= SEI_MASTER_DISPLAY_COLOR_MASK;
 		}
 		payload_size -= 24;
 		while (payload_size > 0) {
@@ -13686,6 +13686,7 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	else
 		hevc->i_only = 0x0;
 	hevc->error_watchdog_count = 0;
+	hevc->sei_hdr10_flag = 0;
 	if (vdec->sys_info)
 		pts_unstable = ((unsigned long)vdec->sys_info->param & 0x40) >> 6;
 	hevc_print(hevc, 0,
