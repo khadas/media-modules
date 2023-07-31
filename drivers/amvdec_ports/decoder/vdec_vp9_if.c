@@ -184,9 +184,9 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 	struct aml_vcodec_ctx *ctx = inst->ctx;
 
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-		"%s:parms_status = 0x%x, present_flag = %d\n",
+		"%s:parms_status = 0x%x, present_flag = %d, hdr.signal_type 0x%x\n",
 		__func__, ctx->config.parm.dec.parms_status,
-		ctx->config.parm.dec.hdr.color_parms.present_flag);
+		ctx->config.parm.dec.hdr.color_parms.present_flag, ctx->config.parm.dec.hdr.signal_type);
 	if (ctx->config.parm.dec.parms_status &
 		V4L2_CONFIG_PARM_DECODE_CFGINFO) {
 		u8 *pbuf = ctx->config.buf;
@@ -219,44 +219,47 @@ static void vdec_parser_parms(struct vdec_vp9_inst *inst)
 		ctx->config.length = vdec_config_default_parms(ctx->config.buf);
 	}
 
-	if ((ctx->config.parm.dec.parms_status &
-		V4L2_CONFIG_PARM_DECODE_HDRINFO) &&
-		ctx->config.parm.dec.hdr.color_parms.present_flag) {
+	if (ctx->config.parm.dec.parms_status &
+		V4L2_CONFIG_PARM_DECODE_HDRINFO) {
 		u8 *pbuf = ctx->config.buf + ctx->config.length;
-
-		pbuf += sprintf(pbuf, "HDRStaticInfo:%d;", 1);
-		pbuf += sprintf(pbuf, "signal_type:%d;",
-			ctx->config.parm.dec.hdr.signal_type);
-		pbuf += sprintf(pbuf, "mG.x:%d;",
-			ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
-		pbuf += sprintf(pbuf, "mG.y:%d;",
-			ctx->config.parm.dec.hdr.color_parms.primaries[0][1]);
-		pbuf += sprintf(pbuf, "mB.x:%d;",
-			ctx->config.parm.dec.hdr.color_parms.primaries[1][0]);
-		pbuf += sprintf(pbuf, "mB.y:%d;",
-			ctx->config.parm.dec.hdr.color_parms.primaries[1][1]);
-		pbuf += sprintf(pbuf, "mR.x:%d;",
-			ctx->config.parm.dec.hdr.color_parms.primaries[2][0]);
-		pbuf += sprintf(pbuf, "mR.y:%d;",
-			ctx->config.parm.dec.hdr.color_parms.primaries[2][1]);
-		pbuf += sprintf(pbuf, "mW.x:%d;",
-			ctx->config.parm.dec.hdr.color_parms.white_point[0]);
-		pbuf += sprintf(pbuf, "mW.y:%d;",
-			ctx->config.parm.dec.hdr.color_parms.white_point[1]);
-		pbuf += sprintf(pbuf, "mMaxDL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.luminance[0] * 10000);
-		pbuf += sprintf(pbuf, "mMinDL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.luminance[1]);
-		pbuf += sprintf(pbuf, "mMaxCLL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.content_light_level.max_content);
-		pbuf += sprintf(pbuf, "mMaxFALL:%d;",
-			ctx->config.parm.dec.hdr.color_parms.content_light_level.max_pic_average);
-		ctx->config.length	= pbuf - ctx->config.buf;
-		inst->parms.hdr		= ctx->config.parm.dec.hdr;
-		inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_HDRINFO;
+		if (ctx->config.parm.dec.hdr.color_parms.present_flag) {
+			pbuf += sprintf(pbuf, "HDRStaticInfo:%d;", 1);
+			pbuf += sprintf(pbuf, "signal_type:%d;",
+				ctx->config.parm.dec.hdr.signal_type);
+			pbuf += sprintf(pbuf, "mG.x:%d;",
+				ctx->config.parm.dec.hdr.color_parms.primaries[0][0]);
+			pbuf += sprintf(pbuf, "mG.y:%d;",
+				ctx->config.parm.dec.hdr.color_parms.primaries[0][1]);
+			pbuf += sprintf(pbuf, "mB.x:%d;",
+				ctx->config.parm.dec.hdr.color_parms.primaries[1][0]);
+			pbuf += sprintf(pbuf, "mB.y:%d;",
+				ctx->config.parm.dec.hdr.color_parms.primaries[1][1]);
+			pbuf += sprintf(pbuf, "mR.x:%d;",
+				ctx->config.parm.dec.hdr.color_parms.primaries[2][0]);
+			pbuf += sprintf(pbuf, "mR.y:%d;",
+				ctx->config.parm.dec.hdr.color_parms.primaries[2][1]);
+			pbuf += sprintf(pbuf, "mW.x:%d;",
+				ctx->config.parm.dec.hdr.color_parms.white_point[0]);
+			pbuf += sprintf(pbuf, "mW.y:%d;",
+				ctx->config.parm.dec.hdr.color_parms.white_point[1]);
+			pbuf += sprintf(pbuf, "mMaxDL:%d;",
+				ctx->config.parm.dec.hdr.color_parms.luminance[0] * 10000);
+			pbuf += sprintf(pbuf, "mMinDL:%d;",
+				ctx->config.parm.dec.hdr.color_parms.luminance[1]);
+			pbuf += sprintf(pbuf, "mMaxCLL:%d;",
+				ctx->config.parm.dec.hdr.color_parms.content_light_level.max_content);
+			pbuf += sprintf(pbuf, "mMaxFALL:%d;",
+				ctx->config.parm.dec.hdr.color_parms.content_light_level.max_pic_average);
+		}else {
+			pbuf += sprintf(pbuf, "signal_type:%d;",
+				ctx->config.parm.dec.hdr.signal_type);
+		}
+			ctx->config.length	= pbuf - ctx->config.buf;
+			inst->parms.hdr		= ctx->config.parm.dec.hdr;
+			inst->parms.parms_status |= V4L2_CONFIG_PARM_DECODE_HDRINFO;
 	}
 	v4l_dbg(ctx, V4L_DEBUG_CODEC_EXINFO,
-		"config.buf = %s\n", ctx->config.buf);
+		"config.buf = %s, ctx->config.length %d\n", ctx->config.buf, ctx->config.length);
 
 	inst->vdec.config	= ctx->config;
 	inst->parms.cfg		= ctx->config.parm.dec.cfg;

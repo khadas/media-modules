@@ -11029,11 +11029,14 @@ static int ammvdec_vp9_probe(struct platform_device *pdev)
 				vp9_print(pbi, 0, "high bandwidth\n");
 		}
 #endif
+
+		get_config_int(pdata->config, "signal_type",
+					&pbi->video_signal_type);
+		vp9_print(pbi, 0,"video_signal_type 0x%x\n",
+					 pbi->video_signal_type);
 		if (get_config_int(pdata->config, "HDRStaticInfo",
 				&vf_dp.present_flag) == 0
 				&& vf_dp.present_flag == 1) {
-			get_config_int(pdata->config, "signal_type",
-					&pbi->video_signal_type);
 			get_config_int(pdata->config, "mG.x",
 					&vf_dp.primaries[0][0]);
 			get_config_int(pdata->config, "mG.y",
