@@ -396,8 +396,10 @@ static void vmh264_dump_state(struct vdec_s *vdec);
 			 frame->frame->coded_frame && \
 			 (!frame->frame->frame_mbs_only_flag) && \
 			 frame->frame->structure == FRAME) || \
-			 (frame->frame && (frame->frame->pic_struct == PIC_TOP_BOT || \
-			 frame->frame->pic_struct == PIC_TOP_BOT)))
+			 (frame->frame && ((frame->frame->pic_struct == PIC_TOP_BOT || \
+			 frame->frame->pic_struct == PIC_BOT_TOP) || \
+			 (frame->frame->pic_struct == PIC_TOP_BOT_TOP || \
+			 frame->frame->pic_struct == PIC_BOT_TOP_BOT))))
 
 #define is_multi_frames(hw) \
 			((hw->frmbase_cont_flag &&\
@@ -10201,7 +10203,8 @@ static void vh264_work_implement(struct vdec_h264_hw_s *hw,
 			parse_sei_data(hw, hw->sei_data_buf, hw->sei_data_len);
 			pic_struct = p_H264_Dpb->dpb_param.l.data[PICTURE_STRUCT];
 			hw->is_interlace = ((pic_struct == PIC_TOP) || (pic_struct == PIC_BOT) ||
-				(pic_struct == PIC_TOP_BOT) || (pic_struct == PIC_BOT_TOP)) ?  1: 0;
+				(pic_struct == PIC_TOP_BOT) || (pic_struct == PIC_BOT_TOP) ||
+				(pic_struct == PIC_TOP_BOT_TOP) || (pic_struct == PIC_BOT_TOP_BOT)) ?  1: 0;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_UCODE_EVT,
 					"pic_struct %d is_interlace %d\n", pic_struct, hw->is_interlace);
 		}
