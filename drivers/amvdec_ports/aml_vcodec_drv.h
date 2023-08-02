@@ -859,6 +859,7 @@ struct aml_vcodec_ctx {
 	bool			force_report_interlace;
 	struct cma_sys_size_info mem_size_info;
 	struct aml_decoder_status_info	decoder_status_info;
+	bool			has_start_resolution_event;
 };
 
 /**
