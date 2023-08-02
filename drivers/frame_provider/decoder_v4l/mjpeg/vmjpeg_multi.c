@@ -955,8 +955,10 @@ static int vmjpeg_v4l_alloc_buff_config_canvas(struct vdec_mjpeg_hw_s *hw, int i
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (!aml_buf)
+	if (!aml_buf) {
+		mmjpeg_debug_print(DECODE_ID(hw), 0, "[ERR]aml_buf is NULL!\n");
 		return -1;
+	}
 
 	if (!hw->frame_width || !hw->frame_height) {
 			struct vdec_pic_info pic;

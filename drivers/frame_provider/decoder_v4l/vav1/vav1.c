@@ -2817,8 +2817,10 @@ static int v4l_alloc_and_config_pic(struct AV1HW_s *hw,
 #endif
 	struct aml_buf *aml_buf = hw->aml_buf;
 
-	if (!aml_buf)
+	if (!aml_buf) {
+		av1_print(hw, 0, "[ERR]aml_buf is NULL!\n");
 		return -1;
+	}
 
 	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_GXL) &&
 		(get_double_write_mode(hw) != 0x10)) {
@@ -9808,12 +9810,11 @@ static bool is_available_buffer(struct AV1HW_s *hw)
 
 	if (hw->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		av1_print(hw,
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
-
-	free_count += aml_buf_ready_num(&ctx->bm);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 

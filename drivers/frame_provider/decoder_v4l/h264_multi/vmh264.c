@@ -2773,16 +2773,14 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 
 	if (hw->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		found = 1;
 	}
-
-	free_count += aml_buf_ready_num(&ctx->bm);
 
 	if (free_count < run_ready_min_buf_num) {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 		"%s no buffer! free_count %d\n",
 		__func__, free_count);
-		return false;
 	} else {
 		dpb_print(DECODE_ID(hw), PRINT_FLAG_VDEC_STATUS,
 			"%s get fb 0X%px free_count %d\n",

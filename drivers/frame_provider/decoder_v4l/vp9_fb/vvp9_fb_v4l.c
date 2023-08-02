@@ -7438,8 +7438,10 @@ static int v4l_alloc_and_config_pic(struct VP9Decoder_s *pbi,
 #endif
 	struct aml_buf *aml_buf = pbi->aml_buf;
 
-	if (!aml_buf)
+	if (!aml_buf) {
+		vp9_print(pbi, 0, "[ERR]aml_buf is NULL!\n");
 		return -1;
+	}
 
 	if (pbi->mmu_enable) {
 		pbi->m_BUF[i].header_addr = aml_buf->fbc->haddr;
@@ -13628,12 +13630,11 @@ static bool is_available_buffer(struct VP9Decoder_s *pbi)
 
 	if (pbi->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		vp9_print(pbi,
 		PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
 		__func__, pbi->aml_buf, pbi->aml_buf->index);
 	}
-
-	free_count += aml_buf_ready_num(&ctx->bm);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 

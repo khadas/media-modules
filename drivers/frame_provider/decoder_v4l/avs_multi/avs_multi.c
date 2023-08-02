@@ -788,12 +788,11 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 
 	if (hw->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		debug_print(hw, PRINT_FLAG_BUFFER_DETAIL,
 		"%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hw->aml_buf, hw->aml_buf->index);
 	}
-
-	free_count += aml_buf_ready_num(&ctx->bm);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
@@ -827,8 +826,10 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
 
-	if (!aml_buf)
+	if (!aml_buf) {
+		debug_print(hw, 0, "[ERR]aml_buf is NULL!\n");
 		return -1;
+	}
 
 	if (!hw->frame_width || !hw->frame_height) {
 		struct vdec_pic_info pic;

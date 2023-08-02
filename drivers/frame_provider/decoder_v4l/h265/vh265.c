@@ -12614,11 +12614,10 @@ static bool is_available_buffer(struct hevc_state_s *hevc)
 
 	if (hevc->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		hevc_print(hevc, H265_DEBUG_BUFMGR, "%s get fb: 0x%lx fb idx: %d\n",
 		__func__, hevc->aml_buf, hevc->aml_buf->index);
 	}
-
-	free_count += aml_buf_ready_num(&ctx->bm);
 
 	if (hevc->dec_result != DEC_RESULT_EOS && !hevc->resolution_change &&
 		save_buffer && free_count < run_ready_min_buf_num &&

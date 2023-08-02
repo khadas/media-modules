@@ -2882,8 +2882,10 @@ static int v4l_alloc_and_config_pic(struct AVS3Decoder_s *dec,
 	int lcu_total = calc_luc_quantity(1 << dec->avs3_dec.lcu_size_log2, dec->frame_width, dec->frame_height);
 	struct aml_buf *aml_buf = dec->aml_buf;
 
-	if (!aml_buf)
+	if (!aml_buf) {
+		avs3_print(dec, 0, "[ERR]aml_buf is NULL!\n");
 		return -1;
+	}
 
 #ifdef AVS3_10B_MMU
 	if (dec->mmu_enable) {
@@ -9225,12 +9227,11 @@ static bool is_available_buffer(struct AVS3Decoder_s *dec)
 
 	if (dec->aml_buf) {
 		free_count++;
+		free_count += aml_buf_ready_num(&ctx->bm);
 		avs3_print(dec,
 			PRINT_FLAG_VDEC_DETAIL, "%s get fb: 0x%lx fb idx: %d\n",
 			__func__, dec->aml_buf, dec->aml_buf->index);
 	}
-
-	free_count += aml_buf_ready_num(&ctx->bm);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_ST_1, free_count);
 
