@@ -3272,6 +3272,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 	int bForceInterlace = 0;
 	int vf_count = 1;
 	int i;
+	int ud_index;
 	struct buffer_spec_s *pic = &hw->buffer_spec[buffer_index];
 	u32 slice_type = 0;
 	u32 offset = 0;
@@ -3601,13 +3602,21 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 
 			decoder_do_frame_check(pvdec, vf);
 		}
+		ud_index = i;
+		if(frame->frame->pic_struct == PIC_TOP_BOT ||
+			frame->frame->pic_struct == PIC_BOT_TOP||
+			frame->frame->pic_struct == PIC_TOP_BOT_TOP ||
+			frame->frame->pic_struct == PIC_BOT_TOP_BOT ||
+			frame->frame->pic_struct == PIC_DOUBLE_FRAME ||
+			frame->frame->pic_struct ==  PIC_TRIPLE_FRAME)
+			ud_index = 0;
 
 		vf->vf_ud_param.magic_code = UD_MAGIC_CODE;
-		vf->vf_ud_param.ud_param = pic->ud_param[i];
+		vf->vf_ud_param.ud_param = pic->ud_param[ud_index];
 
 		if (dpb_is_debug(DECODE_ID(hw), PRINT_FLAG_UD_DETAIL))
 		{
-			struct userdata_param_t ud_param = pic->ud_param[i];
+			struct userdata_param_t ud_param = pic->ud_param[ud_index];
 			{
 				int j = 0;
 				u8 *pstart = (u8 *)ud_param.pbuf_addr;
