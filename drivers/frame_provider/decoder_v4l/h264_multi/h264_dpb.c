@@ -488,11 +488,10 @@ void slice_prepare(struct h264_dpb_stru *p_H264_Dpb,
 
 	p_H264_Dpb->fixed_frame_rate_flag = p_H264_Dpb->dpb_param.l.data[
 		FIXED_FRAME_RATE_FLAG];
-	p_H264_Dpb->num_units_in_tick =
-		p_H264_Dpb->dpb_param.l.data[NUM_UNITS_IN_TICK];
+	p_H264_Dpb->num_units_in_tick = p_H264_Dpb->dpb_param.l.data[NUM_UNITS_IN_TICK] |
+		(p_H264_Dpb->dpb_param.l.data[NUM_UNITS_IN_TICK + 1] << 16);
 	p_H264_Dpb->time_scale = p_H264_Dpb->dpb_param.l.data[TIME_SCALE] |
 		(p_H264_Dpb->dpb_param.l.data[TIME_SCALE + 1] << 16);
-
 	p_H264_Dpb->bitstream_restriction_flag =
 		(p_H264_Dpb->dpb_param.l.data[SPS_FLAGS2] >> 3) & 0x1;
 	p_H264_Dpb->num_reorder_frames =
