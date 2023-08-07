@@ -4126,8 +4126,8 @@ static long jpegenc_ioctl(struct file *file, u32 cmd, ulong arg)
             r = -EFAULT;
             break;
         }
-        jenc_pr(LOG_INFO, "paddr %lx, size %ld\n",
-                dma_info.phys_addr, dma_info.size);
+        jenc_pr(LOG_INFO, "paddr %lx\n",
+                dma_info.phys_addr);
         r = jpegenc_reconfig_input(wq, dma_info.phys_addr, dma_info.size);
         break;
     case JPEGENC_IOC_RELEASE_DMA_INPUT:
@@ -4624,8 +4624,8 @@ static s32 enc_src_addr_config(struct encdrv_dma_buf_info_t *pinfo,
     spin_lock(&s_dma_buf_lock);
     list_add(&vbp->list, &s_dma_bufp_head);
     spin_unlock(&s_dma_buf_lock);
-    jenc_pr(LOG_INFO, "enc_src_addr_config phy_addr 0x%lx, size 0x%lx\n",
-        pinfo->phys_addr, pinfo->size);
+    jenc_pr(LOG_INFO, "enc_src_addr_config phy_addr 0x%lx\n",
+        pinfo->phys_addr);
     return ret;
 }
 
@@ -4779,8 +4779,8 @@ static s32 jpegenc_mem_device_init(struct reserved_mem *rmem,
     res.end = res.start + (phys_addr_t) rmem->size - 1;
     gJpegenc.mem.reserve_mem.buf_start = res.start;
     gJpegenc.mem.reserve_mem.buf_size = res.end - res.start + 1;
-    jenc_pr(LOG_DEBUG, "found reserved memory device(start:0x%llux, size:0x%llux)\n",
-        rmem->base, rmem->size);
+    jenc_pr(LOG_DEBUG, "found reserved memory device(start:0x%x, size:0x%x)\n",
+        gJpegenc.mem.reserve_mem.buf_start, gJpegenc.mem.reserve_mem.buf_size);
     if (gJpegenc.mem.reserve_mem.buf_size >=
         jpegenc_buffspec[JPEGENC_BUFFER_LEVEL_VGA].min_buffsize)
         gJpegenc.use_reserve = true;
