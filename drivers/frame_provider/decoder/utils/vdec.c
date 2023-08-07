@@ -2982,6 +2982,11 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		vdec->vf_receiver_inst))
 		return -EBUSY;
 
+	if (!is_support_format(vdec->format)) {
+		pr_err("%s, unsupport format %d\n", __func__, vdec->format);
+		return -EINVAL;
+	}
+
 	//pr_err("%s [pid=%d,tgid=%d]\n", __func__, current->pid, current->tgid);
 	pdev_name = get_dev_name(vdec_single(vdec), vdec->format);
 	if (pdev_name == NULL)

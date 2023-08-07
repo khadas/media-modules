@@ -871,6 +871,12 @@ static int amstream_port_init(struct port_priv_s *priv)
 		}
 	}
 
+	if (!is_support_format(port->vformat)) {
+		pr_err("%s, unsupport format %d\n", __func__, port->vformat);
+		mutex_unlock(&amstream_mutex);
+		return -EINVAL;
+	}
+
 	/* try to reload the fw.*/
 	r = video_fw_reload(FW_LOAD_TRY);
 	if (r)

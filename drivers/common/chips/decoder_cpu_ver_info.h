@@ -22,6 +22,7 @@
 #include <linux/platform_device.h>
 #include <linux/amlogic/media/registers/cpu_version.h>
 #include "../register/register.h"
+#include <linux/amlogic/media/utils/vformat.h>
 
 /* majoy chip id define */
 #define MAJOY_ID_MASK (0x000000ff)
@@ -102,6 +103,34 @@ enum AM_MESON_CPU_MAJOR_ID {
 #define RESOLUTION_4K     (4302 * 2176)  //4k
 #define RESOLUTION_8K     (8192 * 4352)  //8k
 
+/* fmt_support */
+//vdec
+#define FMT_MPEG2    BIT(VFORMAT_MPEG12)
+#define FMT_MPEG4    BIT(VFORMAT_MPEG4)
+#define FMT_H264     BIT(VFORMAT_H264)
+#define FMT_MJPEG    BIT(VFORMAT_MJPEG)
+#define FMT_VC1      BIT(VFORMAT_VC1)
+#define FMT_AVS      BIT(VFORMAT_AVS)
+#define FMT_MVC      BIT(VFORMAT_H264MVC)
+//hevc
+#define FMT_HEVC     BIT(VFORMAT_HEVC)
+#define FMT_VP9      BIT(VFORMAT_VP9)
+#define FMT_AVS2     BIT(VFORMAT_AVS2)
+#define FMT_AV1      BIT(VFORMAT_AV1)
+#define FMT_AVS3     BIT(VFORMAT_AVS3)
+//hcodec
+#define FMT_H264_ENC BIT(VFORMAT_H264_ENC)
+#define FMT_JPEG_ENC BIT(VFORMAT_JPEG_ENC)
+
+//frequently-used combination
+#define FMT_VDEC_ALL               (FMT_MPEG2 | FMT_MPEG4 | FMT_H264 | FMT_MJPEG | FMT_VC1 | FMT_MVC | FMT_AVS)
+#define FMT_VDEC_NO_AVS            (FMT_MPEG2 | FMT_MPEG4 | FMT_H264 | FMT_MJPEG | FMT_VC1 | FMT_MVC)
+
+#define FMT_HEVC_VP9_AV1           (FMT_HEVC | FMT_VP9 | FMT_AV1)
+#define FMT_HEVC_VP9_AVS2          (FMT_HEVC | FMT_VP9 | FMT_AVS2)
+#define FMT_HEVC_VP9_AVS2_AV1      (FMT_AV1  | FMT_HEVC_VP9_AVS2)
+#define FMT_HEVC_VP9_AVS2_AV1_AVS3 (FMT_AVS3 | FMT_HEVC_VP9_AVS2_AV1)
+
 /* dos hardware feature define. */
 struct dos_of_dev_s {
 	enum AM_MESON_CPU_MAJOR_ID chip_id;
@@ -134,6 +163,8 @@ struct dos_of_dev_s {
 	bool is_support_mmu_copy;
 
 	bool is_support_axi_ctrl;  /*dos pipeline ctrl by dos or dmc */
+
+	u32 fmt_support_flags;
 };
 
 
@@ -193,6 +224,8 @@ inline bool is_support_rdma(void);
 inline bool is_support_mmu_copy(void);
 
 inline bool is_support_axi_ctrl(void);
+
+inline bool is_support_format(int format);
 
 void pr_dos_infos(void);
 
