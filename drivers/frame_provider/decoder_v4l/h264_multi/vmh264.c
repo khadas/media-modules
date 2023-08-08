@@ -8397,7 +8397,7 @@ static int vh264_hw_ctx_restore(struct vdec_h264_hw_s *hw)
 
 	WRITE_VREG(FRAME_COUNTER_REG, hw->decode_pic_count);
 	WRITE_VREG(AV_SCRATCH_8, hw->buf_offset);
-	if (!tee_enabled())
+	if (!fw_tee_enabled())
 		WRITE_VREG(AV_SCRATCH_G, hw->mc_dma_handle);
 	WRITE_VREG(AV_SCRATCH_F, (hw->save_reg_f & 0xffffffc3) |
 		((error_recovery_mode_in & 0x1) << 4));
@@ -8572,7 +8572,7 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	fw->len = size;
 	hw->fw = fw;
 
-	if (!tee_enabled()) {
+	if (!fw_tee_enabled()) {
 		/* -- ucode loading (amrisc and swap code) */
 		hw->mc_cpu_addr =
 			decoder_dma_alloc_coherent(&hw->mc_cpu_handle, MC_TOTAL_SIZE,
@@ -10807,7 +10807,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			hw->vdec_pg_enable_flag = 0;
 			dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 				"MH264 the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				fw_tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&hw->work);
@@ -10823,7 +10823,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 				amhevc_disable();
 				dpb_print(DECODE_ID(hw), PRINT_FLAG_ERROR,
 					"MH264_MMU the %s fw loading failed, err: %x\n",
-					tee_enabled() ? "TEE" : "local", ret);
+					fw_tee_enabled() ? "TEE" : "local", ret);
 				hw->dec_result = DEC_RESULT_FORCE_EXIT;
 				vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 				vdec_schedule_work(&hw->work);

@@ -1595,13 +1595,13 @@ static s32 vh264mvc_init(void)
 
 	amvdec_enable();
 
-	if (tee_enabled()) {
+	if (fw_tee_enabled()) {
 		ret = amvdec_loadmc_ex(VFORMAT_H264MVC, NULL, buf);
 		if (ret != 0) {
 			amvdec_disable();
 			vfree(buf);
 			pr_err("H264_MVC: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				fw_tee_enabled() ? "TEE" : "local", ret);
 			return -1;
 		}
 	} else {

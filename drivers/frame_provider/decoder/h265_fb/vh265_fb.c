@@ -10982,7 +10982,7 @@ static int hevc_recover(struct hevc_state_s *hevc)
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT));
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap) {
+	if (!fw_tee_enabled() && hevc->is_swap) {
 		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 	}
 #endif
@@ -13571,7 +13571,7 @@ static void vh265_prot_init(struct hevc_state_s *hevc)
 	config_decode_mode(hevc);
 	config_nal_control_and_aux_buf(hevc);
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap) {
+	if (!fw_tee_enabled() && hevc->is_swap) {
 		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 		/*pr_info("write swap buffer %x\n", (u32)(hevc->mc_dma_handle));*/
 	}
@@ -13789,7 +13789,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	fw->len = size;
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap) {
+	if (!fw_tee_enabled() && hevc->is_swap) {
 		if (hevc->mmu_enable) {
 			hevc->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
 			hevc->mc_cpu_addr =
@@ -13868,7 +13868,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("H265: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
@@ -13946,7 +13946,7 @@ static s32 vh265_init(struct hevc_state_s *hevc)
 	}
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hevc->is_swap) {
+	if (!fw_tee_enabled() && hevc->is_swap) {
 		WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 	}
 #endif
@@ -15677,7 +15677,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 			ignore reload.
 		*/
 #if 0
-		if (tee_enabled() && hevc->is_swap &&
+		if (fw_tee_enabled() && hevc->is_swap &&
 			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
 #endif
@@ -15688,13 +15688,13 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 		if (loadr < 0) {
 			amhevc_disable();
 			hevc_print(hevc, 0, "H265: the %s back fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", loadr);
+				fw_tee_enabled() ? "TEE" : "local", loadr);
 			hevc->dec_back_result = DEC_BACK_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hevc->work_back);
 			return;
 		}
 #if 0
-		if (tee_enabled() && hevc->is_swap &&
+		if (fw_tee_enabled() && hevc->is_swap &&
 			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 			hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
 #ifdef DETREFILL_ENABLE
@@ -15913,7 +15913,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 			and not changes to another.
 			ignore reload.
 		*/
-		if (tee_enabled() && hevc->is_swap)
+		if (fw_tee_enabled() && hevc->is_swap)
 			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
 	} else {
 #ifdef NEW_FB_CODE
@@ -15943,13 +15943,13 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		if (loadr < 0) {
 			amhevc_disable();
 			hevc_print(hevc, 0, "H265: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", loadr);
+				fw_tee_enabled() ? "TEE" : "local", loadr);
 			hevc->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hevc->work);
 			return;
 		}
 
-		if (tee_enabled() && hevc->is_swap)
+		if (fw_tee_enabled() && hevc->is_swap)
 			hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
 #ifdef DETREFILL_ENABLE
 		if (hevc->is_swap && get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
@@ -15966,7 +15966,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		hevc_hw_init(hevc, 0, 1, 0);
 		config_decode_mode(hevc);
 		config_nal_control_and_aux_buf(hevc);
-		if (!tee_enabled() && hevc->is_swap) {
+		if (!fw_tee_enabled() && hevc->is_swap) {
 			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->mc_dma_handle);
 			pr_info("write swap buffer %x\n", (u32)(hevc->mc_dma_handle));
 		}

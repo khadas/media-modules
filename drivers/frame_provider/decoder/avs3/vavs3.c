@@ -8708,7 +8708,7 @@ static s32 vavs3_init(struct vdec_s *vdec)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("AVS3: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
@@ -9719,7 +9719,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 		if (loadr < 0) {
 			amhevc_disable();
 			avs3_print(dec, 0, "AVS3: the %s back fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", loadr);
+				fw_tee_enabled() ? "TEE" : "local", loadr);
 			dec->dec_back_result = DEC_BACK_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&dec->work_back);
 			return;

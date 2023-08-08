@@ -30,7 +30,7 @@ struct canvas_status_s {
 };
 
 #define CANVAS_MAX_SIZE (AMVDEC_CANVAS_MAX1 - AMVDEC_CANVAS_START_INDEX + 1 + AMVDEC_CANVAS_MAX2 + 1)
-#define CANVAS_MAX_SIZE_S1A 0x40
+#define CANVAS_MAX_SIZE_S1A 0x3a
 
 /* internal canvas */
 #define CANVAS_ADDR_LMASK       0x1fffffff

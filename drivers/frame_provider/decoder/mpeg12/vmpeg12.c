@@ -1969,7 +1969,7 @@ static s32 vmpeg12_init(void)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("MPEG12: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

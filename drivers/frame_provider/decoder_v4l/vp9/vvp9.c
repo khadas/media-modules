@@ -9385,7 +9385,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("VP9: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -EBUSY;
 	}
@@ -10365,7 +10365,7 @@ static void run_front(struct vdec_s *vdec)
 			amhevc_disable();
 			vp9_print(pbi, PRINT_FLAG_ERROR,
 				"VP9: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				fw_tee_enabled() ? "TEE" : "local", ret);
 			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&pbi->work);

@@ -1486,7 +1486,7 @@ static void run(struct vdec_s *vdec, unsigned long mask,
 		ret = amvdec_vdec_loadmc_ex(VFORMAT_MJPEG, "mmjpeg", vdec, hw->fw->data);
 		if (ret < 0) {
 			pr_err("[%d] MMJPEG: the %s fw loading failed, err: %x\n",
-				vdec->id, tee_enabled() ? "TEE" : "local", ret);
+				vdec->id, fw_tee_enabled() ? "TEE" : "local", ret);
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);

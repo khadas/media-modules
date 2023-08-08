@@ -1067,7 +1067,7 @@ static s32 vmpeg4_init(void)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("%s: the %s fw loading failed, err: %x\n",
-			fw_name, tee_enabled() ? "TEE" : "local", ret);
+			fw_name, fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

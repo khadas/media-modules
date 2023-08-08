@@ -47,18 +47,9 @@
 #include <linux/crc32.h>
 #include "../chips/decoder_cpu_ver_info.h"
 
-#if (!IS_ENABLED(CONFIG_AMLOGIC_TEE) && \
-	!IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)) || \
-	(IS_ENABLED(CONFIG_AMLOGIC_ZAPPER_CUT))
+#if !IS_ENABLED(CONFIG_AMLOGIC_TEE) && \
+	!IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
 static inline bool tee_enabled(void) { return false; }
-static inline int tee_load_video_fw_swap(u32 index, u32 vdec, bool is_swap)
-{
-	return -1;
-}
-static inline int tee_load_video_fw(u32 index, u32 vdec)
-{
-	return -1;
-}
 #else
 #include <linux/amlogic/tee.h>
 #endif
@@ -106,6 +97,15 @@ static u32 debug;
 static u32 detail;
 static bool new_package = false;
 
+bool fw_tee_enabled(void)
+{
+	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)
+		return false;
+
+	return tee_enabled();
+}
+EXPORT_SYMBOL(fw_tee_enabled);
+
 extern unsigned long long g_fw_mask;
 void fw_get_format_from_dtb(void)
 {
@@ -137,10 +137,10 @@ int get_firmware_data(unsigned int format, char *buf)
 
 	if (debug)
 		pr_info("[%s], the fw (%s) will be loaded...\n",
-			tee_enabled() ? "TEE" : "LOCAL",
+			fw_tee_enabled() ? "TEE" : "LOCAL",
 			get_fw_format_name(format));
 
-	if (tee_enabled())
+	if (fw_tee_enabled())
 		return 0;
 
 	mutex_lock(&mutex);
@@ -934,7 +934,7 @@ int video_fw_reload(int mode)
 	int ret = 0;
 	struct fw_mgr_s *mgr = g_mgr;
 
-	if (tee_enabled())
+	if (fw_tee_enabled())
 		return 0;
 
 	mutex_lock(&mutex);

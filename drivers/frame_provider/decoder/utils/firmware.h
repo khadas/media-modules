@@ -22,9 +22,8 @@
 
 #include "../../../common/firmware/firmware_type.h"
 #include <linux/amlogic/media/utils/vformat.h>
-#if (IS_ENABLED(CONFIG_AMLOGIC_TEE) || \
-	IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)) && \
-	!IS_ENABLED(CONFIG_AMLOGIC_ZAPPER_CUT)
+#if IS_ENABLED(CONFIG_AMLOGIC_TEE) || \
+	IS_ENABLED(CONFIG_AMLOGIC_TEE_MODULE)
 #include <linux/amlogic/tee.h>
 #else
 /* device ID used by tee_config_device_state() */
@@ -93,5 +92,6 @@ extern int get_decoder_firmware_data(enum vformat_e type,
 extern int get_data_from_name(const char *name, char *buf);
 extern int get_firmware_data(unsigned int format, char *buf);
 extern int video_fw_reload(int mode);
+extern bool fw_tee_enabled(void);
 
 #endif

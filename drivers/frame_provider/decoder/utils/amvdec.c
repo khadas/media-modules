@@ -683,7 +683,7 @@ EXPORT_SYMBOL(optee_load_fw);
 
 s32 amvdec_loadmc_ex(enum vformat_e type, const char *name, char *def)
 {
-	if (tee_enabled())
+	if (fw_tee_enabled())
 		return optee_load_fw(type, name);
 	else
 		return am_loadmc_ex(type, name, def, &amvdec_loadmc);
@@ -693,7 +693,7 @@ EXPORT_SYMBOL(amvdec_loadmc_ex);
 s32 amvdec_vdec_loadmc_ex(enum vformat_e type, const char *name,
 	struct vdec_s *vdec, char *def)
 {
-	if (tee_enabled())
+	if (fw_tee_enabled())
 		return optee_load_fw(type, name);
 	else
 		return am_loadmc_vdec_ex(vdec, name, def, &aml_loadmc_vdec);
@@ -703,7 +703,7 @@ EXPORT_SYMBOL(amvdec_vdec_loadmc_ex);
 s32 amvdec_vdec_loadmc_buf_ex(enum vformat_e type, const char *name,
 	struct vdec_s *vdec, char *buf, int size)
 {
-	if (tee_enabled())
+	if (fw_tee_enabled())
 		return optee_load_fw(type, name);
 	else
 		return am_vdec_loadmc_buf_ex(vdec, buf, size, &amvdec_loadmc);
@@ -953,7 +953,7 @@ static s32 amhevc_back_loadmc(const u32 *p)
 s32 amhevc_loadmc_ex(enum vformat_e type, const char *name, char *def)
 {
 	if (has_hevc_vdec())
-		if (tee_enabled()) {
+		if (fw_tee_enabled()) {
 			return optee_load_fw(type, name);
 		} else {
 			if (name && strstr(name, "back") != NULL) {
@@ -970,7 +970,7 @@ s32 amhevc_vdec_loadmc_ex(enum vformat_e type, struct vdec_s *vdec,
 	const char *name, char *def)
 {
 	if (has_hevc_vdec())
-		if (tee_enabled())
+		if (fw_tee_enabled())
 			return optee_load_fw(type, name);
 		else {
 			if (name && strstr(name, "back") != NULL) {

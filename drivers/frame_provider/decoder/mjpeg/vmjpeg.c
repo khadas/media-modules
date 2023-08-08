@@ -757,7 +757,7 @@ static s32 vmjpeg_init(void)
 		amvdec_disable();
 		vfree(buf);
 		pr_err("MJPEG: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

@@ -6395,7 +6395,7 @@ static s32 vavs2_init(struct vdec_s *vdec)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("AVS2: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 

@@ -13961,7 +13961,7 @@ static s32 vvp9_init(struct VP9Decoder_s *pbi)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("VP9: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
@@ -15270,7 +15270,7 @@ static void run_front(struct vdec_s *vdec)
 			amhevc_disable();
 			vp9_print(pbi, PRINT_FLAG_ERROR,
 				"VP9: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				fw_tee_enabled() ? "TEE" : "local", ret);
 			pbi->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&pbi->work);
 			return;
@@ -15570,7 +15570,7 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 			ignore reload.
 		*/
 #if 0
-		if (tee_enabled() && hevc->is_swap &&
+		if (fw_tee_enabled() && hevc->is_swap &&
 			get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 			WRITE_VREG(HEVC_STREAM_SWAP_BUFFER2, hevc->swap_addr);
 #endif
@@ -15582,13 +15582,13 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 			if (loadr < 0) {
 				amhevc_disable();
 				vp9_print(pbi, 0, "vp9: the %s back fw loading failed, err: %x\n",
-					tee_enabled() ? "TEE" : "local", loadr);
+					fw_tee_enabled() ? "TEE" : "local", loadr);
 				pbi->dec_back_result = DEC_BACK_RESULT_FORCE_EXIT;
 				vdec_schedule_work(&pbi->work_back);
 				return;
 			}
 #if 0
-			if (tee_enabled() && hevc->is_swap &&
+			if (fw_tee_enabled() && hevc->is_swap &&
 				get_cpu_major_id() <= AM_MESON_CPU_MAJOR_ID_GXM)
 				hevc->swap_addr = READ_VREG(HEVC_STREAM_SWAP_BUFFER2);
 #ifdef DETREFILL_ENABLE
@@ -15606,7 +15606,7 @@ static void run_back_fb(struct vdec_s *vdec, void (*callback)(struct vdec_s *, v
 			if (loadr < 0) {
 				amhevc_disable();
 				vp9_print(pbi, 0, "vp9: the %s back fw loading failed, err: %x\n",
-					tee_enabled() ? "TEE" : "local", loadr);
+					fw_tee_enabled() ? "TEE" : "local", loadr);
 				pbi->dec_back_result = DEC_BACK_RESULT_FORCE_EXIT;
 				vdec_schedule_work(&pbi->work_back);
 				return;

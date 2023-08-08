@@ -2351,7 +2351,7 @@ static s32 vavs_init(struct vdec_avs_hw_s *hw)
 		amvdec_disable();
 		/*vfree(buf);*/
 		pr_err("AVS: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		return -EBUSY;
 	}
@@ -3277,7 +3277,7 @@ void (*callback)(struct vdec_s *, void *, int),
 			hw->fw->data, hw->fw->len);
 		if (ret < 0) {
 			pr_err("[%d] %s: the %s fw loading failed, err: %x\n", vdec->id,
-				hw->fw->name, tee_enabled() ? "TEE" : "local", ret);
+				hw->fw->name, fw_tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			vdec_schedule_work(&hw->work);
@@ -4959,7 +4959,7 @@ static void init_hw(struct vdec_s *vdec)
 		/*vfree(buf);*/
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		pr_err("AVS: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 	}
 	pr_info("%s, %d\n", __func__, __LINE__);
 

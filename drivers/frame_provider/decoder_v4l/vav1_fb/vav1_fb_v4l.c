@@ -5720,7 +5720,7 @@ static void av1_local_uninit(struct AV1HW_s *hw, bool reset_flag)
 	vav1_mmu_map_free(hw);
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hw->is_swap && (!reset_flag)) {
+	if (!fw_tee_enabled() && hw->is_swap && (!reset_flag)) {
 		if (hw->swap_virt_addr)
 			codec_mm_dma_free_coherent(hw->swap_mem_handle);
 		hw->swap_mem_handle = 0;
@@ -10205,7 +10205,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 	}
 
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hw->is_swap) {
+	if (!fw_tee_enabled() && hw->is_swap) {
 		char *swap_data;
 		hw->swap_size = (4 * (4 * SZ_1K)); /*max 4 swap code, each 0x400*/
 		hw->swap_virt_addr =
@@ -10262,7 +10262,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 		amhevc_disable();
 		vfree(fw);
 		pr_err("AV1: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
@@ -11290,7 +11290,7 @@ static void run_front(struct vdec_s *vdec)
 			amhevc_disable();
 			av1_print(hw, PRINT_FLAG_ERROR,
 				"AV1: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				fw_tee_enabled() ? "TEE" : "local", ret);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
 			return;
@@ -11299,7 +11299,7 @@ static void run_front(struct vdec_s *vdec)
 	}
 	vdec->mc_loaded = 0;
 #ifdef SWAP_HEVC_UCODE
-	if (!tee_enabled() && hw->is_swap) {
+	if (!fw_tee_enabled() && hw->is_swap) {
 		WRITE_VREG(HEVC_UCODE_SWAP_BUFFER, hw->swap_phy_addr);
 	}
 #endif
@@ -11389,7 +11389,7 @@ static void run_back(struct vdec_s *vdec, void (*callback)(struct vdec_s *, void
 	if (loadr < 0) {
 		amhevc_disable();
 		av1_print(hw, 0, "AV1: the %s back fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", loadr);
+			fw_tee_enabled() ? "TEE" : "local", loadr);
 		hw->dec_back_result = DEC_BACK_RESULT_FORCE_EXIT;
 		vdec_schedule_work(&hw->work_back);
 		return;

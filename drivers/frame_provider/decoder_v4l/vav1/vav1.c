@@ -9107,7 +9107,7 @@ static s32 vav1_init(struct AV1HW_s *hw)
 		vfree(fw);
 		vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 		pr_err("AV1: the %s fw loading failed, err: %x\n",
-			tee_enabled() ? "TEE" : "local", ret);
+			fw_tee_enabled() ? "TEE" : "local", ret);
 		return -EBUSY;
 	}
 
@@ -10044,7 +10044,7 @@ static void run_front(struct vdec_s *vdec)
 			amhevc_disable();
 			av1_print(hw, PRINT_FLAG_ERROR,
 				"AV1: the %s fw loading failed, err: %x\n",
-				tee_enabled() ? "TEE" : "local", ret);
+				fw_tee_enabled() ? "TEE" : "local", ret);
 			vdec_v4l_post_error_event(ctx, DECODER_EMERGENCY_FW_LOAD_ERROR);
 			hw->dec_result = DEC_RESULT_FORCE_EXIT;
 			vdec_schedule_work(&hw->work);
