@@ -6982,6 +6982,10 @@ static irqreturn_t vavs2_isr_thread_fn(int irq, void *data)
 			avs2_print(dec, AVS2_DBG_BUFMGR,
 				"avs2_bufmgr_process=> %d, AVS2_10B_DISCARD_NAL\r\n", ret);
 			WRITE_VREG(HEVC_DEC_STATUS_REG, AVS2_10B_DISCARD_NAL);
+			if (vdec_frame_based(hw_to_vdec(dec))) {
+				avs2_buf_ref_process_for_exception(dec);
+				vdec_v4l_post_error_frame_event(ctx);
+			}
 
 			if (dec->m_ins_flag) {
 				dec->dec_result = DEC_RESULT_DONE;

@@ -829,6 +829,7 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 
 	int32_t i, j;
 	int32_t ii;
+	int32_t tmp_ref;
 	struct avs2_frame_s *tmp_fref;
 
 	/*update IDR frame*/
@@ -932,6 +933,20 @@ int prepare_RefInfo(struct avs2_decoder *avs2_dec)
 		}
 		return -1; /* exit(-1);*/
 		/*******************************************/
+	}
+
+	if (img->type == P_IMG) {
+		for (ii = 0; ii < img->num_of_references;ii++) {
+			tmp_ref = img->coding_order - hd->curr_RPS.ref_pic[ii];
+			if(avs2_dec->fref[ii]->imgcoi_ref != tmp_ref &&
+			 avs2_dec->fref[ii]->imgcoi_ref != (tmp_ref - 256)) {
+				pr_info("wrong reference configuration for P frame\n");
+				pr_info("fref[%d] imgcoi_ref %d, ref_pic[%d] %d\n",
+					ii,avs2_dec->fref[ii]->imgcoi_ref,
+					ii,hd->curr_RPS.ref_pic[ii]);
+				return -1;
+			}
+		}
 	}
 
 #if !FIX_PROFILE_LEVEL_DPB_RPS_1
