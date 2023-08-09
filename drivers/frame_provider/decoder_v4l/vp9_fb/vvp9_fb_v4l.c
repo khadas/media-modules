@@ -187,6 +187,7 @@ static u32 force_pts_unstable;
 static u32 mv_buf_margin;
 
 static u32 mv_buf_dynamic_alloc;
+static u32 debug_mask = 0xffffffff;
 
 #ifdef NEW_FB_CODE
 #define MAX_FB_IFBUF_NUM             16
@@ -203,6 +204,7 @@ static u32 front_back_mode = 1;
 #define EE_ASSIST_MBOX0_MASK       0x3f72
 
 static u32 fb_ucode_debug;
+static u32 efficiency_mode = 1;
 
 #endif
 
@@ -530,6 +532,7 @@ VP9 buffer management start
 
 #define RPM_BEGIN                                              0x200
 #define RPM_END                                                0x280
+#define RPM_VALID_E                                            0x230
 #define MAX_SLICE_NUM 1024
 
 union param_u {
@@ -1218,7 +1221,7 @@ struct BuffInfo_s {
 #endif
 
 static void vp9_work(struct work_struct *work);
-
+static void vp9_work_implement(struct VP9Decoder_s *pbi);
 #ifdef NEW_FB_CODE
 static void vp9_work_back(struct work_struct *work);
 #endif
@@ -1582,8 +1585,8 @@ struct VP9Decoder_s {
 	uint32_t ins_offset;
 #endif
 	int reset_flag;
-
 	int triple_write_mode;
+	int start_decoder_flag;
 };
 
 #ifdef NEW_FRONT_BACK_CODE
@@ -1591,7 +1594,7 @@ void print_hevc_b_data_path_monitor(int frame_count);
 static void  config_mcrcc_axi_hw_new(struct VP9Decoder_s *pbi);
 #endif
 
-static int vp9_print(struct VP9Decoder_s *pbi,
+static int vp9_debug(struct VP9Decoder_s *pbi,
 	int flag, const char *fmt, ...)
 {
 #define HEVC_PRINT_BUF		512
@@ -1615,6 +1618,17 @@ static int vp9_print(struct VP9Decoder_s *pbi,
 	}
 	return 0;
 }
+
+#define vp9_print(pbi, flag, fmt, args...)					\
+	do {									\
+		if (pbi == NULL ||    \
+			(flag == 0) || \
+			((debug_mask & \
+			(1 << pbi->index)) \
+		&& (debug & flag))) { \
+			vp9_debug(pbi, flag, fmt, ##args);	\
+			} \
+	} while (0)
 
 static int is_oversize(int w, int h)
 {
@@ -1968,11 +1982,11 @@ static void trigger_schedule(struct VP9Decoder_s *pbi)
 static void reset_process_time(struct VP9Decoder_s *pbi)
 {
 	if (pbi->start_process_time) {
-		unsigned process_time =
-			1000 * (jiffies - pbi->start_process_time) / HZ;
+		//unsigned process_time =
+			//1000 * (jiffies - pbi->start_process_time) / HZ;
 		pbi->start_process_time = 0;
-		if (process_time > max_process_time[pbi->index])
-			max_process_time[pbi->index] = process_time;
+		//if (process_time > max_process_time[pbi->index])
+			//max_process_time[pbi->index] = process_time;
 	}
 }
 
@@ -3520,6 +3534,7 @@ static struct device *cma_dev;
 #define RPM_CMD_REG               HEVC_ASSIST_SCRATCH_F
 #define LMEM_DUMP_ADR                 HEVC_ASSIST_SCRATCH_F
 #define HEVC_STREAM_SWAP_TEST     HEVC_ASSIST_SCRATCH_L
+#define HEVC_EFFICIENCY_MODE      HEVC_ASSIST_SCRATCH_L
 #ifdef MULTI_INSTANCE_SUPPORT
 #define HEVC_DECODE_COUNT       HEVC_ASSIST_SCRATCH_M
 #define HEVC_DECODE_SIZE		HEVC_ASSIST_SCRATCH_N
@@ -4169,31 +4184,31 @@ static void config_bufstate_front_hw(struct VP9Decoder_s *pbi)
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_mpred_imp0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_mpred_imp0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 3);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_mpred_imp1.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_mpred_imp1.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp1_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.mpred_imp1_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 //config lmem buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 4);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_lmem0.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_lmem0.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lmem0_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.lmem0_ptr);
 	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "pbi->fr.lmem0_ptr 0x%x, pbi->bk.lmem0_ptr 0x%x\n", pbi->fr.lmem0_ptr, pbi->bk.lmem0_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM0_BLOCK_SIZE);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, FB_IFBUF_LMEM0_BLOCK_SIZE);
 
 //config other buffers
 	WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
 	WRITE_VREG(HEVC_ASSIST_RING_F_START, pbi->fb_buf_sys_imem.buf_start);
 	WRITE_VREG(HEVC_ASSIST_RING_F_END, pbi->fb_buf_sys_imem.buf_end);
 	WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, pbi->fr.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.sys_imem_ptr);
-	WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_RPTR, pbi->bk.sys_imem_ptr);
+	//WRITE_VREG(HEVC_ASSIST_RING_F_THRESHOLD, 0);
 
 }
 
@@ -4289,11 +4304,6 @@ static void config_loop_filter_hw(struct VP9Decoder_s *pbi, union param_u *param
 	//WRITE_VREG(HEVC_DBLK_CFGB, lpf_data32);
 	READ_WRITE_DATA16(pbi, HEVC_DBLK_CFGB, lpf_data32, 4, 2);
 
-	//lpf_data32 = READ_VREG(HEVC_DBLK_CFGB_DBE1);
-	if (param->p.width >= 1280) lpf_data32 = 1; // dblk pipeline mode=1 for performance
-	else                        lpf_data32 = 0;
-	//WRITE_VREG(HEVC_DBLK_CFGB_DBE1, lpf_data32);
-	READ_WRITE_DATA16(pbi, HEVC_DBLK_CFGB_DBE1, lpf_data32, 4, 2);
 	/*
 	* Update loop filter Thr/Lvl table for every frame
 	*/
@@ -4326,15 +4336,12 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 #ifdef LOSLESS_COMPRESS_MODE
 //pyx wait rain 265 modify
 	WRITE_BACK_32(pbi, HEVC_SAO_Y_START_ADDR, pic_config->dw_y_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_Y_START_ADDR_DBE1, pic_config->dw_y_adr);
 	if (pbi->mmu_enable) {
 		WRITE_BACK_32(pbi, HEVC_CM_HEADER_START_ADDR, pic_config->header_adr);
-		WRITE_BACK_32(pbi, HEVC_CM_HEADER_START_ADDR_DBE1, pic_config->header_adr);
 	}
 
 #else
 	WRITE_BACK_32(pbi, HEVC_SAO_Y_START_ADDR, pic_config->mc_y_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_Y_START_ADDR_DBE1, pic_config->mc_y_adr);
 #endif
 
 	vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "[config_sao_hw] sao_body_addr:%x\n", pic_config->mc_y_adr);
@@ -4342,16 +4349,12 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 
 #ifndef LOSLESS_COMPRESS_MODE
 	WRITE_BACK_32(pbi, HEVC_SAO_C_START_ADDR, pic_config->mc_u_v_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_C_START_ADDR_DBE1, pic_config->mc_u_v_adr);
 #else
 	WRITE_BACK_32(pbi, HEVC_SAO_C_START_ADDR,pic_config->dw_u_v_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_C_START_ADDR_DBE1,pic_config->dw_u_v_adr);
 #endif
 
 	WRITE_BACK_32(pbi, HEVC_SAO_Y_LENGTH, pic_config->luma_size);
-	WRITE_BACK_32(pbi, HEVC_SAO_Y_LENGTH_DBE1, pic_config->luma_size);
 	WRITE_BACK_32(pbi, HEVC_SAO_C_LENGTH, pic_config->chroma_size);
-	WRITE_BACK_32(pbi, HEVC_SAO_C_LENGTH_DBE1, pic_config->chroma_size);
 	vp9_print(pbi, PRINT_FLAG_V4L_DETAIL,
 		"[%d] config pic, id: %d, Y:(%lx, %d) C:(%lx, %d).\n",
 		v4l2_ctx->id, pic_config->index,
@@ -4361,15 +4364,11 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 #ifndef LOSLESS_COMPRESS_MODE
 	/* multi tile to do... */
 	WRITE_BACK_32(pbi, HEVC_SAO_Y_WPTR , pic_config->mc_y_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_Y_WPTR_DBE1 , pic_config->mc_y_adr);
 
 	WRITE_BACK_32(pbi, HEVC_SAO_C_WPTR , pic_config->mc_u_v_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_C_WPTR_DBE1 , pic_config->mc_u_v_adr);
 #else
 	WRITE_BACK_32(pbi, HEVC_SAO_Y_WPTR ,pic_config->dw_y_adr);
 	WRITE_BACK_32(pbi, HEVC_SAO_C_WPTR ,pic_config->dw_u_v_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_Y_WPTR_DBE1 ,pic_config->dw_y_adr);
-	WRITE_BACK_32(pbi, HEVC_SAO_C_WPTR_DBE1 ,pic_config->dw_u_v_adr);
 #endif
 
 #ifdef VP9_10B_NV21
@@ -4523,58 +4522,6 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 	*/
 	WRITE_BACK_32(pbi, HEVC_SAO_CTRL1, data32);
 
-	data32 = READ_VREG(HEVC_SAO_CTRL1_DBE1);
-	data32 &= (~(3 << 14));
-	data32 |= (2 << 14);	/* line align with 64*/
-
-	data32 &= (~0x3000);
-	/* [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32 */
-	data32 |= (pbi->mem_map_mode << 12);
-
-	data32 &= (~0xff0);
-#ifdef VP9_10B_MMU_DW
-	if (pbi->dw_mmu_enable == 0)
-		data32 |= ((pbi->endian >> 8) & 0xfff);	/* Big-Endian per 64-bit */
-#else
-	data32 |= ((pbi->endian >> 8) & 0xfff);
-#endif
-	data32 &= (~0x3); 		/*[1]:dw_disable [0]:cm_disable*/
-	if (dw_mode == 0)
-		data32 |= 0x2; /*disable double write*/
-	else if (dw_mode & 0x10)
-		data32 |= 0x1; /*disable cm*/
-	if  (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_G12A) { /* >= G12A dw write control */
-		unsigned int data;
-		//data = READ_VREG(HEVC_DBLK_CFGB_DBE1);
-		//data &= (~0x300); /*[8]:first write enable (compress)  [9]:double write enable (uncompress)*/
-		if (dw_mode == 0)
-			data = 1; //data |= (0x1 << 8); /*enable first write*/
-		else if (dw_mode & 0x10)
-			data = 2; //data |= (0x1 << 9); /*double write only*/
-		else
-			data = 3; //data |= ((0x1 << 8)  |(0x1 << 9));
-		READ_WRITE_DATA16(pbi, HEVC_DBLK_CFGB_DBE1, data, 8, 2);
-	}
-	/* swap uv */
-	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21) ||
-		(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV21M))
-		data32 &= ~(1 << 8); /* NV21 */
-	else
-		data32 |= (1 << 8); /* NV12 */
-	/*
-	*  [31:24] ar_fifo1_axi_thred
-	*  [23:16] ar_fifo0_axi_thred
-	*  [15:14] axi_linealign, 0-16bytes, 1-32bytes, 2-64bytes
-	*  [13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32
-	*  [11:08] axi_lendian_C
-	*  [07:04] axi_lendian_Y
-	*  [3]     reserved
-	*  [2]     clk_forceon
-	*  [1]     dw_disable:disable double write output
-	*  [0]     cm_disable:disable compress output
-	*/
-	WRITE_BACK_32(pbi, HEVC_SAO_CTRL1_DBE1, data32);
-
 	if (dw_mode & 0x10) {
 		/* [23:22] dw_v1_ctrl
 		 *[21:20] dw_v0_ctrl
@@ -4586,13 +4533,8 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 		//data32 &= ~(0xff << 16);
 		//WRITE_VREG(HEVC_SAO_CTRL5, data32);
 		READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5, 0, 16, 8);
-
-		//data32 = READ_VREG(HEVC_SAO_CTRL5_DBE1);
-		/*set them all 0 for H265_NV21 (no down-scale)*/
-		//data32 &= ~(0xff << 16);
-		//WRITE_VREG(HEVC_SAO_CTRL5_DBE1, data32);
-		READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5_DBE1, 0, 16, 8);
 	} else {
+		uint32_t data;
 		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
 			WRITE_BACK_8(pbi, HEVC_SAO_CTRL26, 0);
 
@@ -4600,32 +4542,15 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 		//data32 &= (~(0xff << 16));
 		if ((dw_mode & 0xf) == 8 ||
 			(dw_mode & 0xf) == 9) {
-			data32 = 0xff; //data32 |= (0xff << 16);
+			data = 0xff; //data32 |= (0xff << 16);
 			WRITE_BACK_8(pbi, HEVC_SAO_CTRL26, 0xf);
 		} else if ((dw_mode & 0xf) == 2 ||
 			(dw_mode & 0xf) == 3)
-			data32 = 0xff; //data32 |= (0xff << 16);
+			data = 0xff; //data32 |= (0xff << 16);
 		else if ((dw_mode & 0xf) == 4)
-			data32 = 0xff; //data32 |= (0x33 << 16);
+			data = 0xff; //data32 |= (0x33 << 16);
 		//WRITE_VREG(HEVC_SAO_CTRL5, data32);
-		READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5, data32, 16, 8);
-
-		if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_T7)
-			WRITE_BACK_8(pbi, HEVC_SAO_CTRL26_DBE1, 0);
-
-		//data32 = READ_VREG(HEVC_SAO_CTRL5_DBE1);
-		//data32 &= (~(0xff << 16));
-		if ((dw_mode & 0xf) == 8 ||
-			(dw_mode & 0xf) == 9) {
-			data32 = 0xff; //data32 |= (0xff << 16);
-			WRITE_BACK_8(pbi, HEVC_SAO_CTRL26_DBE1, 0xf);
-		} else if ((dw_mode & 0xf) == 2 ||
-			(dw_mode & 0xf) == 3)
-			data32 = 0xff; //data32 |= (0xff << 16);
-		else if ((dw_mode & 0xf) == 4)
-			data32 = 0xff; //data32 |= (0x33 << 16);
-		//WRITE_VREG(HEVC_SAO_CTRL5_DBE1, data32);
-		READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5_DBE1, data32, 16, 8);
+		READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5, data, 16, 8);
 	}
 
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
@@ -4654,34 +4579,6 @@ static void config_sao_hw_fb(struct VP9Decoder_s *pbi)
 	* [31:13] reserved
 	*/
 	WRITE_BACK_32(pbi, HEVCD_IPP_AXIIF_CONFIG, data32);
-
-	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG_DBE1);
-	data32 &= (~0x30);
-	/* [5:4]    -- address_format 00:linear 01:32x32 10:64x32 */
-	data32 |= (pbi->mem_map_mode << 4);
-	data32 &= (~0xf);
-	data32 |= (pbi->endian & 0xf);  /* valid only when double write only */
-
-	/* swap uv */
-	if ((v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21) ||
-		(v4l2_ctx->q_data[AML_Q_DATA_DST].fmt->fourcc == V4L2_PIX_FMT_NV21M))
-		data32 |= (1 << 12); /* NV21 */
-	else
-		data32 &= ~(1 << 12); /* NV12 */
-
-	data32 &= (~(3 << 8));
-	data32 |= (2 << 8);		/* line align with 64 for dw only */
-	/*
-	* [3:0]   little_endian
-	* [5:4]   address_format 00:linear 01:32x32 10:64x32
-	* [7:6]   reserved
-	* [9:8]   Linear_LineAlignment 00:16byte 01:32byte 10:64byte
-	* [11:10] reserved
-	* [12]    CbCr_byte_swap
-	* [31:13] reserved
-	*/
-	WRITE_BACK_32(pbi, HEVCD_IPP_AXIIF_CONFIG_DBE1, data32);
-
 #endif
 
 }
@@ -4697,30 +4594,25 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 		pr_info("config_mc_buffer entered .....\n");
 
 	WRITE_BACK_8(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (0<<1) | 1);
-	WRITE_BACK_8(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1, (0 << 8) | (0<<1) | 1);
 	for (i = 0; i < REFS_PER_FRAME; ++i) {
 		struct PIC_BUFFER_CONFIG_s *pic_config = cur_pic_config->pic_refs[i];
 		if (!pic_config)
 			continue;
 		WRITE_BACK_32(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
-		WRITE_BACK_32(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
 		if (debug & VP9_DEBUG_BUFMGR_MORE)
 		printk("refid %x mc_canvas_u_v %x mc_canvas_y %x\n",
 			i,pic_config->mc_canvas_u_v,pic_config->mc_canvas_y);
 
 	}
 	WRITE_BACK_16(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, 0, (16 << 8) | (0<<1) | 1);
-	WRITE_BACK_16(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1, 1, (16 << 8) | (0<<1) | 1);
 	for (i = 0; i < REFS_PER_FRAME; ++i) {
 		struct PIC_BUFFER_CONFIG_s *pic_config = cur_pic_config->pic_refs[i];
 		if (!pic_config)
 			continue;
 		WRITE_BACK_32(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
-		WRITE_BACK_32(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1, (pic_config->mc_canvas_u_v<<16)|(pic_config->mc_canvas_u_v<<8)|pic_config->mc_canvas_y);
 	}
 
 	WRITE_BACK_8(pbi, VP9D_MPP_REFINFO_TBL_ACCCONFIG, 0x1 << 2); // auto_inc start index:0 field:0
-	WRITE_BACK_8(pbi, VP9D_MPP_REFINFO_TBL_ACCCONFIG_DBE1, 0x1 << 2); // auto_inc start index:0 field:0
 	for (i=0; i<REFS_PER_FRAME; i++) // index 0:last 1:golden 2:altref
 	{
 		int32_t ref_pic_body_size;
@@ -4728,8 +4620,6 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 
 		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA, pic_config->y_crop_width);
 		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA, pic_config->y_crop_height);
-		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA_DBE1, pic_config->y_crop_width);
-		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA_DBE1, pic_config->y_crop_height);
 		vp9_print(pbi, VP9_DEBUG_DUAL_CORE, "refid %x y_crop_width 0x%x y_crop_height 0x%x\n", i,pic_config->y_crop_width,pic_config->y_crop_height);
 
 		if (pic_config->y_crop_width != cur_pic_config->y_crop_width ||
@@ -4744,18 +4634,13 @@ static int32_t config_mc_buffer_fb(struct VP9Decoder_s *pbi, unsigned short bit_
 		//  ref_pic_body_size);
 		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA, (pic_config->y_crop_width<<14)/cur_pic_config->y_crop_width);
 		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA, (pic_config->y_crop_height<<14)/cur_pic_config->y_crop_height);
-		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA_DBE1, (pic_config->y_crop_width<<14)/cur_pic_config->y_crop_width);
-		WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA_DBE1, (pic_config->y_crop_height<<14)/cur_pic_config->y_crop_height);
 		if (pbi->mmu_enable) {
 			WRITE_BACK_8(pbi, VP9D_MPP_REFINFO_DATA, 0);
-			WRITE_BACK_8(pbi, VP9D_MPP_REFINFO_DATA_DBE1, 0);
 		} else {
 			WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA, ref_pic_body_size >> 5);
-			WRITE_BACK_32(pbi, VP9D_MPP_REFINFO_DATA_DBE1, ref_pic_body_size >> 5);
 		}
 	}
 	WRITE_BACK_8(pbi, VP9D_MPP_REF_SCALE_ENBL, scale_enable);
-	WRITE_BACK_8(pbi, VP9D_MPP_REF_SCALE_ENBL_DBE1, scale_enable);
 
 	return 0;
 }
@@ -4801,19 +4686,15 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 	data32 = 1;
 
 	READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5, data32, 9, 1);
-	READ_WRITE_DATA16(pbi, HEVC_SAO_CTRL5_DBE1, data32, 9, 1);
 
 	if (pbi->mmu_enable) {
 		WRITE_BACK_8(pbi, HEVCD_MPP_DECOMP_CTL1,(0x1<< 4)); // bit[4] : paged_mem_mode
-		WRITE_BACK_8(pbi, HEVCD_MPP_DECOMP_CTL1_DBE1,(0x1<< 4)); // bit[4] : paged_mem_mode
 	} else {
 		if (bit_depth == VPX_BITS_10) {
 		WRITE_BACK_8(pbi, HEVCD_MPP_DECOMP_CTL1, (0<<3)); // bit[3] smem mdoe
-		WRITE_BACK_8(pbi, HEVCD_MPP_DECOMP_CTL1_DBE1, (0<<3)); // bit[3] smem mdoe
 		}
 		else {
 		WRITE_BACK_8(pbi, HEVCD_MPP_DECOMP_CTL1, (1<<3)); // bit[3] smem mdoe
-		WRITE_BACK_8(pbi, HEVCD_MPP_DECOMP_CTL1_DBE1, (1<<3)); // bit[3] smem mdoe
 		}
 	}
 
@@ -4822,16 +4703,11 @@ static int32_t config_pic_size_fb(struct VP9Decoder_s *pbi, unsigned short bit_d
 	WRITE_BACK_32(pbi, HEVC_CM_BODY_LENGTH,losless_comp_body_size);
 	WRITE_BACK_32(pbi, HEVC_CM_HEADER_OFFSET,losless_comp_body_size);
 	WRITE_BACK_32(pbi, HEVC_CM_HEADER_LENGTH,losless_comp_header_size);
-	WRITE_BACK_32(pbi, HEVC_CM_BODY_LENGTH_DBE1,losless_comp_body_size);
-	WRITE_BACK_32(pbi, HEVC_CM_HEADER_OFFSET_DBE1,losless_comp_body_size);
-	WRITE_BACK_32(pbi, HEVC_CM_HEADER_LENGTH_DBE1,losless_comp_header_size);
 	if (get_double_write_mode(pbi) & 0x10) {
 		WRITE_BACK_32(pbi, HEVCD_MPP_DECOMP_CTL1, 0x1 << 31);
-		WRITE_BACK_32(pbi, HEVCD_MPP_DECOMP_CTL1_DBE1, 0x1 << 31);
 	}
 #else
 	WRITE_BACK_32(pbi, HEVCD_MPP_DECOMP_CTL1,0x1 << 31);
-	WRITE_BACK_32(pbi, HEVCD_MPP_DECOMP_CTL1_DBE1,0x1 << 31);
 #endif
 	return 0;
 }
@@ -4998,7 +4874,7 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 //#endif
 //
 //#endif
-	if (front_flag) {
+	if (!efficiency_mode && front_flag) {
 		//if (debug&VP9_DEBUG_BUFMGR)
 			//printk("[test.c] Enable HEVC Parser Interrupt\n");
 		data32 = READ_VREG(HEVC_PARSER_INT_CONTROL);
@@ -5062,7 +4938,7 @@ static void vp9_init_decoder_hw_fb(struct VP9Decoder_s *pbi, int32_t decode_pic_
 		WRITE_VREG(HEVC_IQIT_SCALELUT_WR_ADDR_DBE1, 0); // cfg_p_addr
 		for (i=0; i<1024; i++) WRITE_VREG(HEVC_IQIT_SCALELUT_DATA_DBE1, 0);
 	}
-	if (front_flag) {
+	if (!efficiency_mode && front_flag) {
 		WRITE_VREG(HEVC_STREAM_SWAP_TEST, 0);
 		//pyx need check by rain
 		//WRITE_VREG(HEVC_DECODE_PIC_BEGIN_REG, 0);
@@ -5144,7 +5020,6 @@ static void init_pic_list_hw_fb(struct VP9Decoder_s *pbi)
 
 	//WRITE_VREG(P_HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x0);
 	WRITE_BACK_8(pbi, HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, (0x1 << 1) | (0x1 << 2));
-	WRITE_BACK_8(pbi, HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_DBE1, (0x1 << 1) | (0x1 << 2));
 
 	for (i=0; i<FRAME_BUFFERS; i++) {
 		pic_config = &cm->buffer_pool->frame_bufs[i].buf;
@@ -5153,26 +5028,21 @@ static void init_pic_list_hw_fb(struct VP9Decoder_s *pbi)
 		if (pic_config->index >= 0) {
 			if (pbi->mmu_enable && ((pic_config->double_write_mode & 0x10) == 0)) {
 				WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->header_adr>>5);
-				WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->header_adr>>5);
 			} else {
 				WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->dw_y_adr >> 5);
-				WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->dw_y_adr >> 5);
 			}
 
 #ifndef LOSLESS_COMPRESS_MODE
 			WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->header_adr >> 5);
-			WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->header_adr >> 5);
 #else
 			if (get_double_write_mode(pbi) & 0x10) {
 				WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA, pic_config->dw_u_v_adr >> 5);
-				WRITE_BACK_32(pbi, HEVCD_MPP_ANC2AXI_TBL_DATA_DBE1, pic_config->dw_u_v_adr >> 5);
 			}
 #endif
 
 		}
 	}
 	WRITE_BACK_8(pbi, HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR, 0x1);
-	WRITE_BACK_8(pbi, HEVCD_MPP_ANC2AXI_TBL_CONF_ADDR_DBE1, 0x1);
 #if 0
 	if (first_flag) {
 	// Zero out canvas registers in IPP -- avoid simulation X
@@ -5547,7 +5417,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 			test_debug = 10;
 			return;
 		}
-	if (front_flag)
+	if (!efficiency_mode && front_flag)
 		init_pic_list_hw_fb(pbi);
 
 	if (front_flag) {
@@ -5601,7 +5471,7 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 #endif
 	}
 
-	if (front_flag) {
+	if (!efficiency_mode && front_flag) {
 //Start JT
 #if 1
 	if (debug&VP9_DEBUG_BUFMGR)
@@ -5641,7 +5511,9 @@ void vp9_hw_init(struct VP9Decoder_s *pbi, int first_flag, int front_flag, int b
 	WRITE_VREG(HEVC_SHIFT_EMULATECODE, 0x00000300);
 #endif
 // End JT
+	}
 
+	if (front_flag) {
 #if 0 //def SIMULATION
 	if (decode_pic_begin == 0)
 		WRITE_VREG(HEVC_WAIT_FLAG, 1);
@@ -8469,7 +8341,6 @@ void vp9_loop_filter_frame_init_fb(struct VP9Decoder_s *pbi, struct segmentation
 			thr = (thr << 16) | ((lfi->lfthr[i * 2].lim & 0x3f) << 8)
 				| (lfi->lfthr[i * 2].mblim & 0xff);
 			WRITE_BACK_32(pbi, HEVC_DBLK_CFG9, thr);
-			WRITE_BACK_32(pbi, HEVC_DBLK_CFG9_DBE1, thr);
 		}
 	}
 
@@ -8549,7 +8420,6 @@ void vp9_loop_filter_frame_init_fb(struct VP9Decoder_s *pbi, struct segmentation
 		if (!default_filt_lvl)
 			level = 0;
 		WRITE_BACK_32(pbi, HEVC_DBLK_CFGA, level);
-		WRITE_BACK_32(pbi, HEVC_DBLK_CFGA_DBE1, level);
 	}
 }
 
@@ -8858,7 +8728,6 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 			__func__, lastref_inref, goldenref_inref, altref_inref);
 
 	WRITE_BACK_8(pbi, HEVCD_MCRCC_CTL1, 0x2); /* reset mcrcc */
-	WRITE_BACK_8(pbi, HEVCD_MCRCC_CTL1_DBE1, 0x2); // reset mcrcc
 
 	is_inter = ((pbi->common.frame_type != KEY_FRAME)
 		&& (!pbi->common.intra_only)) ? 1 : 0;
@@ -8866,7 +8735,6 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 	if (!is_inter) { /* I-PIC */
 		/* remove reset -- disables clock */
 		WRITE_BACK_8(pbi, HEVCD_MCRCC_CTL1, 0x0);
-		WRITE_BACK_8(pbi, HEVCD_MCRCC_CTL1_DBE1, 0x0); // remove reset -- disables clock
 
 		return;
 	}
@@ -8875,7 +8743,6 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 		dump_hit_rate(pbi);
 
 	WRITE_BACK_8(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR, (0 << 8) | (1<<1) | 0);
-	WRITE_BACK_8(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1, (0 << 8) | (1<<1) | 0);
 
 	lastcanvas = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 	goldencanvas = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
@@ -8948,14 +8815,12 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 		rdata32 = rdata32 & 0xffff;
 		rdata32 = rdata32 | (rdata32 << 16);
 		WRITE_BACK_32(pbi, HEVCD_MCRCC_CTL2, rdata32);
-		WRITE_BACK_32(pbi, HEVCD_MCRCC_CTL2_DBE1, rdata32);
 
 		/* 2nd-lowest delta_picnum */
 		rdata32 = refcanvas_array[1];
 		rdata32 = rdata32 & 0xffff;
 		rdata32 = rdata32 | (rdata32 << 16);
 		WRITE_BACK_32(pbi, HEVCD_MCRCC_CTL3, rdata32);
-		WRITE_BACK_32(pbi, HEVCD_MCRCC_CTL3_DBE1, rdata32);
 
 	} else {
 		/* previous version -- LAST/GOLDEN ALWAYS -- before 09/13/2017*/
@@ -8966,29 +8831,15 @@ static void  config_mcrcc_axi_hw_fb(struct VP9Decoder_s *pbi)
 		//WRITE_VREG(HEVCD_MCRCC_CTL2, rdata32);
 		READ_INS_WRITE(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, HEVCD_MCRCC_CTL2, 0, 16, 16);
 
-		WRITE_BACK_8(pbi, HEVCD_MPP_ANC_CANVAS_ACCCONFIG_ADDR_DBE1, (0 << 8) | (1<<1) | 0);
-		//rdata32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1);
-		//rdata32 = rdata32 & 0xffff;
-		//rdata32 = rdata32 | ( rdata32 << 16);
-		//WRITE_VREG(HEVCD_MCRCC_CTL2_DBE1, rdata32);
-		READ_INS_WRITE(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1, HEVCD_MCRCC_CTL2_DBE1, 0, 16, 16);
-
 		/* Programme canvas1 */
 		//rdata32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR);
 		//rdata32 = rdata32 & 0xffff;
 		//rdata32 = rdata32 | (rdata32 << 16);
 		//WRITE_VREG(HEVCD_MCRCC_CTL3, rdata32);
 		READ_INS_WRITE(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR, HEVCD_MCRCC_CTL3, 0, 16, 16);
-		//rdata32 = READ_VREG(HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1);
-		//rdata32 = rdata32 & 0xffff;
-		//rdata32 = rdata32 | ( rdata32 << 16);
-		//WRITE_VREG(HEVCD_MCRCC_CTL3_DBE1, rdata32);
-		READ_INS_WRITE(pbi, HEVCD_MPP_ANC_CANVAS_DATA_ADDR_DBE1, HEVCD_MCRCC_CTL3_DBE1, 0, 16, 16);
-
 	}
 
 	WRITE_BACK_16(pbi, HEVCD_MCRCC_CTL1, 0, 0xff0); /* enable mcrcc progressive-mode */
-	WRITE_BACK_16(pbi, HEVCD_MCRCC_CTL1_DBE1, 0, 0xff0); // enable mcrcc progressive-mode
 
 	return;
 }
@@ -10788,7 +10639,8 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		/*pr_info("Decode Frame Data %d\n", pbi->frame_count);*/
 		ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_REGISTER_START);
 #ifdef NEW_FRONT_BACK_CODE
-		if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {
+		if (efficiency_mode == 0 &&
+			(pbi->front_back_mode == 1 || pbi->front_back_mode == 3)) {
 			config_pic_size_fb(pbi, pbi->vp9_param.p.bit_depth);
 			if (cur_pic_config->pic_refs[0])
 				config_mc_buffer_fb(pbi, pbi->vp9_param.p.bit_depth);
@@ -10892,7 +10744,7 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		vp9_loop_filter_frame_init(pbi, pbi->seg_4lf,
 			pbi->lfi, pbi->lf, pbi->default_filt_lvl);
 #ifdef NEW_FRONT_BACK_CODE
-		} else {
+		} else if (!efficiency_mode) {
 
 			WRITE_BACK_RET(pbi);
 			vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
@@ -10942,10 +10794,12 @@ int continue_decoding(struct VP9Decoder_s *pbi)
 		}
 #endif
 #endif
+		pbi->start_decoder_flag = 1;
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DECODE_SLICE);
 	} else {
 		pr_info("Skip search next start code\n");
 		cm->prev_fb_idx = INVALID_IDX;
+		pbi->start_decoder_flag = 1;
 		/*skip, search next start code*/
 		WRITE_VREG(HEVC_DEC_STATUS_REG, VP9_10B_DECODE_SLICE);
 	}
@@ -11864,7 +11718,7 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 				if (mcrcc_cache_alg_flag)
 					dump_hit_rate(pbi);
 				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_EDN);
-				vdec_schedule_work(&pbi->work);
+				vp9_work_implement(pbi);
 			}
 		} else {
 			if (pbi->low_latency_flag) {
@@ -11923,229 +11777,307 @@ static irqreturn_t vvp9_isr_thread_fn(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	if (dec_status != VP9_HEAD_PARSER_DONE) {
-		pbi->process_busy = 0;
-		return IRQ_HANDLED;
-	}
+	if (dec_status == VP9_HEAD_PARSER_DONE) {
 
-	if (debug & 1)
-		dump_pic_list(pbi);
+		if (debug & 1)
+			dump_pic_list(pbi);
 
-	if (pbi->m_ins_flag &&
-			!get_free_buf_count(pbi) && pbi->pic_list_init_done) {
-		vp9_print(pbi, VP9_DEBUG_OUT_PTS,
-			"detected %d frames in a packet, ts: %lld.\n",
-			pbi->one_package_frame_cnt + 1,
-			pbi->chunk->timestamp);
-		pbi->process_busy = 0;
-		pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
-		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-		vdec_schedule_work(&pbi->work);
-		return IRQ_HANDLED;
-	}
+		if (pbi->m_ins_flag &&
+				!get_free_buf_count(pbi) && pbi->pic_list_init_done) {
+			vp9_print(pbi, VP9_DEBUG_OUT_PTS,
+				"detected %d frames in a packet, ts: %lld.\n",
+				pbi->one_package_frame_cnt + 1,
+				pbi->chunk->timestamp);
+			pbi->process_busy = 0;
+			pbi->dec_result = DEC_RESULT_NEED_MORE_BUFFER;
+			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+			vdec_schedule_work(&pbi->work);
+			return IRQ_HANDLED;
+		}
 
-	pbi->one_package_frame_cnt++;
+		pbi->one_package_frame_cnt++;
 
 #ifdef MULTI_INSTANCE_SUPPORT
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
-	if (pbi->m_ins_flag ==0 && pbi->low_latency_flag) {
-		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_RUN, 0);
-		if (debug & PRINT_FLAG_VDEC_DETAIL)
-			pr_info("%s VP9 frame header found \n", __func__);
-	}
+		if (pbi->m_ins_flag ==0 && pbi->low_latency_flag) {
+			vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_EVENT_RUN, 0);
+			if (debug & PRINT_FLAG_VDEC_DETAIL)
+				pr_info("%s VP9 frame header found \n", __func__);
+		}
 #endif
-	if (pbi->m_ins_flag)
-		reset_process_time(pbi);
+		if (pbi->m_ins_flag)
+			reset_process_time(pbi);
 #endif
-	if (pbi->process_state != PROC_STATE_SENDAGAIN
+		if (pbi->process_state != PROC_STATE_SENDAGAIN
 #ifdef SUPPORT_FB_DECODING
-		&& pbi->used_stage_buf_num == 0
-#endif
-		) {
-
-		//pyx can not free tail on front but need free on other place
-		if (pbi->mmu_enable
-#ifdef NEW_FB_CODE
-			&& ((pbi->front_back_mode == 0) || (pbi->front_back_mode == 2))
+			&& pbi->used_stage_buf_num == 0
 #endif
 			) {
-			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
-			vp9_recycle_mmu_buf_tail(pbi);
-			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
-		}
 
-		if (atomic_read(&pbi->vf_pre_count) > 0)
-			vp9_bufmgr_postproc(pbi);
-	}
-
-	if (debug & VP9_DEBUG_SEND_PARAM_WITH_REG) {
-		get_rpm_param(&pbi->vp9_param);
-	} else {
-#ifdef SUPPORT_FB_DECODING
-		if (pbi->used_stage_buf_num > 0) {
-			reset_process_time(pbi);
-			get_s1_buf(pbi);
-
-			if (get_mv_buf(pbi,
-				&pbi->s1_mv_buf_index,
-				&pbi->s1_mpred_mv_wr_start_addr
-				) < 0) {
-				vp9_print(pbi, 0,
-					"%s: Error get_mv_buf fail\n",
-					__func__);
+			//pyx can not free tail on front but need free on other place
+			if (pbi->mmu_enable
+#ifdef NEW_FB_CODE
+				&& ((pbi->front_back_mode == 0) || (pbi->front_back_mode == 2))
+#endif
+				) {
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_START);
+				vp9_recycle_mmu_buf_tail(pbi);
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_MEMORY_END);
 			}
 
-			if (pbi->s1_buf == NULL) {
-				vp9_print(pbi, 0,
-					"%s: Error get_s1_buf fail\n",
-					__func__);
+			if (!efficiency_mode &&
+				atomic_read(&pbi->vf_pre_count) > 0)
+				vp9_bufmgr_postproc(pbi);
+		}
+
+		if (debug & VP9_DEBUG_SEND_PARAM_WITH_REG) {
+			get_rpm_param(&pbi->vp9_param);
+		} else {
+#ifdef SUPPORT_FB_DECODING
+			if (pbi->used_stage_buf_num > 0) {
+				reset_process_time(pbi);
+				get_s1_buf(pbi);
+
+				if (get_mv_buf(pbi,
+					&pbi->s1_mv_buf_index,
+					&pbi->s1_mpred_mv_wr_start_addr
+					) < 0) {
+					vp9_print(pbi, 0,
+						"%s: Error get_mv_buf fail\n",
+						__func__);
+				}
+
+				if (pbi->s1_buf == NULL) {
+					vp9_print(pbi, 0,
+						"%s: Error get_s1_buf fail\n",
+						__func__);
+					pbi->process_busy = 0;
+					return IRQ_HANDLED;
+				}
+
+				for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
+					int ii;
+					for (ii = 0; ii < 4; ii++) {
+						pbi->s1_buf->rpm[i + 3 - ii] =
+							pbi->rpm_ptr[i + 3 - ii];
+						pbi->s1_param.l.data[i + ii] =
+							pbi->rpm_ptr[i + 3 - ii];
+					}
+				}
+
+				mpred_process(pbi);
+#ifdef FB_DECODING_TEST_SCHEDULE
+				pbi->dec_s1_result =
+					DEC_S1_RESULT_TEST_TRIGGER_DONE;
+				vdec_schedule_work(&pbi->s1_work);
+#else
+				WRITE_VREG(HEVC_ASSIST_FB_MMU_MAP_ADDR,
+					pbi->stage_mmu_map_phy_addr +
+					pbi->s1_buf->index * STAGE_MMU_MAP_SIZE);
+
+				start_s1_decoding(pbi);
+#endif
+				start_process_time(pbi);
 				pbi->process_busy = 0;
 				return IRQ_HANDLED;
-			}
-
-			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
-				int ii;
-				for (ii = 0; ii < 4; ii++) {
-					pbi->s1_buf->rpm[i + 3 - ii] =
-						pbi->rpm_ptr[i + 3 - ii];
-					pbi->s1_param.l.data[i + ii] =
-						pbi->rpm_ptr[i + 3 - ii];
-				}
-			}
-
-			mpred_process(pbi);
-#ifdef FB_DECODING_TEST_SCHEDULE
-			pbi->dec_s1_result =
-				DEC_S1_RESULT_TEST_TRIGGER_DONE;
-			vdec_schedule_work(&pbi->s1_work);
-#else
-			WRITE_VREG(HEVC_ASSIST_FB_MMU_MAP_ADDR,
-				pbi->stage_mmu_map_phy_addr +
-				pbi->s1_buf->index * STAGE_MMU_MAP_SIZE);
-
-			start_s1_decoding(pbi);
+			} else
 #endif
-			start_process_time(pbi);
+			{
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START);
+				for (i = 0; i < (RPM_VALID_E - RPM_BEGIN); i += 4) {
+					int ii;
+					for (ii = 0; ii < 4; ii++)
+						pbi->vp9_param.l.data[i + ii] =
+							pbi->rpm_ptr[i + 3 - ii];
+				}
+				ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
+			}
+		}
+
+		// get pixelaspect
+		ctx->height_aspect_ratio = 1;
+		ctx->width_aspect_ratio = 1;
+
+		pbi->frame_width = pbi->vp9_param.p.width;
+		pbi->frame_height = pbi->vp9_param.p.height;
+
+		if (is_oversize(pbi->frame_width, pbi->frame_height)) {
+			continue_decoding(pbi);
+			vp9_print(pbi, 0, "pic size(%d x %d) is oversize\n",
+				pbi->frame_width, pbi->frame_height);
+			if (pbi->m_ins_flag)
+				start_process_time(pbi);
+			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			return IRQ_HANDLED;
-		} else
-#endif
-		{
-			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_START);
-			for (i = 0; i < (RPM_END - RPM_BEGIN); i += 4) {
-				int ii;
-				for (ii = 0; ii < 4; ii++)
-					pbi->vp9_param.l.data[i + ii] =
-						pbi->rpm_ptr[i + 3 - ii];
-			}
-			ATRACE_COUNTER(pbi->trace.decode_header_memory_time_name, TRACE_HEADER_RPM_END);
 		}
-	}
 
-	// get pixelaspect
-	ctx->height_aspect_ratio = 1;
-	ctx->width_aspect_ratio = 1;
+		if (!v4l_res_change(pbi)) {
+			if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
+				struct aml_vdec_ps_infos ps;
+				struct vdec_comp_buf_info comp;
 
-	pbi->frame_width = pbi->vp9_param.p.width;
-	pbi->frame_height = pbi->vp9_param.p.height;
+				pr_debug("set ucode parse\n");
+				if (get_double_write_mode(pbi) != 16) {
+					vvp9_get_comp_buf_info(pbi, &comp);
+					vdec_v4l_set_comp_buf_info(ctx, &comp);
+				}
 
-	if (is_oversize(pbi->frame_width, pbi->frame_height)) {
-		continue_decoding(pbi);
-		vp9_print(pbi, 0, "pic size(%d x %d) is oversize\n",
-			pbi->frame_width, pbi->frame_height);
-		if (pbi->m_ins_flag)
-			start_process_time(pbi);
-		pbi->postproc_done = 0;
-		pbi->process_busy = 0;
-		return IRQ_HANDLED;
-	}
+				vvp9_get_ps_info(pbi, &ps);
+				/*notice the v4l2 codec.*/
+				vdec_v4l_set_ps_infos(ctx, &ps);
 
-	if (!v4l_res_change(pbi)) {
-		if (ctx->param_sets_from_ucode && !pbi->v4l_params_parsed) {
-			struct aml_vdec_ps_infos ps;
-			struct vdec_comp_buf_info comp;
+				pbi->init_pic_w = pbi->frame_width;
+				pbi->init_pic_h = pbi->frame_height;
 
-			pr_debug("set ucode parse\n");
-			if (get_double_write_mode(pbi) != 16) {
-				vvp9_get_comp_buf_info(pbi, &comp);
-				vdec_v4l_set_comp_buf_info(ctx, &comp);
+				pbi->last_width = pbi->frame_width;
+				pbi->last_height = pbi->frame_height;
+
+				pbi->v4l_params_parsed	= true;
+				pbi->postproc_done = 0;
+				pbi->process_busy = 0;
+				ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+
+#ifdef NEW_FB_CODE
+				if (pbi->front_back_mode == 1) {
+					u32 bit_depth = pbi->vp9_param.p.bit_depth;
+					int cur_mmu_4k_number = pbi->fb_ifbuf_num * vp9_mmu_page_num(pbi,
+						pbi->init_pic_w, pbi->init_pic_h, bit_depth == 10);
+
+					if (pbi->mmu_fb_4k_number < cur_mmu_4k_number) {
+						vp9_print(pbi, 0,
+							"%s: need realloc cur_mmu_4k_number %d, mmu_4k_number %d\n",
+							__func__, cur_mmu_4k_number, pbi->mmu_fb_4k_number);
+						uninit_mmu_fb_bufstate(pbi);
+						init_mmu_fb_bufstate(pbi, cur_mmu_4k_number);
+					}
+				}
+#endif
+				dec_again_process(pbi);
+
+				return IRQ_HANDLED;
+			} else {
+				if (!pbi->pic_list_init_done) {
+					struct vdec_pic_info pic;
+
+					vdec_v4l_get_pic_info(ctx, &pic);
+					pbi->used_buf_num = pic.dpb_frames +
+						pic.dpb_margin;
+					if (pbi->used_buf_num > MAX_BUF_NUM)
+						pbi->used_buf_num = MAX_BUF_NUM;
+
+					init_pic_list(pbi);
+#ifdef NEW_FB_CODE
+					if ((pbi->front_back_mode != 1) && (pbi->front_back_mode != 3))
+#endif
+						init_pic_list_hw(pbi);
+
+					init_mv_buf_list(pbi);
+
+					vdec_parms_setup_and_sanity_check(pbi);
+
+					pbi->pic_list_init_done = true;
+				}
 			}
-
-			vvp9_get_ps_info(pbi, &ps);
-			/*notice the v4l2 codec.*/
-			vdec_v4l_set_ps_infos(ctx, &ps);
-
-			pbi->init_pic_w = pbi->frame_width;
-			pbi->init_pic_h = pbi->frame_height;
-
-			pbi->last_width = pbi->frame_width;
-			pbi->last_height = pbi->frame_height;
-
-			pbi->v4l_params_parsed	= true;
+		} else {
 			pbi->postproc_done = 0;
 			pbi->process_busy = 0;
 			ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-
-#ifdef NEW_FB_CODE
-			if (pbi->front_back_mode == 1) {
-				u32 bit_depth = pbi->vp9_param.p.bit_depth;
-				int cur_mmu_4k_number = pbi->fb_ifbuf_num * vp9_mmu_page_num(pbi,
-					pbi->init_pic_w, pbi->init_pic_h, bit_depth == 10);
-
-				if (pbi->mmu_fb_4k_number < cur_mmu_4k_number) {
-					vp9_print(pbi, 0,
-						"%s: need realloc cur_mmu_4k_number %d, mmu_4k_number %d\n",
-						__func__, cur_mmu_4k_number, pbi->mmu_fb_4k_number);
-					uninit_mmu_fb_bufstate(pbi);
-					init_mmu_fb_bufstate(pbi, cur_mmu_4k_number);
-				}
-			}
-#endif
 			dec_again_process(pbi);
-
 			return IRQ_HANDLED;
-		} else {
-			if (!pbi->pic_list_init_done) {
-				struct vdec_pic_info pic;
-
-				vdec_v4l_get_pic_info(ctx, &pic);
-				pbi->used_buf_num = pic.dpb_frames +
-					pic.dpb_margin;
-				if (pbi->used_buf_num > MAX_BUF_NUM)
-					pbi->used_buf_num = MAX_BUF_NUM;
-
-				init_pic_list(pbi);
-#ifdef NEW_FB_CODE
-				if ((pbi->front_back_mode != 1) && (pbi->front_back_mode != 3))
-#endif
-					init_pic_list_hw(pbi);
-
-				init_mv_buf_list(pbi);
-
-				vdec_parms_setup_and_sanity_check(pbi);
-
-				pbi->pic_list_init_done = true;
-			}
 		}
-	} else {
-		pbi->postproc_done = 0;
-		pbi->process_busy = 0;
-		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
-		dec_again_process(pbi);
-		return IRQ_HANDLED;
-	}
 
-	continue_decoding(pbi);
-	pbi->postproc_done = 0;
-	pbi->process_busy = 0;
+		continue_decoding(pbi);
+		if (!efficiency_mode)
+			pbi->postproc_done = 0;
 
 #ifdef MULTI_INSTANCE_SUPPORT
-	if (pbi->m_ins_flag)
-		start_process_time(pbi);
+		if (pbi->m_ins_flag)
+			start_process_time(pbi);
 #endif
 
-	vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
-	ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+		vdec_profile(hw_to_vdec(pbi), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
+		ATRACE_COUNTER(pbi->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+	}
+
+	if (efficiency_mode &&
+		dec_status == VP9_HEAD_PARSER_DONE) {
+		struct VP9_Common_s *const cm = &pbi->common;
+		struct PIC_BUFFER_CONFIG_s *cur_pic_config = &cm->cur_frame->buf;
+
+		if (pbi->process_state != PROC_STATE_SENDAGAIN
+#ifdef SUPPORT_FB_DECODING
+			&& pbi->used_stage_buf_num == 0
+#endif
+		) {
+			if (atomic_read(&pbi->vf_pre_count) > 0)
+				vp9_bufmgr_postproc(pbi);
+		}
+
+		pbi->postproc_done = 0;
+
+#ifdef NEW_FRONT_BACK_CODE
+		if (pbi->start_decoder_flag == 1 &&
+			(pbi->front_back_mode == 1 || pbi->front_back_mode == 3)) {
+			init_pic_list_hw_fb(pbi);
+
+			config_pic_size_fb(pbi, pbi->vp9_param.p.bit_depth);
+			if (cur_pic_config->pic_refs[0])
+				config_mc_buffer_fb(pbi, pbi->vp9_param.p.bit_depth);
+			config_mcrcc_axi_hw_fb(pbi);
+			config_sao_hw_fb(pbi);
+			config_loop_filter_hw(pbi, &pbi->vp9_param);
+
+			WRITE_BACK_RET(pbi);
+			vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+				"write system instruction, ins_offset = %d, addr = 0x%x\n",
+				pbi->ins_offset, pbi->fr.sys_imem_ptr);
+			pbi->sys_imem_ptr = pbi->fr.sys_imem_ptr;
+			pbi->sys_imem_ptr_v = pbi->fr.sys_imem_ptr_v;
+#ifdef LARGE_INSTRUCTION_SPACE_SUPORT
+			if (pbi->ins_offset > 1024) {
+				vp9_print(pbi, 0,
+					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>512)\n", pbi->ins_offset);
+				pbi->ins_offset = 1024;
+			} else if (pbi->ins_offset < 512) {
+				pbi->ins_offset = 512;
+				WRITE_BACK_RET(pbi);
+			}
+			memcpy(pbi->sys_imem_ptr_v, (void*)(&pbi->instruction[0]), pbi->ins_offset*4);
+			//pbi->ins_offset = 0; //for next slice
+			//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+			pbi->sys_imem_ptr += 4 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			pbi->sys_imem_ptr_v += 4 * FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#else
+			if (pbi->ins_offset > 256) {
+				vp9_print(pbi, 0,
+					"!!!!!Error!!!!!!!!, ins_offset %d is too big (>256)\n", pbi->ins_offset);
+				pbi->ins_offset = 256;
+			}
+			memcpy(pbi->sys_imem_ptr_v, (void*)(&pbi->instruction[0]), pbi->ins_offset*4);
+			//pbi->ins_offset = 0; //for next slice
+			//copyToDDR_32bits(hevc->fr.sys_imem_ptr, instruction, ins_offset*4, 0);
+			pbi->sys_imem_ptr += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+			pbi->sys_imem_ptr_v += FB_IFBUF_SYS_IMEM_BLOCK_SIZE;
+#endif
+			if (pbi->sys_imem_ptr >= pbi->fb_buf_sys_imem.buf_end) {
+				vp9_print(pbi, PRINT_FLAG_VDEC_DETAIL,
+					"sys_imem_ptr is 0x%x, wrap around\n", pbi->sys_imem_ptr);
+				pbi->sys_imem_ptr = pbi->fb_buf_sys_imem.buf_start;
+				pbi->sys_imem_ptr_v = pbi->fb_buf_sys_imem_addr;
+			}
+
+			if (pbi->front_back_mode == 1) {
+				//WRITE_VREG(HEVC_ASSIST_RING_F_INDEX, 8);
+				//WRITE_VREG(HEVC_ASSIST_RING_F_WPTR, hevc->sys_imem_ptr);
+				//imem_count++;
+				WRITE_VREG(DOS_HEVC_STALL_START, 0); // disable stall
+			}
+		}
+#endif
+
+	}
+	pbi->process_busy = 0;
 	return IRQ_HANDLED;
 }
 
@@ -13171,10 +13103,8 @@ static void vp9_work_back(struct work_struct *work)
 }
 #endif
 
-static void vp9_work(struct work_struct *work)
+static void vp9_work_implement(struct VP9Decoder_s *pbi)
 {
-	struct VP9Decoder_s *pbi = container_of(work,
-		struct VP9Decoder_s, work);
 	struct aml_vcodec_ctx *ctx = pbi->v4l2_ctx;
 	struct vdec_s *vdec = hw_to_vdec(pbi);
 	/* finished decoding one frame or error,
@@ -13472,6 +13402,14 @@ static void vp9_work(struct work_struct *work)
 					| CORE_MASK_HEVC);
 #endif
 	trigger_schedule(pbi);
+}
+
+static void vp9_work(struct work_struct *work)
+{
+	struct VP9Decoder_s *pbi = container_of(work,
+			struct VP9Decoder_s, work);
+
+	vp9_work_implement(pbi);
 }
 
 static int vp9_hw_ctx_restore(struct VP9Decoder_s *pbi)
@@ -13985,6 +13923,10 @@ static void run_front(struct vdec_s *vdec)
 #ifdef NEW_FB_CODE
 	if (pbi->front_back_mode == 1 || pbi->front_back_mode == 3) {
 		u32 decode_mode;
+		if (efficiency_mode)
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 1 << 1);
+		else
+			WRITE_VREG(HEVC_EFFICIENCY_MODE, 0 << 1);
 		/*check to do*/
 		vp9_hw_init(pbi, pbi->frontend_decoded_count == 0, 1, 0);
 		if (test_debug == 10) {
@@ -15511,13 +15453,16 @@ module_param_array(run_count_back, uint,
 		&max_decode_instance_num, 0664);
 
 module_param(test_debug, uint, 0664);
-		MODULE_PARM_DESC(test_debug, "\n fb_ucode_debug\n");
+MODULE_PARM_DESC(test_debug, "\n fb_ucode_debug\n");
 
 module_param(test_dbg, uint, 0664);
-		MODULE_PARM_DESC(test_dbg, "\n fb_ucode_debug\n");
+MODULE_PARM_DESC(test_dbg, "\n fb_ucode_debug\n");
 
 module_param(test_schedule, uint, 0664);
-		MODULE_PARM_DESC(test_schedule, "\n test_schedule\n");
+MODULE_PARM_DESC(test_schedule, "\n test_schedule\n");
+
+module_param(efficiency_mode, uint, 0664);
+MODULE_PARM_DESC(efficiency_mode, "\n  efficiency_mode\n");
 #endif
 
 module_init(amvdec_vp9_driver_init_module);
