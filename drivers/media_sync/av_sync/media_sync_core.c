@@ -820,7 +820,7 @@ long mediasync_ins_alloc(s32 sDemuxId,
 
 			pInstance->mDemuxId = sDemuxId;
 			pInstance->mPcrPid = sPcrPid;
-			mediasync_ins_init_syncinfo(pInstance);
+			// mediasync_ins_init_syncinfo(pInstance);
 			pInstance->mHasAudio = 0;
 			pInstance->mHasVideo = 0;
 			pInstance->mVideoWorkMode = 0;
@@ -1038,6 +1038,7 @@ long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 	s64 current_systemtime = 0;
 	s64 diff_system_time = 0;
 	s64 diff_mediatime = 0;
+	u32 k = 0;
 
 	if (pSyncManage == NULL) {
 		return -1;
@@ -1051,16 +1052,18 @@ long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 
 	current_stc = get_stc_time_us(pInstance);
 	current_systemtime = get_system_time_us();
+	k = pInstance->mSpeed.mNumerator * pInstance->mPcrSlope.mNumerator;
+	k = div_u64(k, pInstance->mSpeed.mDenominator);
 #if 0
 	pInstance->mSyncMode = MEDIA_SYNC_PCRMASTER;
 #endif
 	if (pInstance->mSyncMode == MEDIA_SYNC_PCRMASTER) {
 		if (lSystemTime == 0) {
 			if (current_stc != 0) {
-				diff_system_time = current_stc - pInstance->mLastStc;
+				diff_system_time = div_u64((current_stc - pInstance->mLastStc) * k, pInstance->mSpeed.mDenominator);
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			} else {
-				diff_system_time = current_systemtime - pInstance->mLastRealTime;
+				diff_system_time = div_u64((current_systemtime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			}
 			if (pInstance->mSyncModeChange == 1
@@ -1075,10 +1078,10 @@ long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 			}
 		} else {
 			if (current_stc != 0) {
-				diff_system_time = lSystemTime - pInstance->mLastRealTime;
+				diff_system_time = div_u64((lSystemTime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			} else {
-				diff_system_time = lSystemTime - pInstance->mLastRealTime;
+				diff_system_time = div_u64((lSystemTime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
 				diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			}
 
@@ -1094,7 +1097,7 @@ long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 		}
 	} else {
 		if (lSystemTime == 0) {
-			diff_system_time = current_systemtime - pInstance->mLastRealTime;
+			diff_system_time = div_u64((current_systemtime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
 			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 
 			if (pInstance->mSyncModeChange == 1
@@ -1113,19 +1116,21 @@ long mediasync_ins_update_mediatime(MediaSyncManager* pSyncManage,
 				pInstance->mSyncModeChange = 0;
 			}
 	} else {
-			diff_system_time = lSystemTime - pInstance->mLastRealTime;
+			diff_system_time = div_u64((lSystemTime - pInstance->mLastRealTime) * k, pInstance->mSpeed.mDenominator);
 			diff_mediatime = lMediaTime - pInstance->mLastMediaTime;
 			if (pInstance->mSyncModeChange == 1
 				|| forceUpdate
 				|| diff_mediatime < 0
 				|| ((diff_mediatime > 0)
 				&& (get_llabs(diff_system_time - diff_mediatime) > pInstance->mUpdateTimeThreshold))) {
-				mediasync_pr_info(0,pInstance,"mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld\n",
+				mediasync_pr_info(0,pInstance,"mSyncMode:%d update time stc diff:%lld media diff:%lld lSystemTime:%lld lMediaTime:%lld,k:%d, mUpdateTimeThreshold:%lld\n",
 					pInstance->mSyncMode,
 					diff_system_time,
 					diff_mediatime,
 					lSystemTime,
-					lMediaTime);
+					lMediaTime,
+					k,
+					pInstance->mUpdateTimeThreshold);
 				pInstance->mLastMediaTime = lMediaTime;
 				pInstance->mLastRealTime = lSystemTime;
 				pInstance->mLastStc = current_stc + lSystemTime - current_systemtime;
