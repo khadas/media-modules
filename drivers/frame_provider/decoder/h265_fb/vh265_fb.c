@@ -2547,30 +2547,6 @@ static int is_oversize(int w, int h)
 	return false;
 }
 
-int is_oversize_ex(int w, int h)
-{
-	int max = (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) ?
-		MAX_SIZE_8K : MAX_SIZE_4K;
-
-	if (w == 0 || h == 0)
-		return true;
-	if (get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) {
-		if (w > 8192 || h > 4608)
-			return true;
-	} else {
-		if (w > 4096 || h > 2304)
-			return true;
-	}
-
-	if (w < 0 || h < 0)
-		return true;
-
-	if (h != 0 && (w > max / h))
-		return true;
-
-	return false;
-}
-
 void check_head_error(struct hevc_state_s *hevc)
 {
 #define pcm_enabled_flag                                  0x040
@@ -7655,7 +7631,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 		hevc->TMVPFlag = rpm_param->p.slice_temporal_mvp_enable_flag;
 		hevc->isNextSliceSegment = rpm_param->p.dependent_slice_segment_flag ? 1 : 0;
-		if (is_oversize_ex(rpm_param->p.pic_width_in_luma_samples,
+		if (is_oversize(rpm_param->p.pic_width_in_luma_samples,
 				rpm_param->p.pic_height_in_luma_samples)) {
 			hevc_print(hevc, 0, "over size : %u x %u.\n",
 				rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples);

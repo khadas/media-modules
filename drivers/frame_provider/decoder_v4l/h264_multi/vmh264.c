@@ -5532,8 +5532,19 @@ static int vh264_set_params(struct vdec_h264_hw_s *hw,
 			mb_height);
 			hw->error_frame_width = mb_width << 4;
 			hw->error_frame_height = mb_height << 4;
+		hw->stat |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
 		return -1;
 	}
+
+	if ((hw->error_frame_width) && (hw->error_frame_height)) {
+		//chroma_format_idc 0 means no CbCr, level_idc can't be 0 at same time
+		if ((!param4) && (!param2)) {
+			dpb_print(DECODE_ID(hw), 0,
+				"error params after oversize\n");
+			return -1;
+		}
+	}
+
 	hw->error_frame_width = 0;
 	hw->error_frame_height = 0;
 

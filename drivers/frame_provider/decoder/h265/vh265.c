@@ -2086,52 +2086,12 @@ static int is_oversize(int w, int h)
 	int max = MAX_SIZE_8K;
 
 	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M))
 		max = MAX_SIZE_4K;
 	else if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A))
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) ||
+			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
 		max = MAX_SIZE_2K;
-
-	if (w < 0 || h < 0)
-		return true;
-
-	if (h != 0 && (w > max / h))
-		return true;
-
-	return false;
-}
-
-int is_oversize_ex(int w, int h)
-{
-	int max = MAX_SIZE_8K;
-
-	if ((get_cpu_major_id() < AM_MESON_CPU_MAJOR_ID_SM1) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5M) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2))
-		max = MAX_SIZE_4K;
-
-	if (w == 0 || h == 0)
-		return true;
-	if ((get_cpu_major_id() >= AM_MESON_CPU_MAJOR_ID_SM1) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_T5M) &&
-		(get_cpu_major_id() != AM_MESON_CPU_MAJOR_ID_TXHD2)) {
-		if (w >= h) {
-			if (w > 8192 || h > 4608)
-				return true;
-		} else if (w < h) {
-			if (w > 4608 || h > 8192)
-				return true;
-		}
-	} else {
-		if (w >= h) {
-			if (w > 4096 || h > 2304)
-				return true;
-		} else if (w < h) {
-			if (w > 2304 || h > 4096)
-				return true;
-		}
-	}
 
 	if (w < 0 || h < 0)
 		return true;
@@ -6738,7 +6698,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 
 		hevc->TMVPFlag = rpm_param->p.slice_temporal_mvp_enable_flag;
 		hevc->isNextSliceSegment = rpm_param->p.dependent_slice_segment_flag ? 1 : 0;
-		if (is_oversize_ex(rpm_param->p.pic_width_in_luma_samples,
+		if (is_oversize(rpm_param->p.pic_width_in_luma_samples,
 				rpm_param->p.pic_height_in_luma_samples)) {
 			hevc_print(hevc, 0, "over size : %u x %u.\n",
 				rpm_param->p.pic_width_in_luma_samples, rpm_param->p.pic_height_in_luma_samples);
@@ -7027,7 +6987,7 @@ static int hevc_slice_segment_header_process(struct hevc_state_s *hevc,
 			hevc->new_pic = 0;
 		}
 	} else {
-	if (hevc->wait_buf == 1) {
+		if (hevc->wait_buf == 1) {
 			pic_list_process(hevc);
 			hevc->cur_pic = get_new_pic(hevc, rpm_param);
 			if (hevc->cur_pic == NULL)
