@@ -555,7 +555,6 @@ static void vh264_work(struct work_struct *work);
 static void vh264_timeout_work(struct work_struct *work);
 static void vh264_notify_work(struct work_struct *work);
 #ifdef MH264_USERDATA_ENABLE
-static void user_data_ready_notify_work(struct work_struct *work);
 static void vmh264_wakeup_userdata_poll(struct vdec_s *vdec);
 #endif
 
@@ -8541,9 +8540,6 @@ static s32 vh264_init(struct vdec_h264_hw_s *hw)
 	INIT_WORK(&hw->work, vh264_work);
 	INIT_WORK(&hw->notify_work, vh264_notify_work);
 	INIT_WORK(&hw->timeout_work, vh264_timeout_work);
-#ifdef MH264_USERDATA_ENABLE
-	INIT_WORK(&hw->user_data_ready_work, user_data_ready_notify_work);
-#endif
 
 	fw = vmalloc(sizeof(struct firmware_s) + fw_size);
 	if (IS_ERR_OR_NULL(fw))
@@ -9118,23 +9114,17 @@ static void vmh264_udc_fill_vpts(struct vdec_h264_hw_s *hw,
 	p_userdata_rec->meta_info.flags |=
 		p_H264_Dpb->mVideo.dec_picture->pic_struct << 12;
 
-	hw->wait_for_udr_send = 1;
-	vdec_schedule_work(&hw->user_data_ready_work);
-#endif
-}
-
-static void user_data_ready_notify_work(struct work_struct *work)
-{
-	struct vdec_h264_hw_s *hw = container_of(work,
-		struct vdec_h264_hw_s, user_data_ready_work);
-
 	mutex_lock(&hw->userdata_mutex);
 
 	hw->userdata_info.records[hw->userdata_info.write_index]
 		= hw->ud_record;
+
 	hw->userdata_info.write_index++;
 	if (hw->userdata_info.write_index >= USERDATA_FIFO_NUM)
 		hw->userdata_info.write_index = 0;
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "%s: poc %d, rec_len %d, vpts %llu, vpts_valid %d, write_index %d\n",
+		__func__, hw->ud_record.meta_info.poc_number, p_userdata_rec->rec_len, hw->ud_record.meta_info.vpts,
+		hw->ud_record.meta_info.vpts_valid, hw->userdata_info.write_index);
 
 	mutex_unlock(&hw->userdata_mutex);
 
@@ -9142,8 +9132,7 @@ static void user_data_ready_notify_work(struct work_struct *work)
 	dump_userdata_record(hw, &hw->ud_record);
 #endif
 	vdec_wakeup_userdata_poll(hw_to_vdec(hw));
-
-	hw->wait_for_udr_send = 0;
+#endif
 }
 
 static int vmh264_user_data_read(struct vdec_s *vdec,
@@ -9177,7 +9166,9 @@ static int vmh264_user_data_read(struct vdec_s *vdec,
 
 	rec_len = p_userdata_rec->rec_len;
 	rec_data_start = p_userdata_rec->rec_start + hw->userdata_info.data_buf;
-
+	dpb_print(DECODE_ID(hw), PRINT_FLAG_SEI_DETAIL, "%s:poc %d, rec_len %d, vpts %llu, vpts_valid %d, (ri/wi) %d/%d\n",
+		__func__, p_userdata_rec->meta_info.poc_number, rec_len,
+		p_userdata_rec->meta_info.vpts, p_userdata_rec->meta_info.vpts_valid, rec_ri, rec_wi);
 	if (rec_len <= puserdata_para->buf_len) {
 		/* dvb user data buffer is enought to
 		copy the whole recored. */
