@@ -1091,6 +1091,18 @@ static int is_oversize(int w, int h)
 	return false;
 }
 
+void pic_mutex_lock(struct h264_dpb_stru *p_H264_Dpb)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)p_H264_Dpb->vdec->private;
+	mutex_lock(&hw->pic_mutex);
+}
+
+void pic_mutex_unlock(struct h264_dpb_stru *p_H264_Dpb)
+{
+	struct vdec_h264_hw_s *hw = (struct vdec_h264_hw_s *)p_H264_Dpb->vdec->private;
+	mutex_unlock(&hw->pic_mutex);
+}
+
 static int is_crop_valid(struct vdec_h264_hw_s *hw, int mb_width, int mb_height, u32 param2)
 {
 	struct h264_dpb_stru *p_H264_Dpb = &hw->dpb;

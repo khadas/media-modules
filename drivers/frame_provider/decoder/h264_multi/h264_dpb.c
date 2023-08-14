@@ -5894,6 +5894,8 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 						 *  p_Vid->height_cr,
 						 */
 						 1);
+
+		pic_mutex_lock(p_H264_Dpb);
 		if (p_H264_Dpb->mVideo.dec_picture) {
 			u32 offset_lo, offset_hi;
 			struct DecodedPictureBuffer *p_Dpb =
@@ -5956,9 +5958,12 @@ int h264_slice_header_process(struct h264_dpb_stru *p_H264_Dpb, int *frame_num_g
 			}
 #endif
 			if (post_picture_early(p_H264_Dpb->vdec,
-				p_H264_Dpb->mVideo.dec_picture->buf_spec_num))
+				p_H264_Dpb->mVideo.dec_picture->buf_spec_num)) {
+				pic_mutex_unlock(p_H264_Dpb);
 				return -1;
+			}
 		}
+		pic_mutex_unlock(p_H264_Dpb);
 	}
 
 	if (p_H264_Dpb->buf_alloc_fail)

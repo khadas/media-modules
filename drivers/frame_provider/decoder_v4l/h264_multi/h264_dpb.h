@@ -972,6 +972,10 @@ int release_colocate_buf(struct h264_dpb_stru *p_H264_Dpb, int index);
 
 int v4l_get_free_buf_idx(struct vdec_s *vdec);
 
+void pic_mutex_lock(struct h264_dpb_stru *p_H264_Dpb);
+
+void pic_mutex_unlock(struct h264_dpb_stru *p_H264_Dpb);
+
 int store_picture_in_dpb(struct h264_dpb_stru *p_H264_Dpb,
 			struct StorablePicture *p, unsigned char data_flag);
 
