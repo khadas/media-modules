@@ -145,6 +145,7 @@ struct aml_buf_fbc {
  * @vframe	: The video frame struct.
  * @vb		: The vb2 struct defined by v4l2.
  * @meta_ptr	: The handle of meta date.
+ * @flush_flag	: Mark the buffer flush at the first time to alloc.
  */
 struct aml_buf {
 	u32			index;
@@ -162,6 +163,7 @@ struct aml_buf {
 	ulong			meta_ptr;
 	void			*vpp_buf;
 	void			*ge2d_buf;
+	bool			flush_flag;
 };
 
 /*

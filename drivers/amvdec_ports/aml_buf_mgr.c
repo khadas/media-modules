@@ -349,6 +349,42 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 	}
 }
 
+static void aml_buf_flush(struct aml_buf_mgr_s *bm,
+				struct aml_buf *aml_buf)
+{
+	struct aml_buf_config *cfg = &bm->config;
+	void *buf = NULL;
+	int i;
+
+	if (aml_buf->flush_flag)
+		return;
+
+	if (cfg->enable_secure)
+		return;
+
+	for (i = 0 ; i < aml_buf->num_planes ; i++) {
+		buf = codec_mm_phys_to_virt(aml_buf->planes_tw[i].addr);
+		if (buf) {
+			codec_mm_dma_flush(buf,
+				aml_buf->planes_tw[i].length, DMA_FROM_DEVICE);
+		} else {
+			buf = codec_mm_vmap(aml_buf->planes_tw[i].addr,
+				aml_buf->planes_tw[i].length);
+			if (!buf) {
+				v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
+					"%s flush tw dma buffer fail!\n", __func__);
+				return;
+			}
+
+			codec_mm_dma_flush(buf,
+				aml_buf->planes_tw[i].length, DMA_FROM_DEVICE);
+			codec_mm_unmap_phyaddr(buf);
+		}
+	}
+
+	aml_buf->flush_flag = true;
+}
+
 static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 				   struct aml_buf *aml_buf,
 				   void *priv)
@@ -435,6 +471,7 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 						bm->bc.id,
 						i));
 			aml_buf->planes_tw[i].dbuf = vb->planes[i].dbuf;
+			aml_buf_flush(bm, aml_buf);
 
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 				"Buffer info, id:%x, %c:(0x%lx, %d), TW:%x\n",
