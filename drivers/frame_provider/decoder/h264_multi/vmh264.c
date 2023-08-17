@@ -713,9 +713,6 @@ struct vdec_h264_hw_s {
 	/* recycle buffer for user data storing all itu35 records */
 	void *sei_user_data_buffer;
 	u32 sei_user_data_wp;
-#ifdef MH264_USERDATA_ENABLE
-	struct work_struct user_data_ready_work;
-#endif
 	struct StorablePicture *last_dec_picture;
 
 	ulong lmem_phy_addr;
@@ -9184,9 +9181,7 @@ static int vh264_stop(struct vdec_h264_hw_s *hw)
 	WRITE_VREG(MDEC_DOUBLEW_CFG0, 0);
 	WRITE_VREG(MDEC_DOUBLEW_CFG1, 0);
 #endif
-#ifdef MH264_USERDATA_ENABLE
-	cancel_work_sync(&hw->user_data_ready_work);
-#endif
+
 	cancel_work_sync(&hw->notify_work);
 	cancel_work_sync(&hw->timeout_work);
 	cancel_work_sync(&hw->work);
