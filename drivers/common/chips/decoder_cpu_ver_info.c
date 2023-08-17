@@ -749,7 +749,6 @@ bool is_cpu_t7c(void)
 }
 EXPORT_SYMBOL(is_cpu_t7c);
 
-
 /*
 	feature from dos dev functions
 */
@@ -760,6 +759,17 @@ bit1: force support all video format;
 #define FORCE_VDEC_NO_PARSER     BIT(0)
 #define FORCE_VDEC_SUPPORT_FMT   BIT(1)
 static u32 force_dos_support;
+
+inline bool is_hevc_align32(int blkmod)
+{
+	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A) ||
+		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(is_hevc_align32);
 
 inline bool is_support_new_dos_dev(void)
 {

@@ -5496,8 +5496,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 		data32 |= 0x1; /*disable cm*/
 
 	data32 &= (~(3 << 14));
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)) {
+	if (is_hevc_align32(hevc->mem_map_mode)) {
 		data32 |= (1 << 14);
 	} else {
 		data32 |= (2 << 14);
@@ -5535,8 +5534,7 @@ static void config_sao_hw(struct hevc_state_s *hevc, union param_u *params)
 	data32 |= (hevc->endian & 0xf);  /* valid only when double write only */
 
 	data32 &= (~(3 << 8));
-	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-		(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)) {
+	if (is_hevc_align32(hevc->mem_map_mode)) {
 		data32 |= (1 << 8);
 	} else {
 		data32 |= (2 << 8);
@@ -7612,8 +7610,7 @@ static void set_canvas(struct hevc_state_s *hevc, struct PIC_s *pic)
 		canvas_h = pic->height /
 			get_double_write_ratio(pic->double_write_mode & 0xf);
 
-		if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) ||
-			(get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_S1A)) {
+		if (is_hevc_align32(hevc->mem_map_mode)) {
 			canvas_w = ALIGN(canvas_w, 32);
 		} else {
 			canvas_w = ALIGN(canvas_w, 64);

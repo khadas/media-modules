@@ -188,6 +188,8 @@ inline bool is_support_new_dos_dev(void);
 
 struct dos_of_dev_s *dos_dev_get(void);
 
+inline bool is_hevc_align32(int blkmod);
+
 /* clk get */
 inline u32 vdec_max_clk_get(void);
 

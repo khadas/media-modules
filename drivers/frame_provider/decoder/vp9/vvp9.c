@@ -6225,7 +6225,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 #else
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~(3 << 14));
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) {
+	if (is_hevc_align32(pbi->mem_map_mode)) {
 		data32 |= (1 << 14);
 	} else {
 		data32 |= (2 << 14); /* line align with 64*/
@@ -6328,7 +6328,7 @@ static void config_sao_hw(struct VP9Decoder_s *pbi, union param_u *params)
 			data32 &= ~(1 << 12); /* NV12 */
 	}
 	data32 &= (~(3 << 8));
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) {
+	if (is_hevc_align32(pbi->mem_map_mode)) {
 		data32 |= (1 << 8);
 	} else {
 		data32 |= (2 << 8); /* line align with 64 for dw only */
@@ -7622,7 +7622,7 @@ static void set_canvas(struct VP9Decoder_s *pbi,
 					pic_config->double_write_mode & 0xf);
 
 		/* sao ctrl1 reg alignline with 64, align with 64 */
-		if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)
+		if (is_hevc_align32(pbi->mem_map_mode))
 			canvas_w = ALIGN(canvas_w, 32);
 		else
 			canvas_w = ALIGN(canvas_w, 64);

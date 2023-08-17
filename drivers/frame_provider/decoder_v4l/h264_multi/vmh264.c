@@ -1539,7 +1539,7 @@ static void  hevc_mcr_sao_global_hw_init(struct vdec_h264_hw_s *hw,
 		data32 |= (1 << 8); /* NV12 */
 
 	data32 &= (~(3 << 14));
-	if (get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) {
+	if (is_hevc_align32(hw->canvas_mode)) {
 		data32 |= (1 << 14);
 	} else {
 		data32 |= (2 << 14); /* line align with 64*/
@@ -2130,7 +2130,7 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 	c_canvas_cfg = &bs->canvas_config[1];
 
 	y_canvas_cfg->phy_addr	= y_addr;
-	if (hw->mmu_enable && get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)
+	if (hw->mmu_enable && is_hevc_align32(hw->canvas_mode))
 		y_canvas_cfg->width = ALIGN(hw->frame_width / dw_ratio, 32);
 	else
 		y_canvas_cfg->width = ALIGN(hw->frame_width / dw_ratio, 64);
@@ -2142,7 +2142,7 @@ static int v4l_alloc_buf(struct vdec_h264_hw_s *hw, int idx)
 		y_canvas_cfg->width,y_canvas_cfg->height);
 
 	c_canvas_cfg->phy_addr	= c_addr;
-	if (hw->mmu_enable && get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2)
+	if (hw->mmu_enable && is_hevc_align32(hw->canvas_mode))
 		c_canvas_cfg->width = ALIGN(hw->frame_width / dw_ratio, 32);
 	else
 		c_canvas_cfg->width = ALIGN(hw->frame_width / dw_ratio, 64);

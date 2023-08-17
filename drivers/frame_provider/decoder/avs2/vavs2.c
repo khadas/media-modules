@@ -2825,7 +2825,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
 	/*[13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32*/
-	data32 |= (MEM_MAP_MODE << 12);
+	data32 |= (mem_map_mode << 12);
 	data32 &= (~0x3);
 	data32 |= 0x1; /* [1]:dw_disable [0]:cm_disable*/
 
@@ -2854,14 +2854,14 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	ata32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/*[5:4] address_format 00:linear 01:32x32 10:64x32*/
-	data32 |= (MEM_MAP_MODE << 4);
+	data32 |= (mem_map_mode << 4);
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 #else
 	/*m8baby test1902*/
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~0x3000);
 	/*[13:12] axi_aformat, 0-Linear, 1-32x32, 2-64x32*/
-	data32 |= (MEM_MAP_MODE << 12);
+	data32 |= (mem_map_mode << 12);
 	data32 &= (~0xff0);
 	/*data32 |= 0x670;*/ /*Big-Endian per 64-bit*/
 	data32 |= 0x880;  /*.Big-Endian per 64-bit */
@@ -2888,7 +2888,7 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	data32 = READ_VREG(HEVCD_IPP_AXIIF_CONFIG);
 	data32 &= (~0x30);
 	/*[5:4] address_format 00:linear 01:32x32 10:64x32*/
-	data32 |= (MEM_MAP_MODE << 4);
+	data32 |= (mem_map_mode << 4);
 	data32 &= (~0xF);
 	data32 |= 0x8; /*Big-Endian per 64-bit*/
 
@@ -2899,9 +2899,12 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 #else
 	data32 = READ_VREG(HEVC_SAO_CTRL1);
 	data32 &= (~(3 << 14));
-	data32 |= (2 << 14);	/* line align with 64*/
+	if (is_hevc_align32(mem_map_mode))
+		data32 |= (1 << 14);
+	else
+		data32 |= (2 << 14);	/* line align with 64*/
 	data32 &= (~0x3000);
-	data32 |= (MEM_MAP_MODE << 12);	/* [13:12] axi_aformat, 0-Linear,
+	data32 |= (mem_map_mode << 12);	/* [13:12] axi_aformat, 0-Linear,
 				   1-32x32, 2-64x32 */
 	data32 &= (~0xff0);
 #ifdef AVS2_10B_MMU_DW
@@ -2976,7 +2979,10 @@ static void config_sao_hw(struct AVS2Decoder_s *dec)
 	data32 |= (dec->endian & 0xf);  /* valid only when double write only */
 	/*data32 |= 0x8;*/		/* Big-Endian per 64-bit */
 	data32 &= (~(3 << 8));
-	data32 |= (2 << 8);		/* line align with 64 for dw only */
+	if (is_hevc_align32(mem_map_mode))
+		data32 |= (1 << 8);
+	else
+		data32 |= (2 << 8);		/* line align with 64 for dw only */
 	WRITE_VREG(HEVCD_IPP_AXIIF_CONFIG, data32);
 #endif
 #ifndef AVS2_10B_NV21
@@ -3980,7 +3986,10 @@ static void set_canvas(struct AVS2Decoder_s *dec,
 		canvas_h = pic->pic_h /
 			get_double_write_ratio(pic->double_write_mode);
 		/*sao_crtl1 aligned with 64*/
-		canvas_w = ALIGN(canvas_w, 64);
+		if (is_hevc_align32(blkmode))
+			canvas_w = ALIGN(canvas_w, 32);
+		else
+			canvas_w = ALIGN(canvas_w, 64);
 		canvas_h = ALIGN(canvas_h, 32);
 
 		if (vdec->parallel_dec == 1) {
