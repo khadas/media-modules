@@ -2052,9 +2052,6 @@ static int is_oversize(int w, int h)
 	if (w < 64 || h < 64)
 		return true;
 
-	if (w < 0 || h < 0)
-		return true;
-
 	if (h != 0 && (w > max / h))
 		return true;
 
@@ -11955,12 +11952,6 @@ static int vh265_local_init(struct hevc_state_s *hevc)
 	hevc->get_frame_dur = false;
 	hevc->frame_width = hevc->vh265_amstream_dec_info.width;
 	hevc->frame_height = hevc->vh265_amstream_dec_info.height;
-	if (is_oversize(hevc->frame_width, hevc->frame_height)) {
-		pr_info("over size : %u x %u.\n", hevc->frame_width, hevc->frame_height);
-		hevc->fatal_error |= DECODER_FATAL_ERROR_SIZE_OVERFLOW;
-		vdec_v4l_post_error_event(ctx, DECODER_WARNING_DATA_ERROR);
-		return ret;
-	}
 
 	if (hevc->max_pic_w && hevc->max_pic_h) {
 		hevc->is_4k = !(hevc->max_pic_w && hevc->max_pic_h) ||
