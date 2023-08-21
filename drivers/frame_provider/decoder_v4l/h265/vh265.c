@@ -5622,7 +5622,7 @@ static struct PIC_s *v4l_get_new_pic(struct hevc_state_s *hevc,
 		aml_buf->state = FB_ST_DECODER;
 
 		aml_buf_get_ref(&v4l->bm, aml_buf);
-		if (v4l->vpp_is_need) {
+		if (v4l->vpp_is_need || v4l->enable_di_post) {
 			if (new_pic->pic_struct == 3 || new_pic->pic_struct == 4)
 				aml_buf_get_ref(&v4l->bm, aml_buf);
 			if (new_pic->pic_struct == 5 || new_pic->pic_struct == 6) {
@@ -8509,10 +8509,15 @@ static int vh265_event_cb(int type, void *data, void *op_arg)
 static void get_pair_fb(struct hevc_state_s *hevc, struct vframe_s *vf)
 {
 	int i;
+	struct aml_vcodec_ctx *ctx = hevc->v4l2_ctx;
 
 	for (i = 0; i < 2; i ++) {
 		if (hevc->pair_fb[i] == NULL) {
 			hevc->pair_fb[i] = (struct aml_buf *)vf->v4l_mem_handle;
+			if (ctx->enable_di_post)
+				ctx->fbc_transcode_and_set_vf(ctx,
+					hevc->pair_fb[i], vf);
+			aml_buf_set_vframe(hevc->pair_fb[i], vf);
 			break;
 		}
 	}
@@ -8522,8 +8527,6 @@ static void get_pair_fb(struct hevc_state_s *hevc, struct vframe_s *vf)
 		hevc->pair_fb[1] = NULL;
 		i = 0;
 	}
-
-	aml_buf_set_vframe(hevc->pair_fb[i], vf);
 }
 
 static void clear_pair_fb(struct hevc_state_s *hevc)
@@ -9038,7 +9041,8 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 		vf->height = vf->height /
 			get_double_write_ratio(pic->double_write_mode);
 
-		if (vdec->prog_only || (!v4l2_ctx->vpp_is_need))
+		if (vdec->prog_only ||
+			!(v4l2_ctx->vpp_is_need || v4l2_ctx->enable_di_post))
 			pic->pic_struct = 0;
 
 		vf->height <<= hevc->interlace_flag;
@@ -9361,12 +9365,6 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 				__func__);
 		}
 
-		if (v4l2_ctx->no_fbc_output &&
-			(v4l2_ctx->picinfo.bitdepth != 0 &&
-			 v4l2_ctx->picinfo.bitdepth != 8))
-			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
-				aml_buf, vf);
-
 		if (without_display_mode == 0) {
 			if (v4l2_ctx->is_stream_off) {
 				vh265_vf_put(vh265_vf_get(vdec), vdec);
@@ -9386,7 +9384,14 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 
 							clear_pair_fb(hevc);
 						} else {
+							if ((v4l2_ctx->no_fbc_output &&
+								(v4l2_ctx->picinfo.bitdepth != 0 &&
+								 v4l2_ctx->picinfo.bitdepth != 8)) ||
+								 v4l2_ctx->enable_di_post)
+							v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+									aml_buf, vf);
 							set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hevc->v4l2_ctx);
+							aml_buf_set_vframe(aml_buf, vf);
 							vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
 							ret = aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 						}
@@ -9399,8 +9404,7 @@ static int post_video_frame(struct vdec_s *vdec, struct PIC_s *pic)
 					}
 				}
 			}
-		}
-		else
+		} else
 			vh265_vf_put(vh265_vf_get(vdec), vdec);
 	}
 
@@ -12413,7 +12417,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			(pic->vf_ref || pic->error_mark) &&
 			pic->cma_alloc_addr) {
 
-			if (!ctx->force_recycle && ctx->vpp_is_need &&
+			if (!ctx->force_recycle && (ctx->vpp_is_need || ctx->enable_di_post)&&
 				!(pic->error_mark && (hevc->nal_skip_policy & 0x2))) {
 				if (pic->pic_struct == 3 || pic->pic_struct == 4 ||
 					pic->pic_struct == 9 || pic->pic_struct == 10 ||
@@ -12436,7 +12440,7 @@ static int h265_recycle_frame_buffer(struct hevc_state_s *hevc)
 			aml_buf_put_ref(&ctx->bm, aml_buf);
 			if ((hevc->nal_skip_policy & 0x2) && pic->error_mark) {
 				aml_buf_put_ref(&ctx->bm, aml_buf);
-				if (ctx->vpp_is_need) {
+				if (ctx->vpp_is_need || ctx->enable_di_post) {
 					if (pic->pic_struct == 3 || pic->pic_struct == 4)
 						aml_buf_put_ref(&ctx->bm, aml_buf);
 					if (pic->pic_struct == 5 || pic->pic_struct == 6) {

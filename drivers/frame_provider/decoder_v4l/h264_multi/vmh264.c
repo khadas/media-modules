@@ -2362,7 +2362,8 @@ int v4l_get_free_buf_idx(struct vdec_s *vdec)
 		v4l->aux_infos.bind_sei_buffer(v4l, &pic->aux_data_buf,
 			&pic->aux_data_size, &pic->ctx_buf_idx);
 
-		if (v4l->vpp_is_need &&
+		if (((v4l->enable_di_post && v4l->picinfo.field == V4L2_FIELD_INTERLACED) ||
+			v4l->vpp_is_need) &&
 			p_H264_Dpb->mVideo.dec_picture) {
 			pic_struct = p_H264_Dpb->mVideo.dec_picture->pic_struct;
 			if (v4l->picinfo.field == V4L2_FIELD_INTERLACED || //frame_mbs_only_flag
@@ -2737,6 +2738,7 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 	struct aml_vcodec_ctx * ctx = hw->v4l2_ctx;
 
 	struct h264_dpb_stru *dpb = &hw->dpb;
+	struct aml_buf *sub_buf;
 	int free_count = 0;
 	int free_slot = 0;
 	int found = 0;
@@ -2784,6 +2786,16 @@ unsigned char have_free_buf_spec(struct vdec_s *vdec)
 		}
 		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
 		hw->aml_buf->state = FB_ST_DECODER;
+		if (hw->aml_buf->sub_buf[0]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[0];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
+		if (hw->aml_buf->sub_buf[1]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[1];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
 	}
 
 	if (hw->aml_buf) {
@@ -3075,7 +3087,7 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		hw->buffer_spec[buffer_index].vf_ref = 0;
 	fill_frame_info(hw, frame);
 
-	if (((vdec->prog_only) || (!v4l2_ctx->vpp_is_need)))
+	if (((vdec->prog_only) || (!v4l2_ctx->vpp_is_need && !v4l2_ctx->enable_di_post)))
 		vf_count = 1;
 	if (v4l2_ctx->vpp_is_need && (vf_count == 1) && (picinfo->field != V4L2_FIELD_NONE)) {
 		struct StorablePicture *valid_pic = frame->top_field ? frame->top_field : frame->bottom_field;
@@ -3381,7 +3393,6 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 		}
 		atomic_add(1, &hw->vf_pre_count);
 		vdec_vframe_ready(hw_to_vdec(hw), vf);
-		aml_buf_set_vframe(aml_buf, vf);
 
 		if (!frame->show_frame) {
 			vh264_vf_put(vf, vdec);
@@ -3458,14 +3469,36 @@ static int post_video_frame(struct vdec_s *vdec, struct FrameStore *frame)
 				false, vdec->vf_provider_name, NULL);
 		}
 
+		if (v4l2_ctx->no_fbc_output &&
+				(v4l2_ctx->picinfo.bitdepth != 0 &&
+				v4l2_ctx->picinfo.bitdepth != 8))
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, vf);
+
 		if (without_display_mode == 0) {
 			if (v4l2_ctx->is_stream_off) {
 				vh264_vf_put(vh264_vf_get(vdec), vdec);
 				frame->pre_output = 1;
 			} else {
 				set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
-				vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
-				aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+				if (i && aml_buf->sub_buf[0]) {
+					struct aml_buf *sub_buf =
+							(i == 1) ? aml_buf->sub_buf[0] :
+							aml_buf->sub_buf[1];
+					if (v4l2_ctx->enable_di_post)
+						v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+								sub_buf, vf);
+					aml_buf_set_vframe(sub_buf, vf);
+					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+					aml_buf_done(&v4l2_ctx->bm, sub_buf, BUF_USER_DEC);
+				} else {
+					if (v4l2_ctx->enable_di_post)
+						v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+								aml_buf, vf);
+					aml_buf_set_vframe(aml_buf, vf);
+					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+				}
 			}
 		} else {
 			vh264_vf_put(vh264_vf_get(vdec), vdec);

@@ -192,7 +192,7 @@ enum e_trace_work_status {
 #define DECODER_ON_PROCESS		0x1
 #define VDEC_NOT_READY			0x2
 
-#define META_DATA_SIZE	(256)
+#define VDEC_META_DATA_SIZE	(256)
 #define HDR10P_BUF_SIZE	(128)
 #define SEI_ITU_DATA_SIZE		(5*1024)
 

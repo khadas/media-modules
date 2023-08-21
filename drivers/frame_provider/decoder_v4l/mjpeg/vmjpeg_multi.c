@@ -506,7 +506,6 @@ static irqreturn_t vmjpeg_isr_thread_fn(struct vdec_s *vdec, int irq)
 	vf->mem_handle = decoder_bmmu_box_get_mem_handle(hw->mm_blk_handle, index);
 	decoder_do_frame_check(vdec, vf);
 	vdec_vframe_ready(vdec, vf);
-	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 	ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 	ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
@@ -1584,7 +1583,6 @@ static int notify_v4l_eos(struct vdec_s *vdec)
 	vf->flag		= VFRAME_FLAG_EMPTY_FRAME_V4L;
 
 	vdec_vframe_ready(vdec, vf);
-	aml_buf_set_vframe(aml_buf, vf);
 	kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 
 	vdec_tracing(&ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);

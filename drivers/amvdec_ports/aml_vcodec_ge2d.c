@@ -338,6 +338,27 @@ static void ge2d_vf_get(void *caller, struct vframe_s *vf_out)
 			vf->flag = VFRAME_FLAG_EMPTY_FRAME_V4L;
 		}
 
+		if (ge2d->ctx->enable_di_post) {
+			if (is_cpu_t7()) {
+				if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR) {
+					if ((ge2d->ctx->output_pix_fmt != V4L2_PIX_FMT_H264) &&
+						(ge2d->ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG1) &&
+						(ge2d->ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG2) &&
+						(ge2d->ctx->output_pix_fmt != V4L2_PIX_FMT_MPEG4) &&
+						(ge2d->ctx->output_pix_fmt != V4L2_PIX_FMT_MJPEG)) {
+						vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+					}
+					else {
+						if (aml_buf->state == FB_ST_GE2D)
+							vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+					}
+				}
+			} else {
+				if (vf->canvas0_config[0].block_mode == CANVAS_BLKMODE_LINEAR)
+					vf->flag |= VFRAME_FLAG_VIDEO_LINEAR;
+			}
+		}
+
 		memcpy(vf_out, vf, sizeof(struct vframe_s));
 
 		mutex_lock(&ge2d->output_lock);

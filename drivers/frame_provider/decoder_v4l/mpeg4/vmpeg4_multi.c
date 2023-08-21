@@ -714,7 +714,7 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 	if ((v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12) ||
 		(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
 		nv_order = VIDTYPE_VIU_NV12;
-	if (vdec->prog_only || (!v4l2_ctx->vpp_is_need))
+	if (vdec->prog_only || (!v4l2_ctx->vpp_is_need && !v4l2_ctx->enable_di_post))
 		pic->pic_info &= ~INTERLACE_FLAG;
 
 	if (hw->i_only)
@@ -792,7 +792,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 			vf->mem_handle =
 				decoder_bmmu_box_get_mem_handle(
 					hw->mm_blk_handle, index);
-			aml_buf_set_vframe(aml_buf, vf);
 			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 			hw->frame_num++;
@@ -807,6 +806,10 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				if (v4l2_ctx->is_stream_off) {
 					vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 				} else {
+					if (v4l2_ctx->enable_di_post)
+						v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+							aml_buf, vf);
+					aml_buf_set_vframe(aml_buf, vf);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
@@ -884,7 +887,6 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					hw->mm_blk_handle, index);
 			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
-			aml_buf_set_vframe(aml_buf, vf);
 			kfifo_put(&hw->display_q,
 				(const struct vframe_s *)vf);
 			ATRACE_COUNTER(hw->pts_name, vf->timestamp);
@@ -901,6 +903,12 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 				if (v4l2_ctx->is_stream_off) {
 					vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 				} else {
+					if (aml_buf->sub_buf[0])
+						aml_buf = aml_buf->sub_buf[0];
+					if (v4l2_ctx->enable_di_post)
+						v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+							aml_buf, vf);
+					aml_buf_set_vframe(aml_buf, vf);
 					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 				}
 			} else
@@ -980,6 +988,9 @@ static int prepare_display_buf(struct vdec_mpeg4_hw_s * hw,
 					hw->mm_blk_handle, index);
 			decoder_do_frame_check(vdec, vf);
 			vdec_vframe_ready(vdec, vf);
+			if (v4l2_ctx->enable_di_post)
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, vf);
 			aml_buf_set_vframe(aml_buf, vf);
 			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(hw->pts_name, vf->timestamp);
@@ -1392,7 +1403,7 @@ static irqreturn_t vmpeg4_isr_thread_handler(struct vdec_s *vdec, int irq)
 		}
 
 		aml_buf = (struct aml_buf *)hw->pic[index].v4l_ref_buf_addr;
-		if (ctx->vpp_is_need &&
+		if ((ctx->vpp_is_need || ctx->enable_di_post) &&
 			hw->report_field == V4L2_FIELD_INTERLACED)
 			aml_buf_get_ref(&ctx->bm, aml_buf);
 
@@ -2617,7 +2628,8 @@ static int mpeg4_recycle_frame_buffer(struct vdec_mpeg4_hw_s *hw)
 				__func__, i, hw->pic[i].cma_alloc_addr,
 				aml_buf->index,
 				hw->vfbuf_use[i]);
-			if (ctx->vpp_is_need && hw->report_field == V4L2_FIELD_INTERLACED &&
+			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
+				hw->report_field == V4L2_FIELD_INTERLACED &&
 				hw->vfbuf_use[i] < 2)
 				continue;
 			aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -2643,6 +2655,7 @@ static bool is_available_buffer(struct vdec_mpeg4_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *sub_buf;
 	int i, free_count = 0;
 	int free_slot = 0;
 
@@ -2728,6 +2741,16 @@ static bool is_available_buffer(struct vdec_mpeg4_hw_s *hw)
 		}
 		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
 		hw->aml_buf->state = FB_ST_DECODER;
+		if (hw->aml_buf->sub_buf[0]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[0];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
+		if (hw->aml_buf->sub_buf[1]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[1];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
 	}
 
 	if (hw->aml_buf) {

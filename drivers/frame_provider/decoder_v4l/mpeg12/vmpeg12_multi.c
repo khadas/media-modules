@@ -1575,7 +1575,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 			VIDTYPE_INTERLACE_TOP : VIDTYPE_INTERLACE_BOTTOM;
 		field_num = (info & PICINFO_RPT_FIRST) ? 3 : 2;
 
-		if (v4l2_ctx->vpp_is_need) {
+		if (v4l2_ctx->enable_di_post || v4l2_ctx->vpp_is_need) {
 			aml_buf = (struct aml_buf *)hw->pics[index].v4l_ref_buf_addr;
 			aml_buf_get_ref(&v4l2_ctx->bm, aml_buf);
 			if (field_num == 3)
@@ -1584,7 +1584,7 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 	}
 
 	if ((vdec->prog_only) || (hw->report_field & V4L2_FIELD_NONE) ||
-		(!v4l2_ctx->vpp_is_need)) {
+		(!v4l2_ctx->vpp_is_need && !v4l2_ctx->enable_di_post)) {
 		field_num = 1;
 		type |= VIDTYPE_PROGRESSIVE | VIDTYPE_VIU_FIELD | nv_order;
 	}
@@ -1737,7 +1737,6 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 				}
 			}
 			vdec_vframe_ready(vdec, vf);
-			aml_buf_set_vframe(aml_buf, vf);
 			kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(hw->pts_name, vf->timestamp);
 			ATRACE_COUNTER(hw->new_q_name, kfifo_len(&hw->newframe_q));
@@ -1754,8 +1753,24 @@ static int prepare_display_buf(struct vdec_mpeg12_hw_s *hw,
 					vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
 				} else {
 					set_meta_data_to_vf(vf, UVM_META_DATA_VF_BASE_INFOS, hw->v4l2_ctx);
-					vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
-					aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+					if (i && aml_buf->sub_buf[0]) {
+						struct aml_buf *sub_buf =
+								(i == 1) ? aml_buf->sub_buf[0] :
+								aml_buf->sub_buf[1];
+						if (v4l2_ctx->enable_di_post)
+							v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+								sub_buf, vf);
+						aml_buf_set_vframe(sub_buf, vf);
+						vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+						aml_buf_done(&v4l2_ctx->bm, sub_buf, BUF_USER_DEC);
+					} else {
+						if (v4l2_ctx->enable_di_post)
+							v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+								aml_buf, vf);
+						aml_buf_set_vframe(aml_buf, vf);
+						vdec_tracing(&v4l2_ctx->vtr, VTRACE_DEC_PIC_0, aml_buf->index);
+						aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
+					}
 				}
 			} else
 				vmpeg_vf_put(vmpeg_vf_get(vdec), vdec);
@@ -3466,7 +3481,8 @@ static int mpeg2_recycle_frame_buffer(struct vdec_mpeg12_hw_s *hw)
 				__func__, i, hw->pics[i].cma_alloc_addr,
 				aml_buf->index,
 				hw->vfbuf_use[i]);
-			if (ctx->vpp_is_need && hw->report_field == V4L2_FIELD_INTERLACED &&
+			if ((ctx->enable_di_post || ctx->vpp_is_need) &&
+				hw->report_field == V4L2_FIELD_INTERLACED &&
 				(((hw->pics[i].buffer_info & PICINFO_RPT_FIRST) &&
 				hw->vfbuf_use[i] < 3) ||
 				(!(hw->pics[i].buffer_info & PICINFO_RPT_FIRST) &&
@@ -3495,6 +3511,7 @@ static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *sub_buf;
 	int i, free_count = 0;
 	int free_slot = 0;
 
@@ -3586,6 +3603,16 @@ static bool is_available_buffer(struct vdec_mpeg12_hw_s *hw)
 		}
 		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
 		hw->aml_buf->state = FB_ST_DECODER;
+		if (hw->aml_buf->sub_buf[0]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[0];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
+		if (hw->aml_buf->sub_buf[1]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[1];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
 	}
 
 	if (hw->aml_buf) {

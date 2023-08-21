@@ -56,7 +56,6 @@ struct aml_buf_config {
 	bool	enable_fbc;
 	bool 	enable_secure;
 	int	memory_mode;
-	int	vpp_work_mode;
 	int	planes;
 	u32	luma_length;
 	u32	chroma_length;
@@ -152,6 +151,17 @@ struct aml_buf_fbc {
  * @vb		: The vb2 struct defined by v4l2.
  * @meta_ptr	: The handle of meta date.
  * @flush_flag	: Mark the buffer flush at the first time to alloc.
+ * @is_delay_allocated	: Dma buffer allocated and replaced.
+ * @cap_sgt	: Point to new capture buffer sg table.
+ * @idmabuf[2]	: Delayed allocated dma buffer.
+ * @uvm_buf	: Uvm buf.
+ * @master_buf	: The first filed buf entry.
+ * @sub_buf[2]	: sub_buf[0]: The second filed buf entry;
+ *		  sub_buf[1]: The third filed buf entry;
+ * @pair	: Buf attributes: master, sub0, sub1.
+ * @pair_state	: Buffer pairing status.
+ * @inited	: The pairing is completed and enters the free queue.
+ * @queued_mask	: Field buffer return times.
  */
 struct aml_buf {
 	u32			index;
@@ -170,6 +180,16 @@ struct aml_buf {
 	void			*vpp_buf;
 	void			*ge2d_buf;
 	bool			flush_flag;
+	bool 			is_delay_allocated;
+	struct 			sg_table *cap_sgt;
+	struct dma_buf 		*idmabuf[2];
+	void			*uvm_buf;
+	void 			*master_buf;
+	void 			*sub_buf[2];
+	enum buf_pair		pair;
+	u32			pair_state;
+	u32			inited;
+	u32			queued_mask;
 };
 
 /*
@@ -206,6 +226,7 @@ struct aml_buf_mgr_s {
 
 	void				*vpp_handle;
 	u32				frm_cnt;
+	int				vpp_work_mode;
 };
 
 /*

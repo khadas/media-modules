@@ -7398,9 +7398,10 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 				vf, pic_config->hw_decode_time);
 			pvdec->vdec_fps_detec(pvdec->id);
 
-			if (v4l2_ctx->no_fbc_output &&
+			if ((v4l2_ctx->no_fbc_output &&
 				(v4l2_ctx->picinfo.bitdepth != 0 &&
-				v4l2_ctx->picinfo.bitdepth != 8))
+				v4l2_ctx->picinfo.bitdepth != 8)) ||
+				v4l2_ctx->enable_di_post)
 				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
 					aml_buf, vf);
 

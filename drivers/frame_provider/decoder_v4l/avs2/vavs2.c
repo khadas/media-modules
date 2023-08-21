@@ -4502,6 +4502,9 @@ static int avs2_prepare_display_buf(struct AVS2Decoder_s *dec)
 			set_vframe(dec, vf, pic, 0);
 			decoder_do_frame_check(pvdec, vf);
 			vdec_vframe_ready(pvdec, vf);
+			if (v4l2_ctx->enable_di_post)
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, vf);
 			aml_buf_set_vframe(aml_buf, vf);
 			kfifo_put(&dec->display_q, (const struct vframe_s *)vf);
 			ATRACE_COUNTER(dec->pts_name, vf->timestamp);

@@ -1584,17 +1584,17 @@ void vdec_set_metadata(struct vdec_s *vdec, ulong meta_ptr)
 	if (!meta_ptr)
 		return;
 
-	tmp_buf = vmalloc(META_DATA_SIZE + 4);
+	tmp_buf = vmalloc(VDEC_META_DATA_SIZE + 4);
 	if (!tmp_buf) {
 		pr_err("%s:vmalloc 256+4 fail\n", __func__);
 		return;
 	}
-	memcpy(tmp_buf, (void *)meta_ptr, META_DATA_SIZE + 4);
+	memcpy(tmp_buf, (void *)meta_ptr, VDEC_META_DATA_SIZE + 4);
 
 	size = tmp_buf[0] + (tmp_buf[1] << 8) +
 		(tmp_buf[2] << 16) + (tmp_buf[3] << 24);
 
-	if ((size > 0) && (size <= META_DATA_SIZE)) {
+	if ((size > 0) && (size <= VDEC_META_DATA_SIZE)) {
 		memcpy(vdec->hdr10p_data_buf, tmp_buf + 4, size);
 		vdec->hdr10p_data_size = size;
 		vdec->hdr10p_data_valid = true;
@@ -7091,7 +7091,7 @@ void set_meta_data_to_vf(struct vframe_s *vf, u32 type, void *v4l2_ctx)
 
 	switch (type) {
 	case UVM_META_DATA_VF_BASE_INFOS:
-		if ((vf->meta_data_size + sizeof(struct aml_vf_base_info_s) + AML_META_HEAD_SIZE) <= META_DATA_SIZE) {
+		if ((vf->meta_data_size + sizeof(struct aml_vf_base_info_s) + AML_META_HEAD_SIZE) <= VDEC_META_DATA_SIZE) {
 			head.magic = META_DATA_MAGIC;
 			head.type = UVM_META_DATA_VF_BASE_INFOS;
 			head.data_size = sizeof(struct aml_vf_base_info_s);
@@ -7119,7 +7119,7 @@ void set_meta_data_to_vf(struct vframe_s *vf, u32 type, void *v4l2_ctx)
 		}
 		break;
 	case UVM_META_DATA_HDR10P_DATA:
-		if ((vf->meta_data_size + vf->hdr10p_data_size + AML_META_HEAD_SIZE) <= META_DATA_SIZE) {
+		if ((vf->meta_data_size + vf->hdr10p_data_size + AML_META_HEAD_SIZE) <= VDEC_META_DATA_SIZE) {
 			head.magic = META_DATA_MAGIC;
 			head.type = UVM_META_DATA_HDR10P_DATA;
 			head.data_size = vf->hdr10p_data_size;

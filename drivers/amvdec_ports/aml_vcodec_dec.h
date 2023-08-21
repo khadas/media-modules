@@ -71,7 +71,7 @@ struct file_private_data {
 #define VDEC_GATHER_MEMORY_TYPE		0
 #define VDEC_SCATTER_MEMORY_TYPE	1
 
-#define META_DATA_SIZE			(256)
+#define VDEC_META_DATA_SIZE			(256)
 #ifndef CONFIG_AMLOGIC_MEDIA_ENHANCEMENT_DOLBYVISION
 #define MD_BUF_SIZE			(1024)
 #define COMP_BUF_SIZE			(8196)
@@ -139,10 +139,9 @@ struct aml_v4l2_buf {
 	unsigned int internal_index;
 
 	/*4 bytes data for data len*/
-	char meta_data[META_DATA_SIZE + 4];
+	char meta_data[VDEC_META_DATA_SIZE + 4];
 	void *dma_buf;
 	struct sg_table *out_sgt;
-	struct sg_table *cap_sgt;
 	ulong addr;
 };
 
@@ -228,7 +227,7 @@ void fbc_transcode_and_set_vf(struct aml_vcodec_ctx *ctx,
 						  struct vframe_s *vf);
 ssize_t dump_cma_and_sys_memsize(struct aml_vcodec_ctx *ctx, char *buf);
 
-
+ulong get_addr(struct vb2_buffer *vb, int i);
 
 
 

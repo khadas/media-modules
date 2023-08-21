@@ -257,6 +257,27 @@ static enum task_type_e task_buffer_get_pre_user(struct task_chain_s *task,
 	return type2;
 }
 
+static enum task_type_e task_buffer_get_next_user(struct task_chain_s *task,
+			       enum task_type_e type)
+{
+	struct task_item_s *item = NULL;
+	struct task_item_s *item2 = NULL;
+	enum task_type_e type2 = TASK_TYPE_MAX;
+
+	item = task_item_get(task, type);
+	if (item) {
+		item2 = task_item_get(task, task->map[0][type]);
+
+		if (item2) {
+			type2 = name_to_type(item2->name);
+			task_item_put(item2);
+		}
+		task_item_put(item);
+	}
+
+	return type2;
+}
+
 ssize_t task_chain_show(struct task_chain_s *task, char *buf)
 {
 	struct task_item_s *item = NULL;
@@ -439,6 +460,7 @@ int task_chain_init(struct task_chain_s **task_out,
 	task->submit	= task_buffer_submit;
 	task->recycle	= task_buffer_recycle;
 	task->get_pre_user	= task_buffer_get_pre_user;
+	task->get_next_user	= task_buffer_get_next_user;
 
 	*task_out = task;
 

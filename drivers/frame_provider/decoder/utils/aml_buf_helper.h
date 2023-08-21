@@ -41,14 +41,15 @@ static inline void aml_buf_configure(struct aml_buf_mgr_s *bm,
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
  * @key		: The key information of buffer.
+ * @phy_addr	: Yuv buffer start physic addr.
  * @priv	: The priv data from caller.
  *
  * Use to attach buffers that need to be managed.
  */
 static inline int aml_buf_attach(struct aml_buf_mgr_s *bm,
-				 ulong key, void *priv)
+				 ulong key, ulong phy_addr, void *priv)
 {
-	return bm->bc.attach(&bm->bc, key, priv);
+	return bm->bc.attach(&bm->bc, key, phy_addr, priv);
 }
 
 /*
@@ -197,17 +198,11 @@ static inline void aml_buf_put(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 static inline void aml_buf_get_ref(struct aml_buf_mgr_s *bm,
 				  struct aml_buf *buf)
 {
-#if 0
-	if (buf->planes[0].dbuf)
-		get_dma_buf(buf->planes[0].dbuf);
-	if (buf->planes[1].dbuf)
-		get_dma_buf(buf->planes[1].dbuf);
-#endif
 	bm->bc.buf_ops.get_ref(&bm->bc, &buf->entry);
 }
 
 /*
- * aml_buf_put_ref() - Decrease a reference count to the buffer.
+ * aml_buf_put_ref() - Replace phy addr for entry.
  *
  * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
  * @buf		: The structure of aml_buf.
@@ -217,12 +212,37 @@ static inline void aml_buf_get_ref(struct aml_buf_mgr_s *bm,
 static inline void aml_buf_put_ref(struct aml_buf_mgr_s *bm, struct aml_buf *buf)
 {
 	bm->bc.buf_ops.put_ref(&bm->bc, &buf->entry);
-#if 0
-	if (buf->planes[0].dbuf)
-		dma_buf_put(buf->planes[0].dbuf);
-	if (buf->planes[1].dbuf)
-		dma_buf_put(buf->planes[1].dbuf);
-#endif
+}
+
+/*
+ * aml_buf_update() - Update vb2 and aml buf for each other.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ * @key		: The key information of buffer.
+ * @phy_addr	: Yuv buffer start physic addr.
+ * @buf		: The structure of aml_buf.
+ *
+ * update key.
+ */
+static inline void aml_buf_update(struct aml_buf_mgr_s *bm,
+				ulong phy_addr, struct aml_buf *buf)
+{
+	bm->bc.update(&bm->bc, &buf->entry, phy_addr, buf->pair);
+}
+
+/*
+ * aml_buf_replace() - Use to attach buffers that need to be managed.
+ *
+ * @bm		: Pointer to &struct aml_buf_mgr_s buffer manager context.
+ * @buf		: The structure of aml_buf.
+ * @priv	: The priv data from caller.
+ *
+ * update vb2 buffer and aml_buf each other.
+ */
+static inline void aml_buf_replace(struct aml_buf_mgr_s *bm,
+				struct aml_buf *buf, void *priv)
+{
+	bm->bc.replace(&bm->bc, &buf->entry, priv);
 }
 
 #endif //_AML_BUF_HELPER_H_

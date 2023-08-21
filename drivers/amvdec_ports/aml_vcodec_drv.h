@@ -312,6 +312,8 @@ struct aml_vdec_cfg_infos {
 	u32 low_latency_mode;
 	u32 uvm_hook_type;
 	/*
+	 * bit 21	: buffer alloc flag. 0: dma heap, 1: ion heap.
+	 * bit 20	: di post flag.
 	 * bit 19	: no-surface flag.
 	 * bit 18	: release vpp early. 0:false, 1:true
 	 * bit 17	: force di permission.
@@ -564,10 +566,10 @@ struct aux_info {
 
 /*
  * struct meta_data - record meta data.
- * @buf[META_DATA_SIZE]: meta data information.
+ * @buf[VDEC_META_DATA_SIZE]: meta data information.
  */
 struct meta_data {
-	char buf[META_DATA_SIZE];
+	char buf[VDEC_META_DATA_SIZE];
 };
 
 /*
@@ -860,6 +862,9 @@ struct aml_vcodec_ctx {
 	bool			force_report_interlace;
 	struct cma_sys_size_info mem_size_info;
 	struct aml_decoder_status_info	decoder_status_info;
+	struct aml_buf		*master_buf;
+	bool			enable_di_post;
+	u32			alloc_type;
 	bool			has_start_resolution_event;
 	bool			force_tw_output;
 };

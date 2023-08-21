@@ -20,7 +20,6 @@
 
 #include <linux/device.h>
 #include <linux/amlogic/media/codec_mm/codec_mm.h>
-#include <linux/amlogic/media/video_processor/di_proc_buf_mgr.h>
 #include <linux/amlogic/meson_uvm_core.h>
 
 #include "../frame_provider/decoder/utils/decoder_bmmu_box.h"
@@ -32,16 +31,20 @@
 #include "aml_vcodec_util.h"
 #include "vdec_drv_if.h"
 #include "utils/common.h"
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+#include <linux/amlogic/media/video_processor/di_proc_buf_mgr.h>
+#endif
 
-#define IS_VPP_POST(bm)	(bm->config.vpp_work_mode == VPP_WORK_MODE_DI_POST)
+#define IS_VPP_POST(bm)	(bm->vpp_work_mode == VPP_WORK_MODE_DI_POST)
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 {
 	struct buf_core_mgr_s *bc = caller_data;
+	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct buf_core_entry *entry = NULL;
 	struct dma_buf *dbuf = file->private_data;
-	struct uvm_handle *uvmh = dbuf->priv;
-	ulong key = sg_dma_address(uvmh->ua->sgt->sgl);
+	ulong key = (ulong)dbuf;
 
 	hash_for_each_possible(bc->buf_table, entry, h_node, key) {
 		if (key == entry->key) {
@@ -49,8 +52,10 @@ static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 		}
 	}
 
-	if (bc->buf_ops.vpp_cb)
+	if (entry && bc->buf_ops.vpp_cb)
 		bc->buf_ops.vpp_cb(bc, entry);
+	else
+		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR, "entry is NULL\n");
 }
 
 static int aml_buf_vpp_que(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
@@ -59,11 +64,17 @@ static int aml_buf_vpp_que(struct buf_core_mgr_s *bc, struct buf_core_entry *ent
 	struct aml_buf *buf = entry_to_aml_buf(entry);
 	int ret = -1;
 
+	if (buf->queued_mask & (1 << BUF_SUB0))
+		buf = entry_to_aml_buf(entry->sub_entry[0]);
+
+	if (buf->queued_mask & (1 << BUF_SUB1))
+		buf = entry_to_aml_buf(entry->sub_entry[1]);
+
 	ret = buf_mgr_q_checkin(bm->vpp_handle, buf->planes[0].dbuf->file);
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, ret:%d\n",
-		__func__, entry->user, ret);
+		"%s, idx: %d, ret:%d\n",
+		__func__, buf->index, ret);
 
 	return ret;
 }
@@ -86,8 +97,8 @@ static int aml_buf_vpp_dque(struct buf_core_mgr_s *bc, struct buf_core_entry *en
 	ret = buf_mgr_dq_checkin(bm->vpp_handle, buf->planes[0].dbuf->file);
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, ret:%d\n",
-		__func__, entry->user, ret);
+		"%s, idx: %d, ret:%d\n",
+		__func__, buf->index, ret);
 
 	return ret;
 }
@@ -136,6 +147,7 @@ static void aml_buf_vpp_mgr_release(struct aml_buf_mgr_s *bm)
 	if (bm->vpp_handle)
 		buf_mgr_release(bm->vpp_handle);
 }
+#endif
 
 static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1, void **bmmu) {
 	struct aml_buf_fbc_info fbc_info;
@@ -453,8 +465,9 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 	if (bm->fbc_array) {
 		aml_buf_fbc_destroy(bm);
 	}
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	aml_buf_vpp_mgr_release(bm);
+#endif
 }
 
 static void aml_buf_flush(struct aml_buf_mgr_s *bm,
@@ -493,7 +506,7 @@ static void aml_buf_flush(struct aml_buf_mgr_s *bm,
 	aml_buf->flush_flag = true;
 }
 
-static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
+void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 				   struct aml_buf *aml_buf,
 				   void *priv)
 {
@@ -501,12 +514,16 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 	struct vb2_v4l2_buffer *vb2_v4l2 = to_vb2_v4l2_buffer(vb);
 	struct aml_v4l2_buf *aml_vb = container_of(vb2_v4l2, struct aml_v4l2_buf, vb);
 	struct aml_buf_config *cfg = &bm->config;
+	struct aml_buf *master_buf;
 	char plane_n[3] = {'Y','U','V'};
 	int i;
 
 	aml_buf->vb		= vb;
 	aml_buf->num_planes	= vb->num_planes;
 	aml_vb->aml_buf		= aml_buf;
+	aml_buf->entry.index	= aml_buf->index;
+	aml_buf->inited		= aml_buf->entry.inited;
+	aml_buf->entry.pair_state	= aml_buf->pair_state;
 
 	for (i = 0 ; i < vb->num_planes ; i++) {
 		if (i == 0) {
@@ -529,8 +546,25 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 			}
 		}
 
-		aml_buf->planes[i].addr	= vb2_dma_contig_plane_dma_addr(vb, i);
+		aml_buf->planes[i].addr	= get_addr(vb, i);
 		aml_buf->planes[i].dbuf	= vb->planes[i].dbuf;
+
+		if (aml_buf->pair == BUF_SUB0) {
+			master_buf = (struct aml_buf *)aml_buf->master_buf;
+			master_buf->entry.master_ref = &master_buf->entry.ref;
+			master_buf->entry.sub_entry[0] = (void *)&aml_buf->entry;
+
+			aml_buf->entry.master_entry = (void *)&master_buf->entry;
+			aml_buf->entry.master_ref = &master_buf->entry.ref;
+		}
+
+		if (aml_buf->pair == BUF_SUB1) {
+			master_buf = (struct aml_buf *)aml_buf->master_buf;
+			master_buf->entry.sub_entry[1] = (void *)&aml_buf->entry;
+
+			aml_buf->entry.master_entry = (void *)&master_buf->entry;
+			aml_buf->entry.master_ref = &master_buf->entry.ref;
+		}
 
 		/* Make a fake used size for DW/TW:(0, 0). */
 		if (!cfg->dw_mode)
@@ -582,7 +616,7 @@ static void aml_buf_set_planes_v4l2(struct aml_buf_mgr_s *bm,
 			aml_buf_flush(bm, aml_buf);
 
 			v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-				"Buffer info, id:%x, %c:(0x%lx, %d), TW:%x\n",
+				"Buffer info, id:%d, %c:(0x%lx, %d), TW:%x\n",
 				vb->index,
 				plane_n[i],
 				aml_buf->planes_tw[i].addr,
@@ -620,12 +654,14 @@ static int aml_buf_set_default_parms(struct aml_buf_mgr_s *bm,
 		aml_buf_set_planes(bm, buf);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	ret = aml_buf_vpp_mgr_init(bm);
 	if (ret) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
 			"VPP buf mgr init failed.\n");
 		return ret;
 	}
+#endif
 
 	ret = task_chain_init(&buf->task, bm->priv, buf, buf->index);
 	if (ret) {
@@ -690,11 +726,12 @@ static void aml_buf_free(struct buf_core_mgr_s *bc,
 	int i;
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, entry:%px, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d)\n",
+		"%s, entry:%px, user:%d, key:%lx, idx:%d, st:(%d, %d), ref:(%d, %d)\n",
 		__func__,
 		entry,
 		entry->user,
 		entry->key,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -753,20 +790,37 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct aml_buf *buf = entry_to_aml_buf(entry);
 	struct aml_buf_fbc_info fbc_info = { 0 };
+	struct aml_buf *sub_buf[2];
+	struct buf_core_entry *sub_entry;
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
 		kref_read(&bc->core_ref),
 		bc->free_num);
 
+	if (entry->sub_entry[0]) {
+		sub_entry = (struct buf_core_entry *)entry->sub_entry[0];
+		sub_buf[0] = (struct aml_buf *)buf->sub_buf[0];
+	}
+
+	if (entry->sub_entry[1]) {
+		sub_entry = (struct buf_core_entry *)entry->sub_entry[1];
+		sub_buf[1] = (struct aml_buf *)buf->sub_buf[1];
+	}
+
 	if (entry->user != BUF_USER_MAX && !task_chain_empty(buf->task)) {
 		task_chain_clean(buf->task);
+		if (entry->sub_entry[0])
+			task_chain_clean(sub_buf[0]->task);
+		if (entry->sub_entry[1])
+			task_chain_clean(sub_buf[1]->task);
 	}
 
 	if (bm->config.enable_fbc)
@@ -790,8 +844,13 @@ static void aml_buf_prepare(struct buf_core_mgr_s *bc,
 		aml_buf_set_planes(bm, buf);
 	}
 
-	if (entry->user != BUF_USER_MAX)
+	if (entry->user != BUF_USER_MAX) {
 		aml_creat_pipeline(bm->priv, buf, entry->user);
+		if (entry->sub_entry[0])
+			aml_creat_pipeline(bm->priv, sub_buf[0], entry->user);
+		if (entry->sub_entry[1])
+			aml_creat_pipeline(bm->priv, sub_buf[1], entry->user);
+	}
 }
 
 static int aml_buf_output(struct buf_core_mgr_s *bc,
@@ -800,9 +859,21 @@ static int aml_buf_output(struct buf_core_mgr_s *bc,
 {
 	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct aml_buf *buf = entry_to_aml_buf(entry);
+	struct aml_buf *master_buf;
+	struct buf_core_entry *master_entry;
+	int i;
 
 	if (task_chain_empty(buf->task))
 		return -1;
+
+	if (entry->pair != BUF_MASTER) {
+		master_entry = (struct buf_core_entry *)entry->master_entry;
+		master_buf = entry_to_aml_buf(master_entry);
+
+		for (i = 0; i < buf->num_planes; i++) {
+			buf->planes[i].bytes_used = master_buf->planes[i].bytes_used;
+		}
+	}
 
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
@@ -846,13 +917,13 @@ static int aml_buf_get_pre_user(struct buf_core_mgr_s *bc,
 		   struct buf_core_entry *entry,
 		   enum buf_core_user user)
 {
-	struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	//struct aml_buf_mgr_s *bm = bc_to_bm(bc);
 	struct aml_buf *buf = entry_to_aml_buf(entry);
 	int type;
 
 	if (task_chain_empty(buf->task))
 		return BUF_USER_MAX;
-
+#if 0
 	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
 		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
@@ -863,8 +934,35 @@ static int aml_buf_get_pre_user(struct buf_core_mgr_s *bc,
 		atomic_read(&entry->ref),
 		kref_read(&bc->core_ref),
 		bc->free_num);
-
+#endif
 	type = buf->task->get_pre_user(buf->task, user_to_task(user));
+
+	return task_to_user(type);
+}
+
+static int aml_buf_get_next_user(struct buf_core_mgr_s *bc,
+		   struct buf_core_entry *entry,
+		   enum buf_core_user user)
+{
+	//struct aml_buf_mgr_s *bm = bc_to_bm(bc);
+	struct aml_buf *buf = entry_to_aml_buf(entry);
+	int type;
+
+	if (task_chain_empty(buf->task))
+		return BUF_USER_MAX;
+#if 0
+	v4l_dbg(bm->priv, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		__func__,
+		entry->user,
+		entry->key,
+		entry->state,
+		bc->state,
+		atomic_read(&entry->ref),
+		kref_read(&bc->core_ref),
+		bc->free_num);
+#endif
+	type = buf->task->get_next_user(buf->task, user_to_task(user));
 
 	return task_to_user(type);
 }
@@ -883,6 +981,7 @@ int aml_buf_mgr_init(struct aml_buf_mgr_s *bm, char *name, int id, void *priv)
 	bm->bc.input		= aml_buf_input;
 	bm->bc.output		= aml_buf_output;
 	bm->bc.get_pre_user	= aml_buf_get_pre_user;
+	bm->bc.get_next_user	= aml_buf_get_next_user;
 	bm->bc.external_process	= aml_external_process;
 	bm->bc.mem_ops.alloc	= aml_buf_alloc;
 	bm->bc.mem_ops.free	= aml_buf_free;

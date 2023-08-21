@@ -677,7 +677,8 @@ static int avs_recycle_frame_buffer(struct vdec_avs_hw_s *hw)
 				__func__, i, hw->pics[i].cma_alloc_addr,
 				aml_buf->index,
 				hw->vf_ref[i]);
-			if (ctx->vpp_is_need && hw->interlace_flag &&
+			if ((ctx->vpp_is_need || ctx->enable_di_post) &&
+				hw->interlace_flag &&
 				hw->vf_ref[i] < 2)
 				continue;
 			aml_buf_put_ref(&ctx->bm, aml_buf);
@@ -702,6 +703,7 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 {
 	struct aml_vcodec_ctx *ctx =
 		(struct aml_vcodec_ctx *)(hw->v4l2_ctx);
+	struct aml_buf *sub_buf;
 	int i, free_count = 0;
 	int free_slot =0;
 
@@ -784,6 +786,16 @@ static bool is_available_buffer(struct vdec_avs_hw_s *hw)
 		}
 		hw->aml_buf->task->attach(hw->aml_buf->task, &task_dec_ops, hw_to_vdec(hw));
 		hw->aml_buf->state = FB_ST_DECODER;
+		if (hw->aml_buf->sub_buf[0]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[0];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
+		if (hw->aml_buf->sub_buf[1]) {
+			sub_buf = (struct aml_buf *)hw->aml_buf->sub_buf[1];
+			sub_buf->task->attach(sub_buf->task, &task_dec_ops, hw_to_vdec(hw));
+			sub_buf->state = FB_ST_DECODER;
+		}
 	}
 
 	if (hw->aml_buf) {
@@ -920,7 +932,8 @@ static int v4l_alloc_buff_config_canvas(struct vdec_avs_hw_s *hw, int i)
 		canvas_width, canvas_height);
 
 	aml_buf_get_ref(&ctx->bm, aml_buf);
-	if (ctx->vpp_is_need && hw->interlace_flag) {
+	if ((ctx->vpp_is_need || ctx->enable_di_post) &&
+		hw->interlace_flag) {
 		aml_buf_get_ref(&ctx->bm, aml_buf);
 	}
 
@@ -2844,7 +2857,8 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		!hw->vf_ref[hw->refs[0]]) {
 		hw->ref_use[hw->refs[0]]++;
 		hw->vf_ref[hw->refs[0]]++;
-		if (ctx->vpp_is_need && hw->interlace_flag)
+		if ((ctx->vpp_is_need || ctx->enable_di_post) &&
+			hw->interlace_flag)
 			hw->vf_ref[hw->refs[0]]++;
 		ctx->current_timestamp = hw->pic_pts[hw->refs[0]].timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
@@ -2855,7 +2869,8 @@ static void handle_decoding_error(struct vdec_avs_hw_s *hw)
 		!hw->vf_ref[hw->refs[1]]) {
 		hw->ref_use[hw->refs[1]]++;
 		hw->vf_ref[hw->refs[1]]++;
-		if (ctx->vpp_is_need && hw->interlace_flag)
+		if ((ctx->vpp_is_need || ctx->enable_di_post) &&
+			hw->interlace_flag)
 			hw->vf_ref[hw->refs[1]]++;
 		ctx->current_timestamp = hw->pic_pts[hw->refs[1]].timestamp;
 		vdec_v4l_post_error_frame_event(ctx);
@@ -3465,7 +3480,8 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 			(v4l2_ctx->cap_pix_fmt == V4L2_PIX_FMT_NV12M))
 			nv_order = VIDTYPE_VIU_NV12;
 
-	if (hw->interlace_flag && (v4l2_ctx->vpp_is_need)) {	/* interlace */
+	if (hw->interlace_flag &&
+		(v4l2_ctx->vpp_is_need || v4l2_ctx->enable_di_post)) {	/* interlace */
 		hw->throw_pb_flag = 0;
 
 		debug_print(hw, PRINT_FLAG_VFRAME_DETAIL,
@@ -3567,13 +3583,16 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace1 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
 		vdec_vframe_ready(vdec, vf);
-		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
+			if (v4l2_ctx->enable_di_post)
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, vf);
+			aml_buf_set_vframe(aml_buf, vf);
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
 
@@ -3666,13 +3685,18 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		debug_print(hw, PRINT_FLAG_PTS,
 			"interlace2 vf->pts = %d, vf->pts_us64 = %lld, pts_valid = %d\n", vf->pts, vf->pts_us64, pts_valid);
 		vdec_vframe_ready(vdec, vf);
-		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
 
 		if (v4l2_ctx->is_stream_off) {
 			vavs_vf_put(vavs_vf_get(vdec), vdec);
 		} else {
+			if (aml_buf->sub_buf[0])
+				aml_buf = aml_buf->sub_buf[0];
+			if (v4l2_ctx->enable_di_post)
+				v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+					aml_buf, vf);
+			aml_buf_set_vframe(aml_buf, vf);
 			aml_buf_done(&v4l2_ctx->bm, aml_buf, BUF_USER_DEC);
 		}
 
@@ -3778,6 +3802,9 @@ static int prepare_display_buf(struct vdec_avs_hw_s *hw,
 		}
 		decoder_do_frame_check(hw_to_vdec(hw), vf);
 		vdec_vframe_ready(vdec, vf);
+		if (v4l2_ctx->enable_di_post)
+			v4l2_ctx->fbc_transcode_and_set_vf(v4l2_ctx,
+				aml_buf, vf);
 		aml_buf_set_vframe(aml_buf, vf);
 		kfifo_put(&hw->display_q, (const struct vframe_s *)vf);
 		ATRACE_COUNTER(hw->pts_name, vf->pts);
@@ -3943,7 +3970,7 @@ void avs_buf_ref_process_for_exception(struct vdec_avs_hw_s *hw)
 
 	aml_buf_put_ref(&ctx->bm, aml_buf);
 	aml_buf_put_ref(&ctx->bm, aml_buf);
-	if (ctx->vpp_is_need && hw->interlace_flag) {
+	if ((ctx->vpp_is_need || ctx->enable_di_post) && hw->interlace_flag) {
 		aml_buf_put_ref(&ctx->bm, aml_buf);
 	}
 

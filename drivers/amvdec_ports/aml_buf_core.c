@@ -71,9 +71,11 @@ static void direction_buf_get(struct buf_core_mgr_s *bc,
 				entry->ref_bit_map -= GE2D_BIT;
 
 			break;
+		case BUF_USER_DI:
+			entry->ref_bit_map += DI_BIT;
+
+			break;
 		default:
-			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
-			"Invalid user(%d)!\n", user);
 			break;
 	}
 }
@@ -116,12 +118,19 @@ static void direction_buf_put(struct buf_core_mgr_s *bc,
 			break;
 		case BUF_USER_VSINK:
 			entry->ref_bit_map -= VSINK_BIT;
-			entry->holder = BUF_HOLDER_DEC;
+			if (entry->ref_bit_map & DEC_MASK)
+				entry->holder = BUF_HOLDER_DEC;
+			if (entry->ref_bit_map & VSINK_MASK)
+				entry->holder = BUF_HOLDER_VSINK;
+			else if (entry->ref_bit_map & DI_MASK)
+				entry->holder = BUF_HOLDER_DI;
+
+			break;
+		case BUF_USER_DI:
+			entry->ref_bit_map -= DI_BIT;
 
 			break;
 		default:
-			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_ERROR,
-			"Invalid user(%d)!\n", user);
 			break;
 	}
 }
@@ -131,18 +140,20 @@ static void buf_core_update_holder(struct buf_core_mgr_s *bc,
 			  enum buf_core_user user,
 			  enum buf_direction direction)
 {
-	if (direction == BUF_GET)
-		direction_buf_get(bc, entry, user);
-	else
-		direction_buf_put(bc, entry, user);
+	struct buf_core_entry *master = entry->pair != BUF_MASTER ? entry->master_entry : entry;
 
-	if (entry->ref_bit_map & 0x8888)
+	if (direction == BUF_GET)
+		direction_buf_get(bc, master, user);
+	else
+		direction_buf_put(bc, master, user);
+
+	if (master->ref_bit_map & 0x8888)
 		v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"error! ref_bit_map(0x%x)\n", entry->ref_bit_map);
+		"error! ref_bit_map(0x%x)\n", master->ref_bit_map);
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, holder:%d, ref_bit_map(0x%x)\n",
-		__func__, user, entry->holder, entry->ref_bit_map);
+		"%s, user:%d, holder:%d, key:%lx, ref_bit_map(0x%x)\n",
+		__func__, user, master->holder, master->key, master->ref_bit_map);
 
 	return;
 }
@@ -155,12 +166,16 @@ static void buf_core_free_que(struct buf_core_mgr_s *bc,
 	entry->ref_bit_map = 0;
 	list_add_tail(&entry->node, &bc->free_que);
 	bc->free_num++;
+	entry->inited = true;
+	entry->queued_mask = 0;
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
+		entry->phy_addr,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -173,7 +188,7 @@ static void buf_core_get(struct buf_core_mgr_s *bc,
 			struct buf_core_entry **out_entry,
 			bool more_ref)
 {
-	struct buf_core_entry *entry = NULL;
+	struct buf_core_entry *entry = NULL, *sub_entry;
 	bool user_change = false;
 
 	mutex_lock(&bc->mutex);
@@ -195,10 +210,24 @@ static void buf_core_get(struct buf_core_mgr_s *bc,
 	entry->state	= BUF_STATE_USE;
 	atomic_inc(&entry->ref);
 
+	if (entry->sub_entry[0]) {
+		sub_entry = (struct buf_core_entry *)entry->sub_entry[0];
+		sub_entry->user = user;
+		sub_entry->state = BUF_STATE_USE;
+	}
+
+	if (entry->sub_entry[1]) {
+		sub_entry = (struct buf_core_entry *)entry->sub_entry[1];
+		sub_entry->user = user;
+		sub_entry->state = BUF_STATE_USE;
+	}
+
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__, user,
 		entry->key,
+		entry->phy_addr,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -226,9 +255,7 @@ static void buf_core_put(struct buf_core_mgr_s *bc,
 		return;
 	}
 
-	if (!atomic_dec_return(&entry->ref)) {
-		buf_core_free_que(bc, entry);
-	}
+	atomic_dec_return(&entry->ref);
 
 	mutex_unlock(&bc->mutex);
 }
@@ -249,10 +276,12 @@ static void buf_core_get_ref(struct buf_core_mgr_s *bc,
 	buf_core_update_holder(bc, entry, BUF_USER_DEC, BUF_GET);
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
+		entry->phy_addr,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -269,10 +298,11 @@ static void buf_core_put_ref(struct buf_core_mgr_s *bc,
 
 	if (!atomic_read(&entry->ref) && !bc_sanity_check(bc)) {
 		v4l_dbg_ext(bc->id, 0,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
+		entry->phy_addr,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -290,10 +320,12 @@ static void buf_core_put_ref(struct buf_core_mgr_s *bc,
 	}
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
+		entry->phy_addr,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -310,8 +342,12 @@ static int buf_core_done(struct buf_core_mgr_s *bc,
 			   enum buf_core_user user)
 {
 	int ret = 0;
-
+	struct buf_core_entry *master;
 	mutex_lock(&bc->mutex);
+
+	master = entry;
+	if (entry->pair != BUF_MASTER)
+		master = entry->master_entry;
 
 	if (!bc_sanity_check(bc)) {
 		goto out;
@@ -324,24 +360,28 @@ static int buf_core_done(struct buf_core_mgr_s *bc,
 		goto out;
 	}
 
-	if (bc->vpp_dque &&
-		!bc->vpp_dque(bc, entry)) {
-		atomic_inc(&entry->ref);
-	}
-
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
-		__func__, user,
-		entry->key,
-		entry->state,
-		bc->state,
-		atomic_read(&entry->ref),
-		kref_read(&bc->core_ref),
-		bc->free_num);
-
 	entry->state = BUF_STATE_DONE;
 
 	ret = bc->output(bc, entry, user);
+
+	if (bc->vpp_dque && /* Submit to GE2D doesn't call vpp_dque! */
+		bc->get_next_user(bc, entry, user) == BUF_USER_VSINK &&
+		!bc->vpp_dque(bc, entry)) {
+		atomic_inc(&master->ref);
+		buf_core_update_holder(bc, entry, BUF_USER_DI, BUF_GET);
+	}
+
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		__func__, user,
+		entry->key,
+		entry->phy_addr,
+		entry->index,
+		entry->state,
+		bc->state,
+		atomic_read(&master->ref),
+		kref_read(&bc->core_ref),
+		bc->free_num);
 out:
 	mutex_unlock(&bc->mutex);
 
@@ -352,29 +392,7 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 			    struct buf_core_entry *entry,
 			    enum buf_core_user user)
 {
-	mutex_lock(&bc->mutex);
-
-	if (!bc_sanity_check(bc)) {
-		goto out;
-	}
-
-	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
-		__func__, user,
-		entry->key,
-		entry->state,
-		bc->state,
-		atomic_read(&entry->ref),
-		kref_read(&bc->core_ref),
-		bc->free_num);
-
-	if (WARN_ON((entry->state != BUF_STATE_INIT) &&
-		(entry->state != BUF_STATE_DONE) &&
-		(entry->state != BUF_STATE_REF))) {
-		goto out;
-	}
-
-	if (bc->vpp_que &&
+	if (bc->vpp_que && user == BUF_USER_VSINK &&
 		!bc->vpp_que(bc, entry)) {
 		/*
 		 * For DI post scenario, if seek or change resolution is doing,
@@ -385,9 +403,34 @@ static void buf_core_fill(struct buf_core_mgr_s *bc,
 		 * is referenced by DI mgr, wait for DI mgr to be used, and
 		 * then call callback to retrieve the buffer.
 		 */
-		if (entry->user == BUF_USER_MAX) {
+		mutex_lock(&bc->mutex);
+		if (!entry->inited || entry->state == BUF_STATE_FREE)
 			goto out;
-		}
+		mutex_unlock(&bc->mutex);
+	}
+
+	mutex_lock(&bc->mutex);
+
+	if (!bc_sanity_check(bc)) {
+		goto out;
+	}
+
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		__func__, user,
+		entry->key,
+		entry->phy_addr,
+		entry->index,
+		entry->state,
+		bc->state,
+		atomic_read(&entry->ref),
+		kref_read(&bc->core_ref),
+		bc->free_num);
+
+	if (WARN_ON((entry->state != BUF_STATE_INIT) &&
+		(entry->state != BUF_STATE_DONE) &&
+		(entry->state != BUF_STATE_REF))) {
+		goto out;
 	}
 
 	if (bc->external_process)
@@ -406,10 +449,14 @@ out:
 
 static void buf_core_vpp_cb(struct buf_core_mgr_s *bc, struct buf_core_entry *entry)
 {
+	mutex_lock(&bc->mutex);
+	if (entry->pair != BUF_MASTER)
+		entry = (struct buf_core_entry *)entry->master_entry;
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__, entry->user,
 		entry->key,
+		entry->phy_addr,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -420,8 +467,9 @@ static void buf_core_vpp_cb(struct buf_core_mgr_s *bc, struct buf_core_entry *en
 		buf_core_free_que(bc, entry);
 	} else {
 		entry->state = BUF_STATE_REF;
-		buf_core_update_holder(bc, entry, BUF_USER_DEC, BUF_PUT);
+		buf_core_update_holder(bc, entry, BUF_USER_DI, BUF_PUT);
 	}
+	mutex_unlock(&bc->mutex);
 }
 
 static int buf_core_ready_num(struct buf_core_mgr_s *bc)
@@ -448,6 +496,9 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 	struct hlist_node *h_tmp;
 	ulong bucket;
 
+	if (bc->vpp_reset)
+		bc->vpp_reset(bc);
+
 	mutex_lock(&bc->mutex);
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
@@ -457,9 +508,6 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		kref_read(&bc->core_ref),
 		bc->free_num);
 
-	if (bc->vpp_reset)
-		bc->vpp_reset(bc);
-
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		list_del(&entry->node);
 	}
@@ -467,7 +515,16 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
 		entry->user = BUF_USER_MAX;
 		entry->state = BUF_STATE_INIT;
-		atomic_set(&entry->ref, 1);
+		entry->queued_mask = 0;
+		entry->inited = false;
+
+		if (entry->pair == BUF_MASTER) {
+			atomic_set(&entry->ref, 1);
+			if (entry->sub_entry[0])
+				atomic_inc(&entry->ref);
+			if (entry->sub_entry[1])
+				atomic_inc(&entry->ref);
+		}
 	}
 
 	bc->free_num = 0;
@@ -492,7 +549,8 @@ static void buf_core_destroy(struct kref *kref)
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR, "%s\n", __func__);
 }
 
-static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
+static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key,
+					ulong phy_addr, void *priv)
 {
 	int ret = 0;
 	struct buf_core_entry *entry;
@@ -503,9 +561,12 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
 	hash_for_each_possible_safe(bc->buf_table, entry, tmp, h_node, key) {
 		if (key == entry->key) {
 			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-				"reuse buffer, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+				"reuse buffer, user:%d, key:%lx, phy:%lx idx:%d, "
+				"st:(%d, %d), ref:(%d, %d), free:%d\n",
 				entry->user,
 				entry->key,
+				entry->phy_addr,
+				entry->index,
 				entry->state,
 				bc->state,
 				atomic_read(&entry->ref),
@@ -514,8 +575,7 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
 
 			entry->user	= BUF_USER_MAX;
 			entry->state	= BUF_STATE_INIT;
-			entry->vb2	= priv;
-			//atomic_set(&entry->ref, 1);
+			entry->vb2 	= priv;
 
 			bc->prepare(bc, entry);
 
@@ -529,6 +589,7 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
 	}
 
 	entry->key	= key;
+	entry->phy_addr = phy_addr;
 	entry->priv	= bc;
 	entry->vb2	= priv;
 	entry->user	= BUF_USER_MAX;
@@ -542,10 +603,12 @@ static int buf_core_attach(struct buf_core_mgr_s *bc, ulong key, void *priv)
 	kref_get(&bc->core_ref);
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-		"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+		"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 		__func__,
 		entry->user,
 		entry->key,
+		entry->phy_addr,
+		entry->index,
 		entry->state,
 		bc->state,
 		atomic_read(&entry->ref),
@@ -567,10 +630,12 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 	hash_for_each_possible_safe(bc->buf_table, entry, h_tmp, h_node, key) {
 		if (key == entry->key) {
 			v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
-				"%s, user:%d, key:%lx, st:(%d, %d), ref:(%d, %d), free:%d\n",
+				"%s, user:%d, key:%lx, phy:%lx, idx:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
 				__func__,
 				entry->user,
 				entry->key,
+				entry->phy_addr,
+				entry->index,
 				entry->state,
 				bc->state,
 				atomic_read(&entry->ref),
@@ -589,6 +654,49 @@ static void buf_core_detach(struct buf_core_mgr_s *bc, ulong key)
 	mutex_unlock(&bc->mutex);
 }
 
+static void buf_core_update(struct buf_core_mgr_s *bc, struct buf_core_entry *entry,
+					ulong phy_addr, enum buf_pair pair)
+{
+	mutex_lock(&bc->mutex);
+
+	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
+			"%s, user:%d, key:%lx, phy:(%lx->%lx), "
+			"idx:%d, pair:%d st:(%d, %d), ref:(%d, %d), free:%d\n",
+			__func__,
+			entry->user,
+			entry->key,
+			entry->phy_addr,
+			phy_addr,
+			entry->index,
+			pair,
+			entry->state,
+			bc->state,
+			atomic_read(&entry->ref),
+			kref_read(&bc->core_ref),
+			bc->free_num);
+
+	entry->phy_addr = phy_addr;
+	entry->pair = pair;
+
+	bc->prepare(bc, entry);
+
+	mutex_unlock(&bc->mutex);
+}
+
+void buf_core_replace(struct buf_core_mgr_s *bc,
+				struct buf_core_entry *entry, void *priv)
+{
+	mutex_lock(&bc->mutex);
+
+	entry->vb2	= priv;
+	entry->user	= BUF_USER_MAX;
+	entry->state	= BUF_STATE_INIT;
+
+	bc->prepare(bc, entry);
+
+	mutex_unlock(&bc->mutex);
+}
+
 ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 {
 	struct buf_core_entry *entry, *tmp;
@@ -598,6 +706,7 @@ ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 	int ge2d_holders = 0;
 	int vpp_holders = 0;
 	int vsink_holders = 0;
+	int di_holders = 0;
 	char *pbuf = buf;
 
 	mutex_lock(&bc->mutex);
@@ -605,8 +714,11 @@ ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 	pbuf += sprintf(pbuf, "\nFree queue elements:\n");
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		pbuf += sprintf(pbuf,
-			"--> key:%lx, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d\n",
+			"--> key:%lx, phy:%lx, idx:%d, user:%d, holder:%d, "
+			"st:(%d, %d), ref:(%d, %d), free:%d\n",
 			entry->key,
+			entry->phy_addr,
+			entry->index,
 			entry->user,
 			entry->holder,
 			entry->state,
@@ -618,28 +730,35 @@ ssize_t buf_core_walk(struct buf_core_mgr_s *bc, char *buf)
 
 	pbuf += sprintf(pbuf, "\nHash table elements:\n");
 	hash_for_each_safe(bc->buf_table, bucket, h_tmp, entry, h_node) {
-		if (entry->holder == BUF_HOLDER_DEC)
-			dec_holders++;
-		if (entry->holder == BUF_HOLDER_GE2D)
-			ge2d_holders++;
-		if (entry->holder == BUF_HOLDER_VPP)
-			vpp_holders++;
-		if (entry->holder == BUF_HOLDER_VSINK)
-			vsink_holders++;
-		pbuf += sprintf(pbuf,
-			"--> key:%lx, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d, ref_map:0x%x\n",
-			entry->key,
-			entry->user,
-			entry->holder,
-			entry->state,
-			bc->state,
-			atomic_read(&entry->ref),
-			kref_read(&bc->core_ref),
-			bc->free_num,
-			entry->ref_bit_map);
+		if (entry->pair == BUF_MASTER) {
+			if (entry->holder == BUF_HOLDER_DEC)
+				dec_holders++;
+			if (entry->holder == BUF_HOLDER_GE2D)
+				ge2d_holders++;
+			if (entry->holder == BUF_HOLDER_VPP)
+				vpp_holders++;
+			if (entry->holder == BUF_HOLDER_VSINK)
+				vsink_holders++;
+			if (entry->ref_bit_map & DI_MASK)
+				di_holders++;
+
+			pbuf += sprintf(pbuf,
+				"--> key:%lx, phy:%lx, idx:%d, user:%d, holder:%d, st:(%d, %d), ref:(%d, %d), free:%d, ref_map:0x%x\n",
+				entry->key,
+				entry->phy_addr,
+				entry->index,
+				entry->user,
+				entry->holder,
+				entry->state,
+				bc->state,
+				atomic_read(&entry->ref),
+				kref_read(&bc->core_ref),
+				bc->free_num,
+				entry->ref_bit_map);
+		}
 	}
-	pbuf += sprintf(pbuf, "holders: dec(%d), ge2d(%d), vpp(%d), vsink(%d)\n",
-		dec_holders, ge2d_holders, vpp_holders, vsink_holders);
+	pbuf += sprintf(pbuf, "holders: dec(%d), ge2d(%d), vpp(%d), vsink(%d) di(%d)\n",
+		dec_holders, ge2d_holders, vpp_holders, vsink_holders, di_holders);
 
 	mutex_unlock(&bc->mutex);
 
@@ -671,6 +790,8 @@ int buf_core_mgr_init(struct buf_core_mgr_s *bc)
 	bc->attach		= buf_core_attach;
 	bc->detach		= buf_core_detach;
 	bc->reset		= buf_core_reset;
+	bc->update		= buf_core_update;
+	bc->replace		= buf_core_replace;
 
 	/* The interface set of the buffer core operation. */
 	bc->buf_ops.get		= buf_core_get;

@@ -107,6 +107,7 @@ struct task_chain_s {
 	int	(*submit) (struct task_chain_s *, enum task_type_e);
 	void	(*recycle) (struct task_chain_s *, enum task_type_e);
 	enum task_type_e (*get_pre_user) (struct task_chain_s *, enum task_type_e);
+	enum task_type_e (*get_next_user) (struct task_chain_s *, enum task_type_e);
 };
 
 

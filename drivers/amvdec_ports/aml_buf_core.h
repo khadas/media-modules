@@ -36,12 +36,18 @@
 #define GE2D_BIT  (UL(1) << (4))
 #define VPP_BIT  (UL(1) << (8))
 #define VSINK_BIT  (UL(1) << (12))
+#define DI_BIT  (UL(1) << (16))
 
 #define DEC_MASK  (0xf)
 #define GE2D_MASK  (0xf0)
 #define VPP_MASK  (0xf00)
 #define VSINK_MASK  (0xf000)
+#define DI_MASK  (0xf0000)
 
+#define MASTER_DONE  (1)
+#define SUB0_DONE  (2)
+#define SUB1_DONE  (3)
+#define PAIR_DONE  (3)
 
 struct buf_core_mgr_s;
 
@@ -91,6 +97,7 @@ enum buf_core_user {
 	BUF_USER_VPP,
 	BUF_USER_GE2D,
 	BUF_USER_VSINK,
+	BUF_USER_DI,
 	BUF_USER_MAX
 };
 
@@ -108,6 +115,7 @@ enum buf_core_holder {
 	BUF_HOLDER_VPP,
 	BUF_HOLDER_GE2D,
 	BUF_HOLDER_VSINK,
+	BUF_HOLDER_DI,
 	BUF_HOLDER_FREE,
 };
 
@@ -117,10 +125,24 @@ enum buf_direction {
 };
 
 /*
+ * enum buf_pair - For di post.
+ *
+ * @BUF_MASTER	: Indicates that the first field.
+ * @BUF_SUB0	: Indicates that the second field.
+ * @BUF_SUB1	: Indicates that the third field.
+ */
+enum buf_pair {
+	BUF_MASTER,
+	BUF_SUB0,
+	BUF_SUB1
+};
+
+/*
  * struct buf_core_entry - The entry of buffer.
  *
  * @key		: Record the actual physical address associated with vb.
  * @ref		: Decode buffer's reference count status.
+ * @master_ref	: Point to master buf ref.
  * @node	: The position of the decoded buffer entry.
  * @h_node	: The node of hash list used for query buffer.
  * @state	: The state of the buffer to be used.
@@ -129,10 +151,20 @@ enum buf_direction {
  * @priv	: Record associated private data.
  * @ref_bit_map	: [0, 3]: dec ref, [4, 7]: ge2d ref,
  *		  [8, 11]: vpp ref, [12, 15]: vsink ref.
+ * @sub_entry[2]: sub_entry[0]: The second filed buf entry;
+ *		  sub_entry[1]: The third filed buf entry;
+ * @master_entry: The first filed buf entry.
+ * @pair	: Buf attributes: master, sub0, sub1.
+ * @pair_state	: Buffer pairing status.
+ * @index	: Aml buf index.
+ * @inited	: The pairing is completed and enters the free queue.
+ * @queued_mask	: Field buffer return times.
  */
 struct buf_core_entry {
 	ulong			key;
+	ulong			phy_addr;
 	atomic_t		ref;
+	atomic_t		*master_ref;
 	struct list_head	node;
 	struct hlist_node	h_node;
 	enum buf_core_state	state;
@@ -141,6 +173,13 @@ struct buf_core_entry {
 	void			*vb2;
 	void			*priv;
 	u32			ref_bit_map;
+	void			*sub_entry[2];
+	void			*master_entry;
+	enum buf_pair		pair;
+	u32			pair_state;
+	u32			index;
+	u32			inited;
+	u32			queued_mask; /* bit0: master; bit1: sub0; bit1: sub1*/
 };
 
 /*
@@ -219,7 +258,7 @@ struct buf_core_mgr_s {
 	DECLARE_HASHTABLE(buf_table, BUF_HASH_BITS);
 
 	void	(*config)(struct buf_core_mgr_s *, void *);
-	int	(*attach)(struct buf_core_mgr_s *, ulong, void *);
+	int	(*attach)(struct buf_core_mgr_s *, ulong, ulong, void *);
 	void	(*detach)(struct buf_core_mgr_s *, ulong);
 	void	(*reset)(struct buf_core_mgr_s *);
 	void	(*prepare)(struct buf_core_mgr_s *, struct buf_core_entry *);
@@ -230,6 +269,9 @@ struct buf_core_mgr_s {
 	int	(*vpp_reset)(struct buf_core_mgr_s *);
 	void    (*external_process)(struct buf_core_mgr_s *, struct buf_core_entry *);
 	int	(*get_pre_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
+	int	(*get_next_user) (struct buf_core_mgr_s *, struct buf_core_entry *, enum buf_core_user);
+	void	(*update)(struct buf_core_mgr_s *, struct buf_core_entry *, ulong, enum buf_pair);
+	void	(*replace)(struct buf_core_mgr_s *, struct buf_core_entry *, void *);
 
 	struct buf_core_mem_ops	mem_ops;
 	struct buf_core_ops	buf_ops;
