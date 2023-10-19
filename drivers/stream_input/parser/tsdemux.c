@@ -63,6 +63,9 @@ static s32 pVServerInsId = -1;
 static bool singleDmxNewPtsserv = false;
 static ptsserver_ins* PServerIns = NULL;
 
+static struct workqueue_struct *ptsserv_workqueue;
+static struct ptsserver_checkin_pts_s vpts_checkin_info;
+
 static int pts_checkin_debug = 0;
 module_param(pts_checkin_debug, int, 0644);
 MODULE_PARM_DESC(pts_checkin_debug, "\n\t\t demux pts check in debug");
@@ -454,6 +457,12 @@ static int pts_checkin_vpts_size(u32 ptr, u64 pts_val) {
 	return 0;
 }
 
+static void ptsserv_checkin_work(struct work_struct *work) {
+	struct ptsserver_checkin_pts_s *ptsserv_wk =
+		container_of(work,struct ptsserver_checkin_pts_s,pts_wkr_in);
+	pts_checkin_vpts_size(ptsserv_wk->ptr,ptsserv_wk->pts_val);
+}
+
 extern int pts_lookup(u8 type, u32 *val, u32 *frame_size, u32 pts_margin);
 extern int pts_getaudiocheckinsize(void);
 
@@ -501,9 +510,10 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 						READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
 						vpts);
 				} else {
-					pts_checkin_vpts_size(READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
-						vpts);
 					queue_video_info(vpts,PTS_PACKET_SIZE);
+					vpts_checkin_info.ptr = READ_DEMUX_REG(VIDEO_PDTS_WR_PTR);
+					vpts_checkin_info.pts_val = vpts;
+					queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
 				}
 			}
 
@@ -552,9 +562,10 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 						DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
 						vpts);
 				} else {
-					pts_checkin_vpts_size(DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
-						vpts);
 					queue_video_info(vpts,PTS_PACKET_SIZE);
+					vpts_checkin_info.ptr = DMX_READ_REG(id, VIDEO_PDTS_WR_PTR);
+					vpts_checkin_info.pts_val = vpts;
+					queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
 				}
 			}
 
@@ -991,6 +1002,8 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 			r = ptsserver_start(PTS_SERVER_TYPE_VIDEO);
 			pVServerInsId = vdec->pts_server_id;
 			pr_info("pVServerInsId:%d\n", pVServerInsId);
+			ptsserv_workqueue = create_workqueue("ptsserv_queue");
+			INIT_WORK(&(vpts_checkin_info.pts_wkr_in), ptsserv_checkin_work);
 		} else {
 			if (has_hevc_vdec())
 				r = pts_start((is_hevc) ? PTS_TYPE_HEVC : PTS_TYPE_VIDEO);
@@ -1120,7 +1133,11 @@ void tsdemux_release(void)
 	if (!enable_demux_driver()) {
 		WRITE_DEMUX_REG(STB_INT_MASK, 0);
 		/*TODO irq */
-
+		if (singleDmxNewPtsserv) {
+			cancel_work_sync(&vpts_checkin_info.pts_wkr_in);
+			flush_workqueue(ptsserv_workqueue);
+			destroy_workqueue(ptsserv_workqueue);
+		}
 		vdec_free_irq(DEMUX_IRQ, (void *)tsdemux_irq_id);
 	} else {
 

@@ -485,17 +485,14 @@ long ptsserver_checkin_pts_offset(s32 pServerInsId, checkin_pts_offset* mCheckin
 	s32 level = 0;
 	bool checkinHeadNode = false;
 	bool checkinSpliceNode = false;
-	ulong flags = 0;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
 	vPtsServerIns = &(vPtsServerInsList[index]);
-	// mutex_lock(&vPtsServerIns->mListLock);
-	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
+	mutex_lock(&vPtsServerIns->mListLock);
 	pInstance = vPtsServerIns->pInstance;
 	if (pInstance == NULL) {
-		// mutex_unlock(&vPtsServerIns->mListLock);
-		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		mutex_unlock(&vPtsServerIns->mListLock);
 		return -1;
 	}
 	if (pInstance->mListSize >= pInstance->mMaxCount) {
@@ -522,8 +519,7 @@ long ptsserver_checkin_pts_offset(s32 pServerInsId, checkin_pts_offset* mCheckin
 				if (ptsserver_debuglevel >= 1) {
 					pts_pr_info(index,"ptn is null return \n");
 				}
-				// mutex_unlock(&vPtsServerIns->mListLock);
-				spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+				mutex_unlock(&vPtsServerIns->mListLock);
 				return -1;
 			}
 		} else {
@@ -542,8 +538,7 @@ long ptsserver_checkin_pts_offset(s32 pServerInsId, checkin_pts_offset* mCheckin
 									pInstance->mLastCheckinPiecePts64);
 			}
 
-			// mutex_unlock(&vPtsServerIns->mListLock);
-			spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+			mutex_unlock(&vPtsServerIns->mListLock);
 			return 0;
 		}
 		checkinSpliceNode = true;
@@ -571,8 +566,7 @@ long ptsserver_checkin_pts_offset(s32 pServerInsId, checkin_pts_offset* mCheckin
 			if (ptsserver_debuglevel >= 1) {
 				pts_pr_info(index,"ptn is null return \n");
 			}
-			// mutex_unlock(&vPtsServerIns->mListLock);
-			spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+			mutex_unlock(&vPtsServerIns->mListLock);
 			return -1;
 		}
 
@@ -659,8 +653,7 @@ long ptsserver_checkin_pts_offset(s32 pServerInsId, checkin_pts_offset* mCheckin
 							ptn);
 	}
 
-	// mutex_unlock(&vPtsServerIns->mListLock);
-	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
 EXPORT_SYMBOL(ptsserver_checkin_pts_offset);

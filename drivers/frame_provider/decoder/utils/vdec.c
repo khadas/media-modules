@@ -3004,6 +3004,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	char dev_name[32] = {0};
 	int id = PLATFORM_DEVID_AUTO;/*if have used my self*/
 	int max_di_count = max_di_instance;
+	bool single_dmx_new_ptsserv = false;
 #ifdef CONFIG_AMLOGIC_V4L_VIDEO3
 	char postprocess_name[64] = {0};
 #endif
@@ -3135,6 +3136,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D ||
 		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) &&
 		(vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO)) {
+		single_dmx_new_ptsserv = true;
 		p->use_vfm_path = 0;
 	}
 
@@ -3206,10 +3208,7 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 		/* create IONVIDEO instance and connect decoder's
 		 * vf_provider interface to it
 		 */
-		if (!is_support_no_parser() &&
-			!((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D ||
-			get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) &&
-			(vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO))) {
+		if (!is_support_no_parser() && !single_dmx_new_ptsserv) {
 			if (p->type != VDEC_TYPE_FRAME_BLOCK) {
 				r = -ENODEV;
 				pr_err("vdec: Incorrect decoder type\n");
