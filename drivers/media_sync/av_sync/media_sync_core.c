@@ -3669,6 +3669,7 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 		}
 		case GET_SLOW_SYNC_ENABLE:
 		case GET_TRICK_MODE:
+		case GET_AUDIO_WORK_MODE:
 		{
 			mediasync_ins_ext_ctrls(pSyncManage,&mediasyncUserControl);
 			if (copy_to_user((void *)arg,&mediasyncUserControl,sizeof(mediasyncControl))) {
@@ -3677,6 +3678,7 @@ long mediasync_ins_ext_ctrls_ioctrl(MediaSyncManager* pSyncManage, ulong arg, un
 			}
 			break;
 		}
+
 		case SET_VIDEO_FRAME_ADVANCE:
 		case SET_SLOW_SYNC_ENABLE:
 		case SET_TRICK_MODE:
@@ -3765,6 +3767,10 @@ long mediasync_ins_ext_ctrls(MediaSyncManager* pSyncManage,mediasync_control* me
 			ret = 0;
 			break;
 		}
+		case GET_AUDIO_WORK_MODE:
+			mediasyncControl->value = pInstance->mSyncInfo.audioPacketsInfo.isworkingchannel;
+			ret = 0;
+			break;
 		default:
 			break;
 	}
