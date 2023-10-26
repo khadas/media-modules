@@ -1831,37 +1831,26 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	ptsserver_ins* pInstance = NULL;
 	s32 index = get_index_from_ptsserver_id(pServerInsId);
 	pts_node *ptn = NULL;
+	ulong flags = 0;
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
 	vPtsServerIns = &(vPtsServerInsList[index]);
-	mutex_lock(&vPtsServerIns->mListLock);
+	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
 	pInstance = vPtsServerIns->pInstance;
 	if (pInstance == NULL) {
-		mutex_unlock(&vPtsServerIns->mListLock);
+		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
 		return -1;
 	}
 
 	pts_pr_info(index,"ptsserver_ins_reset ListSize:%d\n",pInstance->mListSize);
-	while (!list_empty(&pInstance->pts_free_list)) {
-		ptn = list_entry(pInstance->pts_free_list.next,
-						struct ptsnode, node);
-		if (ptn != NULL) {
-			list_del(&ptn->node);
-			ptn = NULL;
-		}
-	}
+
 	while (!list_empty(&pInstance->pts_list)) {
 		ptn = list_entry(pInstance->pts_list.next,
 						struct ptsnode, node);
-		if (ptn != NULL) {
-			list_del(&ptn->node);
-			ptn = NULL;
-		}
-	}
-	if (pInstance->all_free_ptn) {
-		vfree(pInstance->all_free_ptn);
-		pInstance->all_free_ptn = NULL;
+		list_del(&ptn->node);
+		list_add_tail(&ptn->node, &pInstance->pts_free_list);//queue empty buffer
+		pInstance->mListSize--;
 	}
 
 	pInstance->mPtsCheckinStarted = 0;
@@ -1908,19 +1897,7 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	INIT_LIST_HEAD(&pInstance->pts_list);
 	INIT_LIST_HEAD(&pInstance->pts_free_list);
 
-	pInstance->all_free_ptn = vmalloc(pInstance->mMaxCount * sizeof(struct ptsnode));
-	if (pInstance->all_free_ptn == NULL) {
-		pr_info("vmalloc all_free_ptn fail \n");
-		return -1;
-	}
-	for (index = 0; index < pInstance->mMaxCount; index++) {
-		ptn = &pInstance->all_free_ptn[index];
-		if (ptsserver_debuglevel >= 1) {
-			pts_pr_info(pServerInsId,"ptn[%d]:%px\n", index,ptn);
-		}
-		list_add_tail(&ptn->node, &pInstance ->pts_free_list);
-	}
-	mutex_unlock(&vPtsServerIns->mListLock);
+	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
 	pts_pr_info(pServerInsId,"ptsserver_ins_reset ok \n");
 	return 0;
 }
