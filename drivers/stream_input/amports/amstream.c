@@ -4081,6 +4081,13 @@ static ssize_t reset_audio_port_store(struct class *class,
 	return size;
 }
 
+static ssize_t reset_audio_port_show(struct class *class,
+		struct class_attribute *attr,
+		char *buf)
+{
+	return 0;
+}
+
 ssize_t dump_stream_show(struct class *class,
 		struct class_attribute *attr, char *buf)
 {
@@ -4191,7 +4198,7 @@ static CLASS_ATTR_RO(vcodec_feature);
 static CLASS_ATTR_RO(videobufused);
 static CLASS_ATTR_RW(canuse_bufferlevel);
 static CLASS_ATTR_RW(max_buffer_delay_ms);
-static CLASS_ATTR_WO(reset_audio_port);
+static CLASS_ATTR_RW(reset_audio_port);
 
 static struct attribute *amstream_class_attrs[] = {
 	&class_attr_ports.attr,
