@@ -1623,7 +1623,7 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 					pts_pr_info(index,"Checkout i:%d offset(diff:%d L:0x%x C:0x%x)\n",i,offsetAbs,ptn->offset,cur_offset);
 				}
 				if (offsetAbs <=  pInstance->mLookupThreshold) {
-					if (offsetAbs <= offsetDiff && cur_offset >= ptn->offset) {
+					if (offsetAbs <= offsetDiff) {
 						offsetDiff = offsetAbs;
 						find = 1;
 						number = i;
@@ -1875,9 +1875,11 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	while (!list_empty(&pInstance->pts_list)) {
 		ptn = list_entry(pInstance->pts_list.next,
 						struct ptsnode, node);
-		list_del(&ptn->node);
-		list_add_tail(&ptn->node, &pInstance->pts_free_list);//queue empty buffer
-		pInstance->mListSize--;
+		if (ptn != NULL) {
+			list_del(&ptn->node);
+			list_add_tail(&ptn->node, &pInstance->pts_free_list);
+			pInstance->mListSize--;
+		}
 	}
 
 	pInstance->mPtsCheckinStarted = 0;
@@ -1903,7 +1905,6 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	pInstance->mLastDoubleCheckoutPts = 0;
 	pInstance->mLastDoubleCheckoutPts64 = 0;
 	pInstance->mDecoderDuration = 0;
-	pInstance->mListSize = 0;
 	pInstance->mLastCheckoutCurOffset = 0;
 	pInstance->mLastCheckinPiecePts = 0;
 	pInstance->mLastCheckinPiecePts64 = 0;
@@ -1920,9 +1921,6 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	pInstance->mLastCheckoutPts90k = 0;
 	pInstance->mFirstCheckinPts90k = 0;
 	pInstance->mLastCheckinPts90k = 0;
-
-	INIT_LIST_HEAD(&pInstance->pts_list);
-	INIT_LIST_HEAD(&pInstance->pts_free_list);
 
 	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
 	pts_pr_info(pServerInsId,"ptsserver_ins_reset ok \n");

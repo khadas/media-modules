@@ -63,7 +63,7 @@ static s32 pVServerInsId = -1;
 static bool singleDmxNewPtsserv = false;
 static ptsserver_ins* PServerIns = NULL;
 
-static struct workqueue_struct *ptsserv_workqueue;
+static struct workqueue_struct *ptsserv_workqueue = NULL;
 static struct ptsserver_checkin_pts_s vpts_checkin_info;
 
 static int pts_checkin_debug = 0;
@@ -513,7 +513,9 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 					queue_video_info(vpts,PTS_PACKET_SIZE);
 					vpts_checkin_info.ptr = READ_DEMUX_REG(VIDEO_PDTS_WR_PTR);
 					vpts_checkin_info.pts_val = vpts;
-					queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
+					if (ptsserv_workqueue) {
+						queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
+					}
 				}
 			}
 
@@ -565,7 +567,9 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 					queue_video_info(vpts,PTS_PACKET_SIZE);
 					vpts_checkin_info.ptr = DMX_READ_REG(id, VIDEO_PDTS_WR_PTR);
 					vpts_checkin_info.pts_val = vpts;
-					queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
+					if (ptsserv_workqueue) {
+						queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
+					}
 				}
 			}
 
@@ -1137,6 +1141,7 @@ void tsdemux_release(void)
 			cancel_work_sync(&vpts_checkin_info.pts_wkr_in);
 			flush_workqueue(ptsserv_workqueue);
 			destroy_workqueue(ptsserv_workqueue);
+			ptsserv_workqueue = NULL;
 		}
 		vdec_free_irq(DEMUX_IRQ, (void *)tsdemux_irq_id);
 	} else {
