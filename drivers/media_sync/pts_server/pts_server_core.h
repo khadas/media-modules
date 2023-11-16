@@ -167,7 +167,7 @@ long ptsserver_ins_release(s32 pServerInsId);
 long ptsserver_set_trick_mode(s32 pServerInsId,s32 mode);
 //audio
 long ptsserver_ins_reset(s32 pServerInsId);
-long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserver_alloc_para allocParm);
+long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserver_alloc_para* allocParm);
 long ptsserver_checkin_apts_size(s32 pServerInsId,checkin_apts_size* mCheckinPtsSize);
 long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mCheckoutPtsOffset);
 long ptsserver_get_list_size(s32 pServerInsId, u32* ListSize);

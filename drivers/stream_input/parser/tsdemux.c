@@ -1039,7 +1039,7 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 				goto err2;
 				pr_info("audio ptsserver start failed.(%d)\n", r);
 			}
-			r = ptsserver_static_ins_binder(pAServerInsId, &PServerIns, allocPara);
+			r = ptsserver_static_ins_binder(pAServerInsId, &PServerIns, &allocPara);
 			pr_info("pAServerInsId:%d index:%d\n", pAServerInsId, PServerIns->mPtsServerInsId);
 		} else {
 			r = pts_start(PTS_TYPE_AUDIO);
@@ -1536,7 +1536,7 @@ void tsdemux_audio_reset(void)
 			allocPara.mMaxCount = 500;
 			allocPara.mLookupThreshold = 1024;
 			allocPara.kDoubleCheckThreshold = 5;
-			ptsserver_static_ins_binder(pAServerInsId, &PServerIns, allocPara);
+			ptsserver_static_ins_binder(pAServerInsId, &PServerIns, &allocPara);
 		} else {
 			ptsserver_ins_reset(pAServerInsId);
 		}

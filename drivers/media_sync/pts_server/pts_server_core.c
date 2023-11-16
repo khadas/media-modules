@@ -1785,7 +1785,7 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 EXPORT_SYMBOL(ptsserver_checkout_apts_offset);
 
 
-long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserver_alloc_para allocParm) {
+long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserver_alloc_para* allocParm) {
 	ptsserver_ins* pInstance = NULL;
 	s32 index = -1;
 	s32 temp_ins;
@@ -1800,7 +1800,7 @@ long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserv
 		}
 		pInstance->mRef++;
 		*pIns = pInstance;
-		pts_pr_info(index,"ptsserver_static_instance has exist! mRef:%d\n", pInstance->mRef);
+		pts_pr_info(index,"ptsserver_static_ins_binder has exist! mRef:%d\n", pInstance->mRef);
 		mutex_unlock(&(vPtsServerInsList[index].mListLock));
 	} else if (index < 0) {
 		pInstance = kzalloc(sizeof(ptsserver_ins), GFP_KERNEL);
@@ -1816,7 +1816,7 @@ long ptsserver_static_ins_binder(s32 pServerInsId, ptsserver_ins** pIns, ptsserv
 				pInstance->mPtsServerInsId = pServerInsId;
 				// *pServerInsId = temp_ins;
 				pInstance->mRef++;
-				ptsserver_ins_init_syncinfo(pInstance, &allocParm);
+				ptsserver_ins_init_syncinfo(pInstance, allocParm);
 				pr_info("ptsserver_static_ins_binder --> pServerInsId:%d index:%d mRef:%d\n", pServerInsId, temp_ins, pInstance->mRef);
 				mutex_unlock(&(vPtsServerInsList[temp_ins].mListLock));
 				break;
