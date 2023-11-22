@@ -69,12 +69,15 @@ static long get_index_from_ptsserver_id(s32 pServerInsId)
 	long temp = -1;
 
 	for (temp = 0; temp < MAX_INSTANCE_NUM; temp++) {
+		mutex_lock(&(vPtsServerInsList[temp].mListLock));
 		if (vPtsServerInsList[temp].pInstance != NULL) {
 			if (pServerInsId == vPtsServerInsList[temp].pInstance->mPtsServerInsId) {
 				index = temp;
+				mutex_unlock(&(vPtsServerInsList[temp].mListLock));
 				break;
 			}
 		}
+		mutex_unlock(&(vPtsServerInsList[temp].mListLock));
 	}
 
 	return index;
@@ -146,7 +149,6 @@ long ptsserver_ins_init_syncinfo(ptsserver_ins* pInstance,ptsserver_alloc_para* 
 	pInstance->mLastCheckinPts90k = 0;
 
 	mutex_init(&pInstance->mPtsListLock);
-	spin_lock_init(&pInstance->mPtsListSlock);
 
 	INIT_LIST_HEAD(&pInstance->pts_list);
 	INIT_LIST_HEAD(&pInstance->pts_free_list);
@@ -1462,17 +1464,15 @@ long ptsserver_checkin_apts_size(s32 pServerInsId,checkin_apts_size* mCheckinPts
 	pts_node* del_ptn = NULL;
 	s32 index = get_index_from_ptsserver_id(pServerInsId);
 	s32 level = 0;
-	ulong flags = 0;
+
 	if (index < 0 || index >= MAX_INSTANCE_NUM)
 		return -1;
 
 	vPtsServerIns = &(vPtsServerInsList[index]);
-	// mutex_lock(&vPtsServerIns->mListLock);
-	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
+	mutex_lock(&vPtsServerIns->mListLock);
 	pInstance = vPtsServerIns->pInstance;
 	if (pInstance == NULL) {
-		// mutex_unlock(&vPtsServerIns->mListLock);
-		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		mutex_unlock(&vPtsServerIns->mListLock);
 		return -1;
 	}
 
@@ -1508,8 +1508,7 @@ long ptsserver_checkin_apts_size(s32 pServerInsId,checkin_apts_size* mCheckinPts
 		if (ptsserver_debuglevel >= 1) {
 			pts_pr_info(index,"ptn is null return \n");
 		}
-		// mutex_unlock(&vPtsServerIns->mListLock);
-		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		mutex_unlock(&vPtsServerIns->mListLock);
 		return -1;
 	}
 
@@ -1556,8 +1555,7 @@ long ptsserver_checkin_apts_size(s32 pServerInsId,checkin_apts_size* mCheckinPts
 	pInstance->mLastCheckinPts90k = mCheckinPtsSize->pts_90k;
 	pInstance->mLastCheckinPts64 = mCheckinPtsSize->pts_64;
 
-	// mutex_unlock(&vPtsServerIns->mListLock);
-	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+	mutex_unlock(&vPtsServerIns->mListLock);
 
 	return 0;
 }
@@ -1581,22 +1579,18 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 	u64 FrameDur64 = 0;
 	s32 number = -1;
 	s32 i = 0;
-	ulong flags = 0;
 
 	if (index < 0 || index >= MAX_INSTANCE_NUM) {
 		return -1;
 	}
 	vPtsServerIns = &(vPtsServerInsList[index]);
-	// mutex_lock(&vPtsServerIns->mListLock);
-	spin_lock_irqsave(&vPtsServerIns->mListSlock, flags);
+	mutex_lock(&vPtsServerIns->mListLock);
 	pInstance = vPtsServerIns->pInstance;
 
 	if (pInstance == NULL) {
-		// mutex_unlock(&vPtsServerIns->mListLock);
-		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		mutex_unlock(&vPtsServerIns->mListLock);
 		return -1;
 	}
-
 	offsetDiff = pInstance->mLookupThreshold;
 
 	if (!pInstance->mPtsCheckoutStarted) {
@@ -1642,7 +1636,6 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 					list_del(&ptn->node);
 					list_add_tail(&ptn->node, &pInstance->pts_free_list);
 					pInstance->mListSize--;
-
 				} else if (find_frame_num > 5) {
 					break;
 				}
@@ -1705,8 +1698,7 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 		mCheckoutPtsOffset->pts_90k = pInstance->mLastCheckoutPts90k;
 		mCheckoutPtsOffset->pts_64 = pInstance->mLastCheckoutPts64;
 		pInstance->mLastCheckoutCurOffset = cur_offset;
-		// mutex_unlock(&vPtsServerIns->mListLock);
-		spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+		mutex_unlock(&vPtsServerIns->mListLock);
 		return 0;
 	}
 
@@ -1778,8 +1770,7 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 	pInstance->mLastDoubleCheckoutPts64 = mCheckoutPtsOffset->pts_64;
 	pInstance->mLastCheckoutPts90k = mCheckoutPtsOffset->pts_90k;
 	pInstance->mLastCheckoutCurOffset = cur_offset;
-	// mutex_unlock(&vPtsServerIns->mListLock);
-	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
+	mutex_unlock(&vPtsServerIns->mListLock);
 	return 0;
 }
 EXPORT_SYMBOL(ptsserver_checkout_apts_offset);
@@ -1923,7 +1914,7 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	pInstance->mLastCheckinPts90k = 0;
 
 	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
-	pts_pr_info(pServerInsId,"ptsserver_ins_reset ok \n");
+	pts_pr_info(index,"ptsserver_ins_reset ok \n");
 	return 0;
 }
 EXPORT_SYMBOL(ptsserver_ins_reset);

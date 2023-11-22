@@ -91,7 +91,6 @@ typedef struct psinstance {
 	u64 mLastCheckoutPts90k;
 	u64 mFirstCheckinPts90k;
 	u64 mLastCheckinPts90k;
-	spinlock_t mPtsListSlock;
 	s32 mRef;
 } ptsserver_ins;
 

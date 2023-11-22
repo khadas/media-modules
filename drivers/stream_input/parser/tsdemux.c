@@ -63,9 +63,6 @@ static s32 pVServerInsId = -1;
 static bool singleDmxNewPtsserv = false;
 static ptsserver_ins* PServerIns = NULL;
 
-static struct workqueue_struct *ptsserv_workqueue = NULL;
-static struct ptsserver_checkin_pts_s vpts_checkin_info;
-
 static int pts_checkin_debug = 0;
 module_param(pts_checkin_debug, int, 0644);
 MODULE_PARM_DESC(pts_checkin_debug, "\n\t\t demux pts check in debug");
@@ -107,8 +104,8 @@ static DEFINE_SPINLOCK(demux_ops_lock);
 
 #define PTS_COUNT 8
 #define PTS_PACKET_SIZE 20
-DECLARE_KFIFO(video_frame,  mediasync_video_packets_info, PTS_COUNT);
-DECLARE_KFIFO(audio_frame,mediasync_audio_packets_info, PTS_COUNT);
+DECLARE_KFIFO(video_frame,packets_info, PTS_COUNT);
+DECLARE_KFIFO(audio_frame,packets_info, PTS_COUNT);
 
 static int enable_demux_driver(void)
 {
@@ -259,11 +256,12 @@ static int tsdemux_config(void)
 	return 0;
 }
 
-static void queue_video_info( u64 pts, int size) {
-	mediasync_video_packets_info dmx_frameinfo;
+static void queue_video_info(u64 pts, int size, u32 ptr) {
+	packets_info dmx_frameinfo;
 	memset(&dmx_frameinfo, 0, sizeof(dmx_frameinfo));
 	dmx_frameinfo.packetsPts = pts;
 	dmx_frameinfo.packetsSize = size;
+	dmx_frameinfo.ptr = ptr;
 	kfifo_put(&video_frame, dmx_frameinfo);
 	if (pts_checkin_debug) {
 		pr_info("%s pts:%lld size:%d kfifo_len:%d \n",
@@ -272,11 +270,12 @@ static void queue_video_info( u64 pts, int size) {
 	return ;
 }
 
-static void queue_audio_info( u64 pts, int size) {
-	mediasync_audio_packets_info dmx_frameinfo;
+static void queue_audio_info(u64 pts, int size, u32 ptr) {
+	packets_info dmx_frameinfo;
 	memset(&dmx_frameinfo, 0, sizeof(dmx_frameinfo));
 	dmx_frameinfo.packetsPts = pts;
 	dmx_frameinfo.packetsSize = size;
+	dmx_frameinfo.ptr = ptr;
 	kfifo_put(&audio_frame, dmx_frameinfo);
 	if (pts_checkin_debug) {
 		pr_info("%s pts:%lld size:%d kfifo_len:%d \n",
@@ -457,12 +456,6 @@ static int pts_checkin_vpts_size(u32 ptr, u64 pts_val) {
 	return 0;
 }
 
-static void ptsserv_checkin_work(struct work_struct *work) {
-	struct ptsserver_checkin_pts_s *ptsserv_wk =
-		container_of(work,struct ptsserver_checkin_pts_s,pts_wkr_in);
-	pts_checkin_vpts_size(ptsserv_wk->ptr,ptsserv_wk->pts_val);
-}
-
 extern int pts_lookup(u8 type, u32 *val, u32 *frame_size, u32 pts_margin);
 extern int pts_getaudiocheckinsize(void);
 
@@ -509,14 +502,8 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 					pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
 						READ_DEMUX_REG(VIDEO_PDTS_WR_PTR),
 						vpts);
-				} else {
-					vpts_checkin_info.ptr = READ_DEMUX_REG(VIDEO_PDTS_WR_PTR);
-					vpts_checkin_info.pts_val = vpts;
-					if (ptsserv_workqueue) {
-						queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
-					}
 				}
-				queue_video_info(vpts,PTS_PACKET_SIZE);
+				queue_video_info(vpts,PTS_PACKET_SIZE,READ_DEMUX_REG(VIDEO_PDTS_WR_PTR));
 			}
 
 			if (pdts_status & (1 << AUDIO_PTS_READY)) {
@@ -532,11 +519,8 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 					pts_checkin_wrptr_pts33(PTS_TYPE_AUDIO,
 						READ_DEMUX_REG(AUDIO_PDTS_WR_PTR),
 						apts);
-				} else {
-					pts_checkin_apts_size(READ_DEMUX_REG(AUDIO_PDTS_WR_PTR),
-						apts, pts_getaudiocheckinsize());
 				}
-				queue_audio_info(apts,pts_getaudiocheckinsize());
+				queue_audio_info(apts,pts_getaudiocheckinsize(),READ_DEMUX_REG(AUDIO_PDTS_WR_PTR));
 			}
 
 			WRITE_DEMUX_REG(STB_PTS_DTS_STATUS, pdts_status);
@@ -563,14 +547,8 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 					pts_checkin_wrptr_pts33(PTS_TYPE_VIDEO,
 						DMX_READ_REG(id, VIDEO_PDTS_WR_PTR),
 						vpts);
-				} else {
-					vpts_checkin_info.ptr = DMX_READ_REG(id, VIDEO_PDTS_WR_PTR);
-					vpts_checkin_info.pts_val = vpts;
-					if (ptsserv_workqueue) {
-						queue_work(ptsserv_workqueue, &(vpts_checkin_info.pts_wkr_in));
-					}
 				}
-				queue_video_info(vpts,PTS_PACKET_SIZE);
+				queue_video_info(vpts,PTS_PACKET_SIZE,DMX_READ_REG(id, VIDEO_PDTS_WR_PTR));
 			}
 
 			if (pdts_status & (1 << AUDIO_PTS_READY)) {
@@ -592,11 +570,8 @@ static irqreturn_t tsdemux_isr(int irq, void *dev_id)
 						DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
 						apts);
 				#endif
-				} else {
-					pts_checkin_apts_size(DMX_READ_REG(id, AUDIO_PDTS_WR_PTR),
-						apts, pts_getaudiocheckinsize());
 				}
-				queue_audio_info(apts,pts_getaudiocheckinsize());
+				queue_audio_info(apts,pts_getaudiocheckinsize(),DMX_READ_REG(id, AUDIO_PDTS_WR_PTR));
 			}
 
 			if (id == 1)
@@ -632,9 +607,11 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 {
 	mediasync_video_packets_info dmx_video_frameinfo;
 	mediasync_audio_packets_info dmx_audio_frameinfo;
+	packets_info dmx_video_packetsinfo;
+	packets_info dmx_audio_packetsinfo;
 	if (!kfifo_is_empty(&video_frame)) {
-		memset(&dmx_video_frameinfo, 0, sizeof(dmx_video_frameinfo));
-		if (kfifo_get(&video_frame,&dmx_video_frameinfo)) {
+		memset(&dmx_video_packetsinfo, 0, sizeof(dmx_video_packetsinfo));
+		if (kfifo_get(&video_frame,&dmx_video_packetsinfo)) {
 			//queue videoframe to mediasync
 			s32 sSyncInsId;
 			//if (!mediasync_vpts_set) {
@@ -646,6 +623,8 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 				} else {
 					sSyncInsId = 12;
 				}
+				dmx_video_frameinfo.packetsPts = dmx_video_packetsinfo.packetsPts;
+				dmx_video_frameinfo.packetsSize = dmx_video_packetsinfo.packetsSize;
 				mediasync_vpts_set(sSyncInsId, dmx_video_frameinfo);
 				if (pts_checkin_debug) {
 					pr_info("%s video sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",
@@ -655,11 +634,14 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 							dmx_video_frameinfo.packetsSize);
 				}
 			}
+			if (singleDmxNewPtsserv) {
+				pts_checkin_vpts_size(dmx_video_packetsinfo.ptr,dmx_video_packetsinfo.packetsPts);
+			}
 		}
 	}
 	if (!kfifo_is_empty(&audio_frame)) {
-		memset(&dmx_audio_frameinfo, 0, sizeof(dmx_audio_frameinfo));
-		if (kfifo_get(&audio_frame,&dmx_audio_frameinfo)) {
+		memset(&dmx_audio_packetsinfo, 0, sizeof(dmx_audio_packetsinfo));
+		if (kfifo_get(&audio_frame,&dmx_audio_packetsinfo)) {
 			//queue audioframe to mediasync
 			s32 sSyncInsId;
 			//if (!mediasync_apts_set) {
@@ -671,6 +653,8 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 				} else {
 					sSyncInsId = 12;
 				}
+				dmx_audio_frameinfo.packetsPts = dmx_audio_packetsinfo.packetsPts;
+				dmx_audio_frameinfo.packetsSize = dmx_audio_packetsinfo.packetsSize;
 				mediasync_apts_set(sSyncInsId, dmx_audio_frameinfo);
 				if (pts_checkin_debug) {
 					pr_info("%s audio sSyncInsId:%d packetsPts:%lld packetsSize:%d\n",
@@ -680,7 +664,9 @@ static irqreturn_t tsdemux_thread_isr(int irq, void *dev_id)
 							dmx_audio_frameinfo.packetsSize);
 				}
 			}
-
+			if (singleDmxNewPtsserv) {
+				pts_checkin_apts_size(dmx_audio_packetsinfo.ptr,dmx_audio_packetsinfo.packetsPts,dmx_audio_packetsinfo.packetsSize);
+			}
 			//add by audioteam zhangjing
 			if (fpaudio == 0) {
 				fpaudio = media_open("/tmp/paudiofifo",O_WRONLY | O_NONBLOCK ,0);
@@ -1014,8 +1000,6 @@ s32 tsdemux_init(u32 vid, u32 aid, u32 sid, u32 pcrid, bool is_hevc,
 			r = ptsserver_start(PTS_SERVER_TYPE_VIDEO);
 			pVServerInsId = vdec->pts_server_id;
 			pr_info("pVServerInsId:%d\n", pVServerInsId);
-			ptsserv_workqueue = create_workqueue("ptsserv_queue");
-			INIT_WORK(&(vpts_checkin_info.pts_wkr_in), ptsserv_checkin_work);
 		} else {
 			if (has_hevc_vdec())
 				r = pts_start((is_hevc) ? PTS_TYPE_HEVC : PTS_TYPE_VIDEO);
@@ -1145,12 +1129,6 @@ void tsdemux_release(void)
 	if (!enable_demux_driver()) {
 		WRITE_DEMUX_REG(STB_INT_MASK, 0);
 		/*TODO irq */
-		if (singleDmxNewPtsserv) {
-			cancel_work_sync(&vpts_checkin_info.pts_wkr_in);
-			flush_workqueue(ptsserv_workqueue);
-			destroy_workqueue(ptsserv_workqueue);
-			ptsserv_workqueue = NULL;
-		}
 		vdec_free_irq(DEMUX_IRQ, (void *)tsdemux_irq_id);
 	} else {
 
