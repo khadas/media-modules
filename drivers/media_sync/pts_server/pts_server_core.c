@@ -1575,8 +1575,6 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 	s32 find_frame_num = 0;
 	s32 find = 0;
 	s32 offsetAbs = 0;
-	u32 FrameDur = 0;
-	u64 FrameDur64 = 0;
 	s32 number = -1;
 	s32 i = 0;
 
@@ -1665,102 +1663,20 @@ long ptsserver_checkout_apts_offset(s32 pServerInsId,checkout_apts_offset* mChec
 	}
 	if (!find) {
 		pInstance->mPtsCheckoutFailCount++;
-		if (ptsserver_debuglevel >= 1 || pInstance->mPtsCheckoutFailCount % 30 == 0) {
-			pts_pr_info(index,"Checkout fail mPtsCheckoutFailCount:%d level:%d \n",
-				pInstance->mPtsCheckoutFailCount,pInstance->mLastCheckinOffset - cur_offset);
-		}
-
-		if (pInstance->mFrameDuration != 0) {
-			pInstance->mLastCheckoutPts90k = pInstance->mLastCheckoutPts90k + pInstance->mFrameDuration;
-		}
-		if (pInstance->mFrameDuration64 != 0) {
-			pInstance->mLastCheckoutPts64 = pInstance->mLastCheckoutPts64 + pInstance->mFrameDuration64;
-		}
-		if (pInstance->mPtsCheckoutStarted == 0) {
-			pts_pr_info(index,"first Checkout fail cur_offset:0x%x firstCheckinPts90k:%llx \n",cur_offset, pInstance->mFirstCheckinPts90k);
-			if (!cur_offset && pInstance->mFirstCheckinPts90k != 0) {
-				pInstance->mLastCheckoutPts64 = pInstance->mFirstCheckinPts64;
-				pInstance->mLastCheckoutPts90k = pInstance->mFirstCheckinPts90k;
-				pInstance->mPtsCheckoutStarted = 1;
-			} else {
-				pInstance->mLastCheckoutPts64 = -1;
-				pInstance->mLastCheckoutPts90k = -1;
-			}
-		}
-		if (ptsserver_debuglevel >= 1) {
-			pts_pr_info(index,"Checkout fail Calculate by FrameDuration(32:%d 64:%lld) pts(32:%llx 64:%lld)\n",
-								pInstance->mFrameDuration,
-								pInstance->mFrameDuration64,
-								pInstance->mLastCheckoutPts90k,
-								pInstance->mLastCheckoutPts64);
-		}
-
-		mCheckoutPtsOffset->pts_90k = pInstance->mLastCheckoutPts90k;
-		mCheckoutPtsOffset->pts_64 = pInstance->mLastCheckoutPts64;
+		mCheckoutPtsOffset->pts_90k = -1;
+		mCheckoutPtsOffset->pts_64 = -1;
 		pInstance->mLastCheckoutCurOffset = cur_offset;
+		if (ptsserver_debuglevel >= 1 || pInstance->mPtsCheckoutFailCount % 30 == 0) {
+			pts_pr_info(index,"Checkout fail mPtsCheckoutFailCount:%d level:%d pts(32:0x%llx 64:%lld)\n",
+				pInstance->mPtsCheckoutFailCount,pInstance->mLastCheckinOffset - cur_offset,
+				mCheckoutPtsOffset->pts_90k,
+				mCheckoutPtsOffset->pts_64);
+		}
 		mutex_unlock(&vPtsServerIns->mListLock);
 		return 0;
 	}
 
-	if (pInstance->mPtsCheckoutStarted) {
-		if (pInstance->mFrameDuration == 0 && pInstance->mFrameDuration64 == 0) {
-
-			pInstance->mFrameDuration = div_u64(mCheckoutPtsOffset->pts_90k - pInstance->mLastCheckoutPts90k,
-													pInstance->mPtsCheckoutFailCount + 1);
-
-			pInstance->mFrameDuration64 = div_u64(mCheckoutPtsOffset->pts_64 - pInstance->mLastCheckoutPts64,
-													pInstance->mPtsCheckoutFailCount + 1);
-
-			if (pInstance->mFrameDuration < 0 ||
-				pInstance->mFrameDuration > 9000) {
-				pInstance->mFrameDuration = 0;
-			}
-			if (pInstance->mFrameDuration64 < 0 ||
-				pInstance->mFrameDuration64 > 100000) {
-				pInstance->mFrameDuration64 = 0;
-			}
-		} else {
-
-			FrameDur = div_u64(mCheckoutPtsOffset->pts_90k - pInstance->mLastCheckoutPts90k,
-								pInstance->mPtsCheckoutFailCount + 1);
-
-			FrameDur64 = div_u64(mCheckoutPtsOffset->pts_64 - pInstance->mLastDoubleCheckoutPts64,
-									pInstance->mPtsCheckoutFailCount + 1);
-
-			if (ptsserver_debuglevel > 1) {
-				pts_pr_info(index,"checkout FrameDur(32:%d 64:%lld) DoubleCheckFrameDuration(32:%d 64:%lld)\n",
-									FrameDur,
-									FrameDur64,
-									pInstance->mDoubleCheckFrameDuration,
-									pInstance->mDoubleCheckFrameDuration64);
-				pts_pr_info(index,"checkout LastDoubleCheckoutPts(64:%lld) pts(32:%llx 64:%lld) PtsCheckoutFailCount:%d\n",
-									pInstance->mLastDoubleCheckoutPts64,
-									mCheckoutPtsOffset->pts_90k,
-									mCheckoutPtsOffset->pts_64,
-									pInstance->mPtsCheckoutFailCount);
-			}
-
-			if ((FrameDur == pInstance->mDoubleCheckFrameDuration) ||
-				(FrameDur64 == pInstance->mDoubleCheckFrameDuration64)) {
-				pInstance->mDoubleCheckFrameDurationCount ++;
-			} else {
-				pInstance->mDoubleCheckFrameDuration = FrameDur;
-				pInstance->mDoubleCheckFrameDuration64 = FrameDur64;
-				pInstance->mDoubleCheckFrameDurationCount = 0;
-			}
-			if (pInstance->mDoubleCheckFrameDurationCount > pInstance->kDoubleCheckThreshold) {
-				if (ptsserver_debuglevel > 1) {
-					pts_pr_info(index,"checkout DoubleCheckFrameDurationCount(%d) DoubleCheckFrameDuration(32:%d 64:%lld)\n",
-										pInstance->mDoubleCheckFrameDurationCount,
-										pInstance->mDoubleCheckFrameDuration,
-										pInstance->mDoubleCheckFrameDuration64);
-				}
-				pInstance->mFrameDuration = pInstance->mDoubleCheckFrameDuration;
-				pInstance->mFrameDuration64 = pInstance->mDoubleCheckFrameDuration64;
-				pInstance->mDoubleCheckFrameDurationCount = 0;
-			}
-		}
-	} else {
+	if (!pInstance->mPtsCheckoutStarted) {
 		pInstance->mPtsCheckoutStarted = 1;
 	}
 
