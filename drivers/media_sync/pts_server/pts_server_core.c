@@ -1828,6 +1828,7 @@ long ptsserver_ins_reset(s32 pServerInsId) {
 	pInstance->mLastCheckoutPts90k = 0;
 	pInstance->mFirstCheckinPts90k = 0;
 	pInstance->mLastCheckinPts90k = 0;
+	pInstance->mListSize = 0;
 
 	spin_unlock_irqrestore(&vPtsServerIns->mListSlock, flags);
 	pts_pr_info(index,"ptsserver_ins_reset ok \n");

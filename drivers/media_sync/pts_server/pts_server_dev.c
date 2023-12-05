@@ -232,10 +232,12 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 			return -EFAULT;
 		break;
 		case PTSSERVER_IOC_CHECKOUT_APTS:
+			if (priv->pServerIns == NULL) {
+				return -EFAULT;
+			}
 			if (copy_from_user ((void *)&mCheckoutAptsOffset,
 							(void *)arg,
 							sizeof(checkout_pts_offset))) {
-				pr_info("[%s]%d cmd:%d", __func__, __LINE__, cmd);
 				return -EFAULT;
 			}
 			ret = ptsserver_checkout_apts_offset(priv->mPtsServerInsId, &mCheckoutAptsOffset);

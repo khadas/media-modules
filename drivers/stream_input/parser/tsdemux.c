@@ -1508,6 +1508,8 @@ void tsdemux_audio_reset(void)
 	if (demux_ops && demux_ops->hw_dmx_unlock)
 		demux_ops->hw_dmx_unlock(xflags);
 
+	spin_unlock_irqrestore(&demux_ops_lock, flags);
+
 	if (singleDmxNewPtsserv) {
 		ptsserver_stop(PTS_SERVER_TYPE_AUDIO);
 		if (PServerIns == NULL) {
@@ -1521,7 +1523,6 @@ void tsdemux_audio_reset(void)
 		ptsserver_start(PTS_SERVER_TYPE_AUDIO);
 	}
 
-	spin_unlock_irqrestore(&demux_ops_lock, flags);
 	if (reset_demux_enable == 1)
 		tsdemux_reset();
 }

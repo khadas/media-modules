@@ -131,7 +131,7 @@ static MediaSyncManager* get_media_sync_manager(s32 sSyncInsId,const char* from,
 			}
 		}
 	}
-	if (ret == NULL) {
+	if (ret == NULL && media_sync_debug_level) {
 		mediasync_pr_error("Invalid sSyncInsId:%d from %s:%d\n",sSyncInsId,from,line);
 	}
 	return ret;
@@ -3079,7 +3079,7 @@ void mediasync_ins_get_video_cache_info_implementation(mediasync_ins* pInstance,
 				if (cacheDuration > 0) {
 					info->cacheDuration = cacheDuration;
 				} else {
-					cacheDuration = 0;
+					info->cacheDuration = 0;
 				}
 				if (pInstance->mVideoDiscontinueInfo.isDiscontinue == 1) {
 					pInstance->mVideoDiscontinueInfo.lastDiscontinuePtsBefore = pInstance->mVideoDiscontinueInfo.discontinuePtsBefore;
