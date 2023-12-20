@@ -129,7 +129,7 @@ static long ptsserver_ioctl(struct file *file, unsigned int cmd, ulong arg)
 							sizeof(checkin_pts_size))) {
 				return -EFAULT;
 			}
-			ret = ptsserver_checkin_pts_size(priv->mPtsServerInsId,&mCheckinPtsSize);
+			ret = ptsserver_checkin_pts_size(priv->mPtsServerInsId,&mCheckinPtsSize,false);
 		break;
 
 		case PTSSERVER_IOC_CHECKOUT_PTS:

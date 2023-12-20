@@ -430,8 +430,8 @@ static int pts_checkin_apts_size(u32 ptr, u64 pts_val, int size) {
 
 static int pts_checkin_vpts_size(u32 ptr, u64 pts_val) {
 	u32 offset, cur_offset = 0, page = 0, page_no;
-	checkin_pts_offset checkinPtsOffset;
-	memset(&checkinPtsOffset, 0, sizeof(checkinPtsOffset));
+	checkin_pts_size mCheckinPtsSize;
+	memset(&mCheckinPtsSize, 0, sizeof(mCheckinPtsSize));
 
 	if (tsync_get_new_arch())
 		return -EINVAL;
@@ -444,14 +444,13 @@ static int pts_checkin_vpts_size(u32 ptr, u64 pts_val) {
 	get_swrpage_offset(PTS_SERVER_TYPE_VIDEO, &page, &cur_offset);
 
 	page_no = (offset > cur_offset) ? (page - 1) : page;
-	checkinPtsOffset.offset = pts_table[PTS_SERVER_TYPE_VIDEO].buf_size * page_no + offset;
-
-	checkinPtsOffset.pts = (u32)pts_val;
-	checkinPtsOffset.pts_64 = div64_u64(pts_val * 100, 9);
-	ptsserver_checkin_pts_offset((pVServerInsId & 0xff), &checkinPtsOffset);
+	mCheckinPtsSize.size = pts_table[PTS_SERVER_TYPE_VIDEO].buf_size * page_no + offset;
+	mCheckinPtsSize.pts = (u32)pts_val;
+	mCheckinPtsSize.pts_64 = div64_u64(pts_val * 100, 9);
+	ptsserver_checkin_pts_size((pVServerInsId & 0xff),&mCheckinPtsSize,true);
 	if (pts_checkin_debug) {
 		pr_info("%s pts:%lld page_no:%d rel_offset:%d\n",
-				__func__, pts_val, page_no, checkinPtsOffset.offset);
+				__func__, pts_val, page_no, mCheckinPtsSize.size);
 	}
 	return 0;
 }
