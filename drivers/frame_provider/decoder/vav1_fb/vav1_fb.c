@@ -10156,8 +10156,9 @@ static irqreturn_t vav1_isr_thread_fn(int irq, void *data)
 			vdec_schedule_work(&hw->work);
 		}
 	}
-	vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 	ATRACE_COUNTER(hw->trace.decode_time_name, DECODER_ISR_THREAD_HEAD_END);
+	if (hw->frame_decoded == 0)
+		vdec_profile(hw_to_vdec(hw), VDEC_PROFILE_DECODER_START, CORE_MASK_HEVC);
 
 #ifdef NEW_FRONT_BACK_CODE
 	if (efficiency_mode &&
@@ -11841,6 +11842,8 @@ static void av1_work_implement(struct AV1HW_s *hw)
 			hw->start_shift_bytes
 			);
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		if (hw->dec_status == AOM_AV1_DEC_PIC_END)
+			vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
 	} else if (hw->dec_result == DEC_RESULT_AGAIN) {
 		/*
 			stream base: stream buf empty or timeout
@@ -11859,6 +11862,7 @@ static void av1_work_implement(struct AV1HW_s *hw)
 		av1_postproc(hw);
 
 		vdec_vframe_dirty(hw_to_vdec(hw), hw->chunk);
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
 	} else if (hw->dec_result == DEC_RESULT_FORCE_EXIT) {
 		av1_print(hw, PRINT_FLAG_VDEC_STATUS,
 			"%s: force exit\n",
@@ -11900,7 +11904,7 @@ static void av1_work_implement(struct AV1HW_s *hw)
 			READ_VREG(HEVC_STREAM_RD_PTR),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT),
 			READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
-
+		vdec_code_rate(vdec, READ_VREG(HEVC_SHIFT_BYTE_COUNT) - hw->start_shift_bytes);
 #ifdef NEW_FB_CODE
 		if (hw->front_back_mode == 1)
 			amhevc_stop_f();
