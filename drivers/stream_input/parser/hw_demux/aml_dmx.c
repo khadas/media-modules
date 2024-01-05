@@ -1905,11 +1905,19 @@ static int dsc_set_csa_key(struct aml_dsc_channel *ch, int flags,
 				((ch->id + type * DSC_COUNT)+
 					(is_dsc2 ? 16 : 0)));
 		}
+
 		if (get_cpu_type() == MESON_CPU_MAJOR_ID_GXL ||
 			get_cpu_type() == MESON_CPU_MAJOR_ID_GXM) {
 			pr_info("do kl..\n");
 			WRITE_MPEG_REG(COMM_DESC_KEY_RW,
 				(type ? (1 << 6) : (1 << 5)) | (1<<7) |
+				((ch->id + type * DSC_COUNT)+
+				 (is_dsc2 ? 16 : 0)));
+		} else if (get_cpu_type() == MESON_CPU_MAJOR_ID_T5D ||
+			get_cpu_type() == MESON_CPU_MAJOR_ID_SM1) {
+			pr_info("do kl..\n");
+			WRITE_MPEG_REG(COMM_DESC_KEY_RW,
+				((1 << 5)) | (1<<7) |
 				((ch->id + type * DSC_COUNT)+
 				 (is_dsc2 ? 16 : 0)));
 		}
