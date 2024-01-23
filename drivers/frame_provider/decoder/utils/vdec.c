@@ -197,6 +197,7 @@ static int v4lvideo_add_di = 1;
 static int v4lvideo_add_ppmgr = 0;
 static int max_di_instance = 2;
 static int max_supported_di_instance = 4;
+static int mediasync_add_di = 1;
 
 //static int path_debug = 0;
 
@@ -3490,10 +3491,16 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 				"vdec-map-%d", vdec->id);
 		} else if (p->frame_base_video_path ==
 			FRAME_BASE_PATH_DTV_TUNNEL_MEDIASYNC_MODE) {
-			snprintf(vdec->vfm_map_chain,
-						VDEC_MAP_NAME_SIZE, "%s %s",
-						vdec->vf_provider_name,
-							 "deinterlace mediasync.0 amvideo");
+			if (mediasync_add_di)
+				snprintf(vdec->vfm_map_chain,
+					VDEC_MAP_NAME_SIZE, "%s %s",
+					vdec->vf_provider_name,
+					"deinterlace mediasync.0 amvideo");
+			else
+				snprintf(vdec->vfm_map_chain,
+					VDEC_MAP_NAME_SIZE, "%s %s",
+					vdec->vf_provider_name,
+					"mediasync.0 amvideo");
 
 			snprintf(vdec->vfm_map_id, VDEC_MAP_NAME_SIZE,
 					"vdec-map-%d", vdec->id);
@@ -7710,6 +7717,9 @@ MODULE_PARM_DESC(rate_time_avg_threshold_hi, "\n rate_time_avg_threshold_hi\n");
 
 module_param(rate_time_avg_threshold_lo, uint, 0664);
 MODULE_PARM_DESC(rate_time_avg_threshold_lo, "\n rate_time_avg_threshold_lo\n");
+
+module_param(mediasync_add_di, uint, 0664);
+MODULE_PARM_DESC(mediasync_add_di, "\n mediasync_add_di\n");
 
 /*
 *module_init(vdec_module_init);
