@@ -3183,7 +3183,8 @@ s32 vdec_init(struct vdec_s *vdec, int is_4k, bool is_v4l)
 	}
 
 	if ((get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_T5D ||
-		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2) &&
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_TXHD2 ||
+		get_cpu_major_id() == AM_MESON_CPU_MAJOR_ID_G12A) &&
 		(vdec->frame_base_video_path == FRAME_BASE_PATH_DI_V4LVIDEO)) {
 		single_dmx_new_ptsserv = true;
 		p->use_vfm_path = 0;
