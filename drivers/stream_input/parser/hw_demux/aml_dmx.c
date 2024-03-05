@@ -540,7 +540,7 @@ static void section_buffer_watchdog_func(struct timer_list * timer)
 
 	spin_lock_irqsave(&dvb->slock, flags);
 
-	for (device_no = 0; device_no < DMX_DEV_COUNT; device_no++) {
+	for (device_no = 0; device_no < dvb->dmx_device_num; device_no++) {
 
 		dmx = &dvb->dmx[device_no];
 
@@ -2105,7 +2105,7 @@ static void set_fec_core_sel (struct aml_dvb *dvb)
 {
 	int i;
 
-	for (i = 0; i < DMX_DEV_COUNT; i ++) {
+	for (i = 0; i < dvb->dmx_device_num; i ++) {
 		int set = 0;
 		u32 ctrl = DMX_READ_REG(i, FEC_INPUT_CONTROL);
 
@@ -3867,7 +3867,7 @@ static void reset_async_fifos(struct aml_dvb *dvb)
 
 	struct aml_asyncfifo *afifo = NULL;
 
-	for (j = 0; j < DMX_DEV_COUNT; j++) {
+	for (j = 0; j < dvb->dmx_device_num; j++) {
 		if (!dvb->dmx[j].init)
 			continue;
 
@@ -3993,7 +3993,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	memset(&pcr_num, 0, sizeof(pcr_num));
 	memset(&pcr_dmx, 0, sizeof(pcr_dmx));
 
-	for (id = 0; id < DMX_DEV_COUNT; id++) {
+	for (id = 0; id < dvb->dmx_device_num; id++) {
 		if (!dvb->dmx[id].init)
 			continue;
 		pcr_reg[id] = DMX_READ_REG(id, PCR90K_CTL);
@@ -4012,7 +4012,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 		del_timer_sync(&dvb->watchdog_timer);
 #endif
 	/*RESET_TOP will clear the dsc pid , save all dsc pid that setting in TA*/
-	for (id = 0; id < DSC_DEV_COUNT; id++) {
+	for (id = 0; id < dvb->ca_device_num; id++) {
 		struct aml_dsc *dsc = &dvb->dsc[id];
 		int n;
 
@@ -4027,7 +4027,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 
 	WRITE_MPEG_REG(RESET1_REGISTER, RESET_DEMUXSTB);
 
-	for (id = 0; id < DMX_DEV_COUNT; id++) {
+	for (id = 0; id < dvb->dmx_device_num; id++) {
 		times = 0;
 		while (times++ < 1000000) {
 			if (!(DMX_READ_REG(id, OM_CMD_STATUS) & 0x01))
@@ -4038,7 +4038,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 	WRITE_MPEG_REG(STB_TOP_CONFIG, 0);
 	WRITE_MPEG_REG(STB_S2P2_CONFIG, 0);
 
-	for (id = 0; id < DMX_DEV_COUNT; id++) {
+	for (id = 0; id < dvb->dmx_device_num; id++) {
 		u32 version, data;
 
 		if (!dvb->dmx[id].init)
@@ -4070,7 +4070,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 
 	stb_enable(dvb);
 
-	for (id = 0; id < DMX_DEV_COUNT; id++) {
+	for (id = 0; id < dvb->dmx_device_num; id++) {
 		struct aml_dmx *dmx = &dvb->dmx[id];
 		int n;
 		unsigned long addr;
@@ -4174,7 +4174,7 @@ void dmx_reset_hw_ex(struct aml_dvb *dvb, int reset_irq)
 		DMX_WRITE_REG(id, PCR_DEMUX, pcr_dmx[id]);
 	}
 
-	for (id = 0; id < DSC_DEV_COUNT; id++) {
+	for (id = 0; id < dvb->ca_device_num; id++) {
 		struct aml_dsc *dsc = &dvb->dsc[id];
 		int n;
 
@@ -4237,7 +4237,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	}
 #endif
 #if 0
-	for (id = 0; id < DSC_DEV_COUNT; id++)
+	for (id = 0; id < dvb->ca_device_num; id++)
 	{
 		struct aml_dsc *dsc = &dvb->dsc[id];
 		int n;
@@ -4410,7 +4410,7 @@ void dmx_reset_dmx_hw_ex_unlock(struct aml_dvb *dvb, struct aml_dmx *dmx,
 	{
 		int id;
 
-		for (id = 0; id < DSC_DEV_COUNT; id++) {
+		for (id = 0; id < dvb->ca_device_num; id++) {
 			struct aml_dsc *dsc = &dvb->dsc[id];
 			int n;
 
@@ -5687,7 +5687,7 @@ int aml_dmx_set_skipbyte(struct aml_dvb *dvb, int skipbyte)
 int aml_dmx_set_demux(struct aml_dvb *dvb, int id)
 {
 	aml_stb_hw_set_source(dvb, DMX_SOURCE_DVR0);
-	if (id < DMX_DEV_COUNT) {
+	if (id < dvb->dmx_device_num) {
 		struct aml_dmx *dmx = &dvb->dmx[id];
 
 		aml_dmx_hw_set_source((struct dmx_demux *)dmx,
