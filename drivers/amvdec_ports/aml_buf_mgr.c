@@ -31,13 +31,10 @@
 #include "aml_vcodec_util.h"
 #include "vdec_drv_if.h"
 #include "utils/common.h"
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 #include <linux/amlogic/media/video_processor/di_proc_buf_mgr.h>
-#endif
 
 #define IS_VPP_POST(bm)	(bm->vpp_work_mode == VPP_WORK_MODE_DI_POST)
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 {
 	struct buf_core_mgr_s *bc = caller_data;
@@ -147,7 +144,6 @@ static void aml_buf_vpp_mgr_release(struct aml_buf_mgr_s *bm)
 	if (bm->vpp_handle)
 		buf_mgr_release(bm->vpp_handle);
 }
-#endif
 
 static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1, void **bmmu) {
 	struct aml_buf_fbc_info fbc_info;
@@ -465,9 +461,7 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 	if (bm->fbc_array) {
 		aml_buf_fbc_destroy(bm);
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	aml_buf_vpp_mgr_release(bm);
-#endif
 }
 
 static void aml_buf_flush(struct aml_buf_mgr_s *bm,
@@ -654,14 +648,12 @@ static int aml_buf_set_default_parms(struct aml_buf_mgr_s *bm,
 		aml_buf_set_planes(bm, buf);
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	ret = aml_buf_vpp_mgr_init(bm);
 	if (ret) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
 			"VPP buf mgr init failed.\n");
 		return ret;
 	}
-#endif
 
 	ret = task_chain_init(&buf->task, bm->priv, buf, buf->index);
 	if (ret) {
