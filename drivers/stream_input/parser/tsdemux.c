@@ -712,25 +712,18 @@ static ssize_t _tsdemux_write(const char __user *buf, size_t count,
 	const char __user *p = buf;
 	u32 len;
 	int ret;
-	dma_addr_t dma_addr = 0;
 
 	if (r > 0) {
 		if (isphybuf)
 			len = count;
 		else {
 			len = min_t(size_t, r, FETCHBUF_SIZE);
-			if (copy_from_user(fetchbuf, p, len))
+			if (copy_from_user(fetchbuf.vaddr, p, len))
 				return -EFAULT;
 
-			dma_addr =
-				dma_map_single(amports_get_dma_device(),
-						fetchbuf,
-						FETCHBUF_SIZE, DMA_TO_DEVICE);
-			if (dma_mapping_error(amports_get_dma_device(),
-						dma_addr))
-				return -EFAULT;
-
-
+			codec_mm_dma_flush(fetchbuf.vaddr,
+								fetchbuf.size,
+								DMA_TO_DEVICE);
 		}
 
 		fetch_done = 0;
@@ -741,9 +734,7 @@ static ssize_t _tsdemux_write(const char __user *buf, size_t count,
 			u32 buf_32 = (unsigned long)buf & 0xffffffff;
 			WRITE_PARSER_REG(PARSER_FETCH_ADDR, buf_32);
 		} else {
-			WRITE_PARSER_REG(PARSER_FETCH_ADDR, dma_addr);
-			dma_unmap_single(amports_get_dma_device(), dma_addr,
-					FETCHBUF_SIZE, DMA_TO_DEVICE);
+			WRITE_PARSER_REG(PARSER_FETCH_ADDR, fetchbuf.paddr);
 		}
 
 		WRITE_PARSER_REG(PARSER_FETCH_CMD, (7 << FETCH_ENDIAN) | len);
