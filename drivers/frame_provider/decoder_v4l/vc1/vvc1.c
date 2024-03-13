@@ -1081,7 +1081,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			if ((repeat_count > 1) && avi_flag) {
 				vf->duration =
 					vvc1_amstream_dec_info.rate *
-					repeat_count >> 1;
+					(repeat_count >> 1);
 				next_pts = pts +
 					(vvc1_amstream_dec_info.rate *
 					 repeat_count >> 1) * 15 / 16;
@@ -1106,7 +1106,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 			if ((repeat_count > 1) && avi_flag) {
 				vf->duration =
 					vvc1_amstream_dec_info.rate *
-					repeat_count >> 1;
+					(repeat_count >> 1);
 				if (next_pts != 0) {
 					next_pts += ((vf->duration) -
 					((vf->duration) >> 4));
@@ -1193,7 +1193,7 @@ static int prepare_display_buf(struct vdec_vc1_hw_s *hw,	struct pic_info_t *pic)
 		if ((repeat_count > 1) && avi_flag) {
 			vf->duration =
 				vvc1_amstream_dec_info.rate *
-				repeat_count >> 1;
+				(repeat_count >> 1);
 			if (next_pts != 0) {
 				next_pts +=
 					((vf->duration) -
@@ -1784,7 +1784,6 @@ static irqreturn_t vvc1_isr_thread_fn(int irq, void *dev_id)
 
 static irqreturn_t vvc1_isr(int irq, void *dev_id)
 {
-
 	if (process_busy)
 		return IRQ_HANDLED;
 
