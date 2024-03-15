@@ -1013,7 +1013,8 @@ static ssize_t dsc##i##_source_store(struct class *class,  \
 	} \
 	else \
 		dst = src; \
-	aml_dsc_hw_set_source(&aml_dvb_device.dsc[i], src, dst);\
+	if (aml_dvb_device.dsc[i].id != -1)	\
+		aml_dsc_hw_set_source(&aml_dvb_device.dsc[i], src, dst);\
 	return size;\
 }
 
@@ -1258,7 +1259,7 @@ static ssize_t demux##i##_source_store(struct class *class,  \
 	} else if (!strncmp("dmx2", buf, 4)) {\
 		src = DMX_SOURCE_FRONT2_OFFSET;\
 	} \
-	if (src != -1) {\
+	if (src != -1 && aml_dvb_device.dmx[i].id != -1) {\
 		aml_dmx_hw_set_source(aml_dvb_device.dmx[i].dmxdev.demux, src);\
 	} \
 	return size;\
@@ -1314,7 +1315,7 @@ static ssize_t demux_state_show(struct class *class,
 	ssize_t ret = 0;
 	char *str = NULL;
 
-	for (i = 0; i < 3; i++) {
+	for (i = 0; i < dvb->dmx_device_num; i++) {
 		r = sprintf(buf, "#####dmx%d#######\n", i);
 		buf += r;
 		ret += r;
@@ -1392,6 +1393,8 @@ static ssize_t demux##i##_filter_users_show(struct class *class,  \
 	int dmxdevfid, count;\
 	ssize_t ret = 0;\
 	unsigned long flags;\
+	if (dmx->id == -1)\
+		return ret;\
 	spin_lock_irqsave(&dvb->slock, flags);\
 	count = 0;\
 	for (dmxdevfid = 0; dmxdevfid < dmx->dmxdev.filternum; dmxdevfid++) {\
@@ -1416,6 +1419,8 @@ static ssize_t demux##i##_filter_users_store(struct class *class,  \
 	unsigned long filter_used;\
 	unsigned long flags;/*char *endp;*/\
 	int ret = kstrtol(buf, 0, &filter_used);\
+	if (dmx->id == -1)\
+		return ret;\
 	spin_lock_irqsave(&dvb->slock, flags);\
 	if (ret == 0 && filter_used) {\
 		if (dmx->demux_filter_user < FILTER_COUNT)\
@@ -1466,7 +1471,8 @@ static ssize_t demux##i##_reset_store(struct class *class,  \
 	if (!strncmp("1", buf, 1)) { \
 		struct aml_dvb *dvb = &aml_dvb_device; \
 		pr_inf("Reset demux["#i"], call dmx_reset_dmx_hw\n"); \
-		dmx_reset_dmx_id_hw_ex(dvb, i, 0); \
+		if (dvb->dmx[i].id != -1)\
+			dmx_reset_dmx_id_hw_ex(dvb, i, 0); \
 	} \
 	return size; \
 }
@@ -1500,7 +1506,7 @@ static ssize_t dvr##i##_mode_store(struct class *class,  \
 	} else if (!strncmp("ts", buf, 2) && !dmx->dump_ts_select) {\
 		dump_ts_select = 1;\
 	} \
-	if (dump_ts_select != -1) {\
+	if (dump_ts_select != -1 && aml_dvb_device.dmx[i].id != -1) {\
 		aml_dmx_hw_set_dump_ts_select(\
 			aml_dvb_device.dmx[i].dmxdev.demux, dump_ts_select);\
 	} \
@@ -1583,7 +1589,7 @@ static ssize_t asyncfifo##i##_source_store(struct class *class,  \
 	} else if (!strncmp("dmx2", buf, 4)) {\
 		src = AM_DMX_2;\
 	} \
-	if (src != -1) {\
+	if (src != -1 && aml_dvb_device.asyncfifo[i].id != -1) {\
 		aml_asyncfifo_hw_set_source(&aml_dvb_device.asyncfifo[i], src);\
 	} \
 	return size;\
@@ -1627,7 +1633,7 @@ static ssize_t asyncfifo##i##_flush_size_store(struct class *class,  \
 	ret = kstrtol(buf, 0, &value);\
 	if (ret == 0)\
 		fsize = value;\
-	if (fsize != afifo->flush_size) {\
+	if (fsize != afifo->flush_size && aml_dvb_device.asyncfifo[i].id != -1) {\
 		afifo->flush_size = fsize;\
 	aml_asyncfifo_hw_reset(&aml_dvb_device.asyncfifo[i]);\
 	} \
@@ -2510,13 +2516,13 @@ static int aml_dvb_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 */
-	for (i = 0; i < advb->dmx_device_num; i++)
+	for (i = 0; i < DMX_DEV_COUNT; i++)
 		advb->dmx[i].id = -1;
 
-	for (i = 0; i < advb->ca_device_num; i++)
+	for (i = 0; i < DSC_DEV_COUNT; i++)
 		advb->dsc[i].id = -1;
 
-	for (i = 0; i < advb->async_fifo_total_count; i++)
+	for (i = 0; i < ASYNCFIFO_COUNT; i++)
 		advb->asyncfifo[i].id = -1;
 
 	//advb->dvb_adapter.priv = advb;
