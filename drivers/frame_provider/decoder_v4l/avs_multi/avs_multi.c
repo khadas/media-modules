@@ -228,7 +228,7 @@ firmware_sel
 static int firmware_sel;
 static int disable_longcabac_trans = 1;
 static int pre_decode_buf_level = 0x800;
-static u32 dynamic_buf_num_margin = 6;
+static u32 default_margin = 0;
 
 static struct vframe_s *vavs_vf_peek(void *);
 static struct vframe_s *vavs_vf_get(void *);
@@ -269,8 +269,7 @@ static struct vframe_provider_s vavs_vf_prov;
 #define LONG_CABAC_RV_AI_BUFF_START_ADDR	 0x00000000
 
 /* 4 buffers not enough for multi inc*/
-static u32 vf_buf_num = 3;
-
+static u32 vf_buf_num = 8;
 /*static u32 vf_buf_num_used;*/
 static u32 canvas_base = 128;
 #ifdef NV21
@@ -4677,9 +4676,9 @@ static void vmavs_dump_state(struct vdec_s *vdec)
 			&config_val) == 0)
 			hw->dynamic_buf_num_margin = config_val;
 		else
-			hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+			hw->dynamic_buf_num_margin = default_margin;
 	} else
-		hw->dynamic_buf_num_margin = dynamic_buf_num_margin;
+		hw->dynamic_buf_num_margin = default_margin;
 
 	hw->platform_dev = pdev;
 
@@ -5426,9 +5425,6 @@ static void __exit ammvdec_avs_driver_remove_module(void)
 
 	platform_driver_unregister(&ammvdec_avs_driver);
 }
-
-module_param(dynamic_buf_num_margin, uint, 0664);
-MODULE_PARM_DESC(dynamic_buf_num_margin, "\n dynamic_buf_num_margin\n");
 
 module_param(step, uint, 0664);
 MODULE_PARM_DESC(step, "\n step\n");
