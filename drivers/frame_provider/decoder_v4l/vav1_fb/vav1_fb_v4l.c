@@ -323,7 +323,6 @@ bit [3:2]: valid when bit1 == 0;
 #endif
 
 #ifdef MULTI_INSTANCE_SUPPORT
-#define MAX_DECODE_INSTANCE_NUM     9
 
 #define MULTI_DRIVER_NAME "ammvdec_av1_fb_v4l"
 
@@ -338,19 +337,19 @@ static u32 suffix_aux_buf_size;
 #if (defined DEBUG_UCODE_LOG) || (defined DEBUG_CMD)
 #define UCODE_LOG_BUF_SIZE   (1024 * 1024)
 #endif
-static unsigned int max_decode_instance_num = MAX_DECODE_INSTANCE_NUM;
-static unsigned int decode_frame_count[MAX_DECODE_INSTANCE_NUM];
-static unsigned int display_frame_count[MAX_DECODE_INSTANCE_NUM];
-static unsigned int max_process_time[MAX_DECODE_INSTANCE_NUM];
-static unsigned int run_count[MAX_DECODE_INSTANCE_NUM];
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int decode_frame_count[MAX_INSTANCE_MUN];
+static unsigned int display_frame_count[MAX_INSTANCE_MUN];
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
+static unsigned int run_count[MAX_INSTANCE_MUN];
 #ifdef NEW_FB_CODE
-static unsigned int max_process_time_back[MAX_DECODE_INSTANCE_NUM];
-static unsigned int run_count_back[MAX_DECODE_INSTANCE_NUM];
+static unsigned int max_process_time_back[MAX_INSTANCE_MUN];
+static unsigned int run_count_back[MAX_INSTANCE_MUN];
 #endif
-static unsigned int input_empty[MAX_DECODE_INSTANCE_NUM];
-static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
+static unsigned int input_empty[MAX_INSTANCE_MUN];
+static unsigned int not_run_ready[MAX_INSTANCE_MUN];
 #ifdef AOM_AV1_MMU_DW
-static unsigned int dw_mmu_enable[MAX_DECODE_INSTANCE_NUM];
+static unsigned int dw_mmu_enable[MAX_INSTANCE_MUN];
 #endif
 
 static u32 decode_timeout_val = 600;

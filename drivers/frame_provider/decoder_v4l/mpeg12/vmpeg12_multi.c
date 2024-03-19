@@ -134,9 +134,8 @@ static unsigned int rval;
 static u32 without_display_mode;
 static u32 dynamic_buf_num_margin = 6;
 
-#define VMPEG12_DEV_NUM        9
-static unsigned int max_decode_instance_num = VMPEG12_DEV_NUM;
-static unsigned int max_process_time[VMPEG12_DEV_NUM];
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
 static unsigned int decode_timeout_val = 200;
 #define INCPTR(p) ptr_atomic_wrap_inc(&p)
 

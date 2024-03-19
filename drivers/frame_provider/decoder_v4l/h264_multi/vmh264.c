@@ -130,7 +130,6 @@ to enable DV of frame mode
 #define ALIGN_WIDTH(x) (ALIGN((x), 64))
 #define ALIGN_HEIGHT(x) (ALIGN((x), 32))
 
-#define H264_DEV_NUM        9
 
 #define CONSTRAIN_MAX_BUF_NUM
 
@@ -234,16 +233,15 @@ static u32 udebug_pause_decode_idx;
 
 static unsigned int disp_vframe_valve_level;
 
-static unsigned int max_decode_instance_num = H264_DEV_NUM;
-static unsigned int decode_frame_count[H264_DEV_NUM];
-static unsigned int display_frame_count[H264_DEV_NUM];
-static unsigned int max_process_time[H264_DEV_NUM];
-static unsigned int max_get_frame_interval[H264_DEV_NUM];
-static unsigned int run_count[H264_DEV_NUM];
-static unsigned int input_empty[H264_DEV_NUM];
-static unsigned int not_run_ready[H264_DEV_NUM];
-static unsigned int ref_frame_mark_flag[H264_DEV_NUM] =
-{1, 1, 1, 1, 1, 1, 1, 1, 1};
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int decode_frame_count[MAX_INSTANCE_MUN];
+static unsigned int display_frame_count[MAX_INSTANCE_MUN];
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
+static unsigned int max_get_frame_interval[MAX_INSTANCE_MUN];
+static unsigned int run_count[MAX_INSTANCE_MUN];
+static unsigned int input_empty[MAX_INSTANCE_MUN];
+static unsigned int not_run_ready[MAX_INSTANCE_MUN];
+static bool ref_frame_mark_flag[MAX_INSTANCE_MUN];
 
 #define VDEC_CLOCK_ADJUST_FRAME 30
 static unsigned int clk_adj_frame_count;
@@ -252,7 +250,7 @@ static unsigned int clk_adj_frame_count;
  *bit[3:0]: 0, run ; 1, pause; 3, step
  *bit[4]: 1, schedule run
  */
-static unsigned int step[H264_DEV_NUM];
+static unsigned int step[MAX_INSTANCE_MUN];
 
 #define AUX_BUF_ALIGN(adr) ((adr + 0xf) & (~0xf))
 static u32 prefix_aux_buf_size = (16 * 1024);
@@ -12284,6 +12282,8 @@ static int __init ammvdec_h264_driver_init_module(void)
 		"mh264-v4l", hm264_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_H264, 1);
 
+	memset(ref_frame_mark_flag, 1 , sizeof(ref_frame_mark_flag));
+
 	return 0;
 }
 
@@ -12475,7 +12475,7 @@ module_param_array(max_get_frame_interval, uint,
 
 module_param_array(step, uint, &max_decode_instance_num, 0664);
 
-module_param_array(ref_frame_mark_flag, uint, &max_decode_instance_num, 0664);
+module_param_array(ref_frame_mark_flag, bool, &max_decode_instance_num, 0664);
 
 module_param(disp_vframe_valve_level, uint, 0664);
 MODULE_PARM_DESC(disp_vframe_valve_level, "\n disp_vframe_valve_level\n");

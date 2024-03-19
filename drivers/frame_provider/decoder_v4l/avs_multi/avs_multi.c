@@ -196,14 +196,13 @@ static u32 step;
 
 static u32 start_decoding_delay;
 
-#define AVS_DEV_NUM        9
-static unsigned int max_decode_instance_num = AVS_DEV_NUM;
-static unsigned int max_process_time[AVS_DEV_NUM];
-static unsigned int max_get_frame_interval[AVS_DEV_NUM];
-static unsigned int run_count[AVS_DEV_NUM];
-static unsigned int ins_udebug_flag[AVS_DEV_NUM];
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
+static unsigned int max_get_frame_interval[MAX_INSTANCE_MUN];
+static unsigned int run_count[MAX_INSTANCE_MUN];
+static unsigned int ins_udebug_flag[MAX_INSTANCE_MUN];
 #ifdef DEBUG_MULTI_FRAME_INS
-static unsigned int max_run_count[AVS_DEV_NUM];
+static unsigned int max_run_count[MAX_INSTANCE_MUN];
 #endif
 /*
 error_handle_policy:

@@ -93,9 +93,8 @@ static u32 udebug_flag;
 
 static unsigned int radr;
 static unsigned int rval;
-#define VMJPEG_DEV_NUM        9
-static unsigned int max_decode_instance_num = VMJPEG_DEV_NUM;
-static unsigned int max_process_time[VMJPEG_DEV_NUM];
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
 static unsigned int decode_timeout_val = 200;
 static struct vframe_s *vmjpeg_vf_peek(void *);
 static struct vframe_s *vmjpeg_vf_get(void *);

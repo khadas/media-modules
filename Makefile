@@ -31,6 +31,8 @@ CONFIGS := CONFIG_AMLOGIC_MEDIA_VDEC_MPEG2_MULTI=m \
 	CONFIG_AMLOGIC_MEDIA_VENC_VCENC=m \
 	CONFIG_AMLOGIC_HW_DEMUX=m \
 	CONFIG_AMLOGIC_MEDIA_V4L_DEC=y
+
+MEDIA_MODULES_CFLAGS = ""
 else
 ${info "media_modules use config in ${PRODUCT_FULL_DIR}"}
 include ${PRODUCT_FULL_DIR}/media_modules.build.config.trunk.mk
@@ -53,7 +55,7 @@ endif
 include $(out_dir)/include/config/auto.conf
 
 modules:
-	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE) $(KBUILD_CFLAGS_MODULE) ${VERSION_CONTROL_CFLAGS}" $(CONFIGS)
+	$(MAKE) -C  $(KERNEL_SRC) M=$(M)/drivers modules "EXTRA_CFLAGS+=-I$(INCLUDE) -Wno-error $(CONFIGS_BUILD) $(EXTRA_INCLUDE) $(KBUILD_CFLAGS_MODULE) ${VERSION_CONTROL_CFLAGS} ${MEDIA_MODULES_CFLAGS}" $(CONFIGS)
 
 all: modules
 

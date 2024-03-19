@@ -148,7 +148,6 @@ to enable DV of frame mode
 #endif
 
 #ifdef MULTI_INSTANCE_SUPPORT
-#define MAX_DECODE_INSTANCE_NUM     9
 #define MULTI_DRIVER_NAME "ammvdec_h265_fb"
 #endif
 #define DRIVER_NAME "amvdec_h265_fb"
@@ -616,22 +615,21 @@ static unsigned int pic_list_debug;
 static unsigned int performance_profile = 1;
 #endif
 #ifdef MULTI_INSTANCE_SUPPORT
-static unsigned int max_decode_instance_num = MAX_DECODE_INSTANCE_NUM;
-static unsigned int decode_frame_count[MAX_DECODE_INSTANCE_NUM];
-static unsigned int display_frame_count[MAX_DECODE_INSTANCE_NUM];
-static unsigned int max_process_time[MAX_DECODE_INSTANCE_NUM];
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int decode_frame_count[MAX_INSTANCE_MUN];
+static unsigned int display_frame_count[MAX_INSTANCE_MUN];
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
 #ifdef NEW_FB_CODE
-static unsigned int max_process_time_back[MAX_DECODE_INSTANCE_NUM];
+static unsigned int max_process_time_back[MAX_INSTANCE_MUN];
 #endif
-static unsigned int max_get_frame_interval[MAX_DECODE_INSTANCE_NUM];
-static unsigned int run_count[MAX_DECODE_INSTANCE_NUM];
+static unsigned int max_get_frame_interval[MAX_INSTANCE_MUN];
+static unsigned int run_count[MAX_INSTANCE_MUN];
 #ifdef NEW_FB_CODE
-static unsigned int run_count_back[MAX_DECODE_INSTANCE_NUM];
+static unsigned int run_count_back[MAX_INSTANCE_MUN];
 #endif
-static unsigned int input_empty[MAX_DECODE_INSTANCE_NUM];
-static unsigned int not_run_ready[MAX_DECODE_INSTANCE_NUM];
-static unsigned int ref_frame_mark_flag[MAX_DECODE_INSTANCE_NUM] =
-	{1, 1, 1, 1, 1, 1, 1, 1, 1};
+static unsigned int input_empty[MAX_INSTANCE_MUN];
+static unsigned int not_run_ready[MAX_INSTANCE_MUN];
+static bool ref_frame_mark_flag[MAX_INSTANCE_MUN];
 
 #ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 static unsigned char get_idx(struct hevc_state_s *hevc);
@@ -18656,6 +18654,8 @@ static int __init amvdec_h265_driver_init_module(void)
 		"h265_fb", h265_configs, CONFIG_FOR_RW);
 	vcodec_feature_register(VFORMAT_HEVC, 0);
 
+	memset(ref_frame_mark_flag, 1 , sizeof(ref_frame_mark_flag));
+
 	return 0;
 }
 
@@ -18906,7 +18906,7 @@ module_param_array(input_empty, uint,
 module_param_array(not_run_ready, uint,
 	&max_decode_instance_num, 0664);
 
-module_param_array(ref_frame_mark_flag, uint,
+module_param_array(ref_frame_mark_flag, bool,
 	&max_decode_instance_num, 0664);
 
 #endif

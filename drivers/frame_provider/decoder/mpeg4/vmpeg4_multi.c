@@ -155,9 +155,8 @@ static unsigned int rval;
 static unsigned int frmbase_cont_bitlevel = 0x40;
 static unsigned int dynamic_buf_num_margin = 6;
 
-#define VMPEG4_DEV_NUM        9
-static unsigned int max_decode_instance_num = VMPEG4_DEV_NUM;
-static unsigned int max_process_time[VMPEG4_DEV_NUM];
+static unsigned int max_decode_instance_num = MAX_INSTANCE_MUN;
+static unsigned int max_process_time[MAX_INSTANCE_MUN];
 static unsigned int decode_timeout_val = 200;
 
 static u32 error_frame_skip_level = 1;
