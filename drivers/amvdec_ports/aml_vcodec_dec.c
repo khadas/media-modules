@@ -2317,6 +2317,7 @@ static int vidioc_decoder_streamon(struct file *file, void *priv,
 		}
 
 		ctx->is_stream_off = false;
+		aml_buf_workqueue_enable(&ctx->bm);
 	} else {
 		ctx->is_out_stream_off = false;
 		ctx->es_wkr_stop = false;
