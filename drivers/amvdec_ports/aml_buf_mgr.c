@@ -44,6 +44,7 @@ void aml_buf_ref_recycle_worker(struct work_struct *work)
 	bc->buf_ops.vpp_cb(bc, entry);
 }
 
+#ifdef CONFIG_AMLOGIC_DI_PROCESS
 static void aml_buf_vpp_callback(void *caller_data, struct file *file, int id)
 {
 	struct buf_core_mgr_s *bc = caller_data;
@@ -167,6 +168,7 @@ static void aml_buf_vpp_mgr_release(struct aml_buf_mgr_s *bm)
 	if (bm->vpp_handle)
 		buf_mgr_release(bm->vpp_handle);
 }
+#endif
 
 static int aml_buf_box_alloc(struct aml_buf_mgr_s *bm, void **mmu, void **mmu_1, void **bmmu) {
 	struct aml_buf_fbc_info fbc_info;
@@ -484,7 +486,9 @@ static void aml_buf_mgr_destroy(struct kref *kref)
 	if (bm->fbc_array) {
 		aml_buf_fbc_destroy(bm);
 	}
+#ifdef CONFIG_AMLOGIC_DI_PROCESS
 	aml_buf_vpp_mgr_release(bm);
+#endif
 }
 
 static void aml_buf_flush(struct aml_buf_mgr_s *bm,
@@ -670,14 +674,14 @@ static int aml_buf_set_default_parms(struct aml_buf_mgr_s *bm,
 		// alloc buffer
 		aml_buf_set_planes(bm, buf);
 	}
-
+#ifdef CONFIG_AMLOGIC_DI_PROCESS
 	ret = aml_buf_vpp_mgr_init(bm);
 	if (ret) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
 			"VPP buf mgr init failed.\n");
 		return ret;
 	}
-
+#endif
 	ret = task_chain_init(&buf->task, bm->priv, buf, buf->index);
 	if (ret) {
 		v4l_dbg(bm->priv, V4L_DEBUG_CODEC_ERROR,
