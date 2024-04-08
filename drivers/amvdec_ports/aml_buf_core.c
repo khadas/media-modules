@@ -581,6 +581,11 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 	if (bc->vpp_reset)
 		bc->vpp_reset(bc);
 
+	mutex_lock(&bc->workqueue_mutex);
+	flush_workqueue(bc->recycle_buf_ref_workqueue);
+	bc->workqueue_enabled = false;
+	mutex_unlock(&bc->workqueue_mutex);
+
 	mutex_lock(&bc->mutex);
 
 	v4l_dbg_ext(bc->id, V4L_DEBUG_CODEC_BUFMGR,
@@ -589,11 +594,6 @@ static void buf_core_reset(struct buf_core_mgr_s *bc)
 		bc->state,
 		kref_read(&bc->core_ref),
 		bc->free_num);
-
-	mutex_lock(&bc->workqueue_mutex);
-	flush_workqueue(bc->recycle_buf_ref_workqueue);
-	bc->workqueue_enabled = false;
-	mutex_unlock(&bc->workqueue_mutex);
 
 	list_for_each_entry_safe(entry, tmp, &bc->free_que, node) {
 		if (!list_del_entry_valid(bc, entry))
