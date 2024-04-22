@@ -3701,6 +3701,8 @@ static void vdec_connect_list_force_clear(struct vdec_core_s *core, struct vdec_
 				core->last_hevc = NULL;
 			if (core->last_hevc_back == v_ref)
 				core->last_hevc_back = NULL;
+			if (core->last_run_vdec == v_ref)
+				core->last_run_vdec = NULL;
 			list_del(&vdec->list);
 		}
 	}
