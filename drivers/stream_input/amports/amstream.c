@@ -2253,6 +2253,7 @@ static long amstream_ioctl_get_ex(struct port_priv_s *priv, ulong arg)
 			p->status.data_len = stbuf_level(buf);
 			p->status.free_len = stbuf_space(buf);
 			p->status.read_pointer = stbuf_rp(buf);
+			p->status.write_pointer = stbuf_wp(buf);
 			mutex_unlock(&amstream_mutex);
 		} else
 			r = -EINVAL;
@@ -2769,6 +2770,7 @@ static long amstream_do_ioctl_old(struct port_priv_s *priv,
 			p->status.data_len = stbuf_level(buf);
 			p->status.free_len = stbuf_space(buf);
 			p->status.read_pointer = stbuf_rp(buf);
+			p->status.write_pointer = stbuf_wp(buf);
 			if (copy_to_user((void *)arg, p, sizeof(para)))
 				r = -EFAULT;
 

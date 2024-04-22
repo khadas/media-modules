@@ -1734,8 +1734,9 @@ static int tsparser_stbuf_init(struct stream_buf_s *stbuf,
 			   vdec);
 	if (ret)
 		goto out;
-
-	tsync_pcr_start();
+	if (!singleDmxNewPtsserv) {
+		tsync_pcr_start();
+	}
 
 	stbuf->flag |= BUF_FLAG_IN_USE;
 out:

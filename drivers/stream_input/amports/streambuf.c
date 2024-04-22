@@ -286,6 +286,26 @@ u32 stbuf_rp(struct stream_buf_s *buf)
 	return _READ_ST_REG(RP);
 }
 
+u32 stbuf_wp(struct stream_buf_s *buf)
+{
+	if ((buf->type == BUF_TYPE_HEVC) || (buf->type == BUF_TYPE_VIDEO)) {
+		if (buf->no_parser)
+			return buf->buf_wp;
+		else {
+			if (READ_PARSER_REG(PARSER_ES_CONTROL) & 1) {
+				return READ_PARSER_REG(PARSER_VIDEO_WP);
+			}
+			else {
+				return (buf->type == BUF_TYPE_HEVC) ?
+					READ_VREG(HEVC_STREAM_WR_PTR) :
+					_READ_ST_REG(WP);
+			}
+		}
+	}
+
+	return _READ_ST_REG(WP);
+}
+
 u32 stbuf_space(struct stream_buf_s *buf)
 {
 	/* reserved space for safe write,

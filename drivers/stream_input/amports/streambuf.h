@@ -178,6 +178,7 @@ extern struct fetch fetchbuf;
 
 extern u32 stbuf_level(struct stream_buf_s *buf);
 extern u32 stbuf_rp(struct stream_buf_s *buf);
+extern u32 stbuf_wp(struct stream_buf_s *buf);
 extern u32 stbuf_space(struct stream_buf_s *buf);
 extern u32 stbuf_size(struct stream_buf_s *buf);
 extern u32 stbuf_canusesize(struct stream_buf_s *buf);
