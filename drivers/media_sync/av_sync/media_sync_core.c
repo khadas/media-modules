@@ -73,11 +73,7 @@ static u64 last_pcr;
 # define PAGE_SIZE 4096
 #endif
 
-#if IS_ENABLED(CONFIG_AMLOGIC_DVB_DMX)
 extern int demux_get_pcr(int demux_device_index, int index, u64 *pcr);
-#else
-int demux_get_pcr(int demux_device_index, int index, u64 *pcr) {return -1;}
-#endif
 
 extern int register_mediasync_vpts_set_cb(void* pfunc);
 extern int register_mediasync_apts_set_cb(void* pfunc);
