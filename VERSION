@@ -1,10 +1,18 @@
 #Developing Version
 Major_V=6
-Minor_V=9
-DevelopingChangeId=I3c4a313a92eccac0bdba45acf76006399bd5a48f
+Minor_V=10
+DevelopingChangeId=I3121e45e13360002bb63be022e78501138f0977a
 
 
 #history version
+#V6.10 Release Notes
+#Support S7 S7D chips
+#AMMS  V2.1
+#    Memory optimization, especially suitable for low-memory projects(HTXD2 512M etc.)
+#    Memory evaluation flow release
+#S5 Error recovery improvement
+#    Optimize display effect, utilize mmu copy function in the mosaic mode
+#    Stability optimization for error streams
 #V6.8 Release Notes
 #Support QOS for v4ldec
 #AMMS(Amlogic Media Memory System)  V2.0
