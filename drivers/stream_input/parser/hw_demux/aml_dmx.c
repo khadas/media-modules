@@ -1966,6 +1966,7 @@ static int dsc_set_csa_key(struct aml_dsc_channel *ch, int flags,
 #define AES_MSG_OUT_ENDIAN 24
 #define AES_MSG_IN_ENDIAN  20
 #define AES_KEY_ENDIAN  16
+#define AES_TS_OUT_DELAY  8
 #define DES_MSG_OUT_ENDIAN 8
 #define DES_MSG_IN_ENDIAN  4
 #define DES_KEY_ENDIAN  0
@@ -2031,6 +2032,7 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 	unsigned int des2_in_endian = 0;
 	unsigned int des2_cfg = 0;
 	unsigned int des2_enable = 0;
+	unsigned int aes_ts_out_delay = 0;
 
 	pr_dbg("%s mode:%d,alog:%d\n",__FUNCTION__,mode,algo);
 
@@ -2062,6 +2064,7 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 		sm4_mode = 1;
 	} else if (algo ==  ALGO_AES){
 		aes_enable = 1;
+		aes_ts_out_delay = 8;
 	} else {
 		if (get_cpu_type() < MESON_CPU_MAJOR_ID_SM1) {
 			des_enable = 1;
@@ -2093,6 +2096,7 @@ static void aml_ci_plus_config(int key_endian, int mode, int algo)
 			(des2_enable << DES2_EN) |
 			(cbc_disable << AES_CBC_DISABLE) |
 			(1 << CNTL_ENABLE) |
+			(aes_ts_out_delay << AES_TS_OUT_DELAY) |
 			(aes_enable << AES_EN) |
 			(des_enable << DES_EN);
 
